@@ -1,0 +1,9 @@
+[Unit]
+Description=AWG exit direct guard refresh
+Requires=awg-server-network.service
+After=awg-server-network.service
+
+[Service]
+Type=oneshot
+ExecStart=/etc/awg-server.sh guard
+TimeoutStartSec=300

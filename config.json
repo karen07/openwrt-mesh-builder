@@ -1,0 +1,379 @@
+{
+    "openwrt_version": "25.12.4",
+    "ssh_key_dir": "~/.ssh/router-autoinstall-demo",
+    "secrets_key_path": "~/.ssh/router-autoinstall-demo/secrets.key",
+    "materials_key_path": "~/.ssh/router-autoinstall-demo/materials.key",
+    "packages": [
+        "block-mount",
+        "htop",
+        "kmod-fs-vfat",
+        "kmod-usb-storage",
+        "luci-theme-material",
+        "tcpdump"
+    ],
+    "device_profiles": {
+        "asus_rt-ax59u": {
+            "board": "mediatek/filogic",
+            "arch": "aarch64_cortex-a53"
+        },
+        "asus_tuf-ax4200": {
+            "board": "mediatek/filogic",
+            "arch": "aarch64_cortex-a53"
+        },
+        "asus_rt-ax53u": {
+            "board": "ramips/mt7621",
+            "arch": "mipsel_24kc"
+        },
+        "xiaomi_mi-router-4a-gigabit-v2": {
+            "board": "ramips/mt7621",
+            "arch": "mipsel_24kc"
+        }
+    },
+    "main_router": "Spine01",
+    "routers": [
+        {
+            "name": "Spine01",
+            "device_profile": "asus_rt-ax59u",
+            "subnet": "10.101.1.0/24",
+            "exit_order": [
+                "EGR02",
+                "EGR01",
+                "PUB01",
+                "REV01",
+                "REV02"
+            ],
+            "wifi_2g": {
+                "ssid": "Example-Spine01-2G",
+                "key": "Example-Spine01-2G"
+            },
+            "wifi_5g": {
+                "ssid": "Example-Spine01-5G",
+                "key": "Example-Spine01-5G",
+                "blocked_macs": [
+                    "02:00:00:01:00:01",
+                    "02:00:00:01:00:02"
+                ]
+            },
+            "allow_to_router": [
+                "all"
+            ],
+            "allow_to_lan": [
+                "all"
+            ]
+        },
+        {
+            "name": "Spine02",
+            "device_profile": "asus_tuf-ax4200",
+            "subnet": "10.101.2.0/24",
+            "wifi_5g": {
+                "ssid": "Example-Spine02-5G",
+                "key": "Example-Spine02-5G"
+            }
+        },
+        {
+            "name": "Spine03",
+            "device_profile": "asus_tuf-ax4200",
+            "subnet": "10.101.3.0/24",
+            "wifi_5g": {
+                "ssid": "Example-Spine03-5G",
+                "key": "Example-Spine03-5G"
+            }
+        },
+        {
+            "name": "AccessOnly01",
+            "device_profile": "asus_rt-ax59u",
+            "subnet": "10.101.31.0/24",
+            "wifi_2g": {
+                "ssid": "Example-AccessOnly01-2G",
+                "key": "Example-AccessOnly01-2G"
+            },
+            "wifi_5g": {
+                "ssid": "Example-AccessOnly01-5G",
+                "key": "Example-AccessOnly01-5G"
+            }
+        },
+        {
+            "name": "AccessOnly02",
+            "device_profile": "asus_rt-ax59u",
+            "subnet": "10.101.32.0/24",
+            "wifi_2g": {
+                "ssid": "Example-AccessOnly02-2G",
+                "key": "Example-AccessOnly02-2G"
+            },
+            "wifi_5g": {
+                "ssid": "Example-AccessOnly02-5G",
+                "key": "Example-AccessOnly02-5G"
+            }
+        },
+        {
+            "name": "Leaf01",
+            "device_profile": "asus_rt-ax53u",
+            "subnet": "10.101.11.0/24",
+            "wifi_2g": {
+                "ssid": "Example-Leaf01-2G",
+                "key": "Example-Leaf01-2G",
+                "blocked_macs": [
+                    "02:00:00:11:00:01"
+                ]
+            },
+            "wifi_5g": {
+                "ssid": "Example-Leaf01-5G",
+                "key": "Example-Leaf01-5G"
+            },
+            "allow_to_router": [
+                "Spine01"
+            ]
+        },
+        {
+            "name": "Leaf02",
+            "device_profile": "xiaomi_mi-router-4a-gigabit-v2",
+            "subnet": "10.101.12.0/24",
+            "wifi_2g": {
+                "ssid": "Example-Leaf02-2G",
+                "key": "Example-Leaf02-2G"
+            },
+            "packages": [
+                "-block-mount",
+                "-kmod-fs-vfat",
+                "-kmod-usb-storage",
+                "-tcpdump",
+                "+nano"
+            ]
+        },
+        {
+            "name": "Leaf03",
+            "device_profile": "asus_rt-ax53u",
+            "subnet": "10.101.13.0/24",
+            "exit_order": [
+                "PUB01",
+                "EGR02",
+                "EGR01",
+                "REV01",
+                "REV02"
+            ],
+            "wifi_5g": {
+                "ssid": "Example-Leaf03-5G",
+                "key": "Example-Leaf03-5G"
+            }
+        },
+        {
+            "name": "Leaf04",
+            "device_profile": "asus_rt-ax53u",
+            "subnet": "10.101.21.0/24",
+            "allow_to_lan": [
+                "Spine01",
+                "Leaf01"
+            ]
+        }
+    ],
+    "mesh_hubs": [
+        {
+            "name": "Spine01",
+            "listen_ip": "203.0.113.11"
+        },
+        {
+            "name": "Spine02",
+            "listen_ip": "203.0.113.12"
+        },
+        {
+            "name": "Spine03",
+            "listen_ip": "203.0.113.13"
+        },
+        {
+            "name": "AccessOnly01",
+            "listen_ip": "203.0.113.31",
+            "access_only": true
+        },
+        {
+            "name": "AccessOnly02",
+            "listen_ip": "203.0.113.32",
+            "access_only": true
+        }
+    ],
+    "exit_hubs": [
+        {
+            "name": "EGR01",
+            "listen_ip": "198.51.100.21",
+            "exit_ip": "198.51.100.121"
+        },
+        {
+            "name": "EGR02",
+            "listen_ip": "198.51.100.22",
+            "exit_ip": "198.51.100.122"
+        },
+        {
+            "name": "PUB01",
+            "listen_ip": "198.51.100.24"
+        },
+        {
+            "name": "REV01"
+        },
+        {
+            "name": "REV02"
+        }
+    ],
+    "exit_order": [
+        "EGR01",
+        "EGR02",
+        "PUB01",
+        "REV01",
+        "REV02"
+    ],
+    "access": {
+        "Spine01": [
+            {
+                "name": "AdminWG",
+                "protocol": "wireguard",
+                "policy": "trusted",
+                "port": 45110,
+                "subnet": "10.201.1.0/24",
+                "users": [
+                    "AdminLaptop",
+                    "AdminPhone"
+                ],
+                "allow_to_router": [
+                    "all"
+                ],
+                "allow_to_lan": [
+                    "all"
+                ]
+            },
+            {
+                "name": "GuestWG",
+                "protocol": "wireguard",
+                "policy": "transit",
+                "port": 45111,
+                "subnet": "10.201.2.0/24",
+                "users": [
+                    "GuestPhone",
+                    "GuestTablet"
+                ]
+            }
+        ],
+        "Spine02": [
+            {
+                "name": "OpsOVPN",
+                "protocol": "openvpn",
+                "policy": "trusted",
+                "port": 46210,
+                "subnet": "10.201.11.0/24",
+                "users": [
+                    "OpsLaptop",
+                    "OpsPhone"
+                ],
+                "allow_to_lan": [
+                    "Spine01",
+                    "Leaf01"
+                ]
+            },
+            {
+                "name": "GuestOVPN",
+                "protocol": "openvpn",
+                "policy": "transit",
+                "port": 46211,
+                "subnet": "10.201.12.0/24",
+                "users": [
+                    "GuestNotebook"
+                ]
+            }
+        ],
+        "AccessOnly01": [
+            {
+                "name": "MobileAWG",
+                "protocol": "amneziawg",
+                "policy": "trusted",
+                "port": 47310,
+                "subnet": "10.201.21.0/24",
+                "users": [
+                    "MobileUser01",
+                    "MobileUser02"
+                ],
+                "awg": {
+                    "jc": 6,
+                    "jmin": 96,
+                    "jmax": 384,
+                    "s1": 24,
+                    "s2": 32,
+                    "s3": 40,
+                    "s4": 12,
+                    "h1": "100000000-100065535",
+                    "h2": "200000000-200065535",
+                    "h3": "300000000-300065535",
+                    "h4": "400000000-400065535",
+                    "i1": "<r 128>",
+                    "i2": "",
+                    "i3": "",
+                    "i4": "",
+                    "i5": ""
+                },
+                "allow_to_router": [
+                    "Leaf03"
+                ]
+            },
+            {
+                "name": "PartnerAWG",
+                "protocol": "amneziawg",
+                "policy": "transit",
+                "port": 47311,
+                "subnet": "10.201.22.0/24",
+                "users": [
+                    "PartnerDevice01"
+                ],
+                "awg": {
+                    "jc": 3,
+                    "jmin": 128,
+                    "jmax": 512,
+                    "s1": 12,
+                    "s2": 18,
+                    "s3": 24,
+                    "s4": 8,
+                    "h1": "1100000000-1100065535",
+                    "h2": "1200000000-1200065535",
+                    "h3": "1300000000-1300065535",
+                    "h4": "1400000000-1400065535",
+                    "i1": "<r 64>",
+                    "i2": "<r 32>",
+                    "i3": "",
+                    "i4": "",
+                    "i5": ""
+                }
+            }
+        ],
+        "AccessOnly02": [
+            {
+                "name": "BackupMobileAWG",
+                "protocol": "amneziawg",
+                "policy": "trusted",
+                "port": 47410,
+                "subnet": "10.201.31.0/24",
+                "users": [
+                    "BackupMobileUser01"
+                ],
+                "awg": {
+                    "jc": 4,
+                    "jmin": 96,
+                    "jmax": 384,
+                    "s1": 16,
+                    "s2": 24,
+                    "s3": 32,
+                    "s4": 8,
+                    "h1": "2100000000-2100065535",
+                    "h2": "2200000000-2200065535",
+                    "h3": "2300000000-2300065535",
+                    "h4": "2400000000-2400065535",
+                    "i1": "<r 96>",
+                    "i2": "<r 48>",
+                    "i3": "",
+                    "i4": "",
+                    "i5": ""
+                },
+                "allow_to_router": [
+                    "Spine01"
+                ],
+                "allow_to_lan": [
+                    "Leaf01"
+                ]
+            }
+        ]
+    }
+}

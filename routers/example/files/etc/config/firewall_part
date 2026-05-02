@@ -1,0 +1,145 @@
+
+# Unique part up to this line
+
+config rule
+    option name 'Allow-Babel-Mesh'
+    option src 'Mesh'
+    option dest_port '6696'
+    option target 'ACCEPT'
+    option proto 'udp'
+
+config rule
+    option name 'Allow-Babel-Exit'
+    option src 'Exit'
+    option dest_port '6696'
+    option target 'ACCEPT'
+    option proto 'udp'
+
+config rule
+    option name 'Allow-Iperf-Mesh'
+    option src 'Mesh'
+    option dest_port '5201'
+    option target 'ACCEPT'
+    list proto 'tcp'
+    list proto 'udp'
+
+config rule
+    option name 'Allow-Iperf-Exit'
+    option src 'Exit'
+    option dest_port '5201'
+    option target 'ACCEPT'
+    list proto 'tcp'
+    list proto 'udp'
+
+config rule
+    option name 'Exitlan'
+    option src 'lan'
+    option dest '*'
+    option ipset '!direct'
+    option target 'MARK'
+    option set_mark '0x25'
+    option family 'ipv4'
+    list proto 'all'
+
+config rule
+    option name 'ExitTrustedAccess'
+    option src 'TrustedAccess'
+    option dest '*'
+    option ipset '!direct'
+    option target 'MARK'
+    option set_mark '0x25'
+    option family 'ipv4'
+    list proto 'all'
+
+config rule
+    option name 'ExitTransitAccess'
+    option src 'TransitAccess'
+    option dest '*'
+    option ipset '!direct'
+    option target 'MARK'
+    option set_mark '0x25'
+    option family 'ipv4'
+    list proto 'all'
+
+config rule
+    option name 'ExitOutput'
+    option dest '*'
+    option ipset '!direct'
+    option target 'MARK'
+    option set_mark '0x25'
+    option family 'ipv4'
+    list proto 'all'
+    option enabled '0'
+
+config rule
+    option name 'ExitIPIPClearMark'
+    option src '*'
+    option dest 'ExitIPIP'
+    option target 'MARK'
+    option set_mark '0x0/0xffffffff'
+    option family 'ipv4'
+    list proto 'all'
+
+config ipset
+    option name 'direct'
+    option family 'ipv4'
+    option loadfile '/etc/ipsets/direct.txt'
+    option timeout '0'
+    option counters '0'
+    list match 'dest_net'
+
+config forwarding
+    option src 'lan'
+    option dest 'ExitIPIP'
+
+config forwarding
+    option src 'lan'
+    option dest 'Exit'
+
+config forwarding
+    option src 'lan'
+    option dest 'Mesh'
+
+config forwarding
+    option src 'Mesh'
+    option dest 'Exit'
+
+config forwarding
+    option src 'Exit'
+    option dest 'Mesh'
+
+config forwarding
+    option src 'TrustedAccess'
+    option dest 'lan'
+
+config forwarding
+    option src 'TrustedAccess'
+    option dest 'Mesh'
+
+config forwarding
+    option src 'TrustedAccess'
+    option dest 'Exit'
+
+config forwarding
+    option src 'TrustedAccess'
+    option dest 'ExitIPIP'
+
+config forwarding
+    option src 'TrustedAccess'
+    option dest 'wan'
+
+config forwarding
+    option src 'TransitAccess'
+    option dest 'Mesh'
+
+config forwarding
+    option src 'TransitAccess'
+    option dest 'Exit'
+
+config forwarding
+    option src 'TransitAccess'
+    option dest 'ExitIPIP'
+
+config forwarding
+    option src 'TransitAccess'
+    option dest 'wan'

@@ -1,0 +1,15 @@
+[Unit]
+Description=AWG server network
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/etc/awg-server.sh network-up
+ExecStop=/etc/awg-server.sh network-down
+TimeoutStartSec=300
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

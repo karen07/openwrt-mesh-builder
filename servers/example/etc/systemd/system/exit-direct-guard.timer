@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh AWG exit direct guard daily
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Europe/Moscow
+Persistent=true
+Unit=exit-direct-guard.service
+
+[Install]
+WantedBy=timers.target

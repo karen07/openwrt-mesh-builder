@@ -1,0 +1,19 @@
+
+config main 'config'
+    option force_dns '0'
+    option dnsmasq_config_update '-'
+
+config https-dns-proxy
+    option resolver_url 'https://cloudflare-dns.com/dns-query'
+    option bootstrap_dns '1.1.1.1,1.0.0.1'
+    option listen_port '5060'
+
+config https-dns-proxy
+    option resolver_url 'https://dns.google/dns-query'
+    option bootstrap_dns '8.8.8.8,8.8.4.4'
+    option listen_port '5061'
+
+config https-dns-proxy
+    option resolver_url 'https://doh.opendns.com/dns-query'
+    option bootstrap_dns '208.67.222.222,208.67.220.220'
+    option listen_port '5062'
