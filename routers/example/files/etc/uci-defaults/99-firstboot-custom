@@ -1,0 +1,78 @@
+#!/bin/sh
+
+customization() {
+    # Set subnet and name
+    true
+}
+
+# Unique part up to this line
+
+append_if_exists() {
+    [ -s "$1" ] && cat "$1" >>"$2"
+    rm -f "$1"
+}
+
+update_release_from_deploy_version() {
+    [ -s /etc/deploy_version ] || return 0
+
+    deploy_version="$(tr -d '\r\n' </etc/deploy_version)"
+
+    sed -i "s|^DISTRIB_DESCRIPTION=.*|DISTRIB_DESCRIPTION='${deploy_version}'|" /etc/openwrt_release
+    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /etc/os-release
+    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /usr/lib/os-release
+
+    rm -f /etc/deploy_version
+}
+
+setup_doh() {
+    echo 'doh:x:4453:' >>/etc/group
+    echo 'doh:x:4453:4453:doh:/var/run/doh:/bin/false' >>/etc/passwd
+
+    uci -q set dhcp.@dnsmasq[0].noresolv='1'
+    uci -q set dhcp.@dnsmasq[0].filter_aaaa='1'
+    uci -q del dhcp.@dnsmasq[0].server
+    uci -q add_list dhcp.@dnsmasq[0].server='127.0.0.1#5060'
+
+    uci -q set https-dns-proxy.config.user='doh'
+    uci -q set https-dns-proxy.config.group='doh'
+}
+
+# Append network
+append_if_exists /etc/config/network_part /etc/config/network
+
+# Append dhcp
+append_if_exists /etc/config/dhcp_part /etc/config/dhcp
+
+# Append firewall
+append_if_exists /etc/config/firewall_part /etc/config/firewall
+
+# Log size
+uci -q set system.@system[0].log_size='10240'
+
+# Set DOH
+setup_doh
+
+# Add timezone
+uci -q set system.@system[0].timezone='MSK-3'
+uci -q set system.@system[0].zonename='Europe/Moscow'
+
+# Disable uhttpd HTTPS listener on port 443
+uci -q delete uhttpd.main.listen_https
+
+# Disable wan6 autostart
+uci -q set network.wan6.auto='0'
+
+# Replace literal $clientid with "-C" inside udhcpc call block
+sed -i "/proto_run_command.*udhcpc/,/^[[:space:]]*}[[:space:]]*$/ s/\\\$clientid/\"-C\"/" \
+    /lib/netifd/proto/dhcp.sh
+
+# Update release from deploy version
+update_release_from_deploy_version
+
+# Customization commands
+customization
+
+# Commit uci changes
+uci commit
+
+exit 0

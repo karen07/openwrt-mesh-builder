@@ -1,0 +1,9 @@
+
+config watchcat
+    option mode 'ping_reboot'
+    option period '5m'
+    option pinghosts '195.208.4.1'
+    option addressfamily 'any'
+    option pingperiod '1m'
+    option pingsize 'standard'
+    option forcedelay '1m'
