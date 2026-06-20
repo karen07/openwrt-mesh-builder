@@ -248,6 +248,10 @@ def reconcile_router_openvpn_dirs(
     keep_iface_names: set[str],
 ) -> None:
     root = router_openvpn_root(cfg, router_name)
+    if not keep_iface_names:
+        rm(root)
+        return
+
     root.mkdir(parents=True, exist_ok=True)
     for child in root.iterdir():
         if child.is_dir() and child.name not in keep_iface_names:
@@ -295,8 +299,7 @@ def generate_openvpn_access(cfg: ConfigData, force: bool, verbose: bool) -> None
         ovpn_groups = [g for g in groups if g.protocol == PROTOCOL_OPENVPN]
         keep_ifaces = {g.name for g in ovpn_groups}
 
-        if keep_ifaces:
-            reconcile_router_openvpn_dirs(cfg, router_name, keep_ifaces)
+        reconcile_router_openvpn_dirs(cfg, router_name, keep_ifaces)
 
         for group in ovpn_groups:
             reconcile_router_openvpn_layout(cfg, router_name, group.name)

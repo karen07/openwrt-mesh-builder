@@ -411,7 +411,7 @@ customization() {
 
 `customization()` выполняется на роутере при первом запуске образа, после общей подготовки и перед `uci commit`.
 
-`tools/show_unmanaged.py` проверяет managed-секции строго: generated UCI-блоки в `network_part` и `firewall_part`, а также generated-блоки внутри `customization()` скрываются из отчёта только если они совпадают с тем, что строит генератор. Если generated-блок поменяли руками, добавили похожий блок с тем же именем, изменили порт, protocol, Wi-Fi key, IP, hostname или OpenVPN/Babel hotplug, он остаётся в отчёте как unmanaged.
+`tools/show_unmanaged.py` запускается после генерации и показывает unmanaged-контент, который переживает `tools/generate.py`: ручные UCI-блоки в `network_part` и `firewall_part`, ручные части внутри `customization()` и лишние файлы вне generated/sync-managed набора. Generated UCI-блоки в `network_part` и `firewall_part`, а также generated-блоки внутри `customization()` скрываются из отчёта только если они совпадают с тем, что строит генератор. Полностью generated-файлы, которые генератор перезаписывает целиком, не используются как standalone drift-check: ручные правки в них перезаписываются генерацией.
 
 Проверка неожиданных unmanaged-частей:
 
@@ -511,7 +511,7 @@ printf '%s' 'plain-secret' | age -r <recipient> -a
 
 ### `tools/validate.py`
 
-Проверяет generated mesh/exit/access configs.
+Проверяет консистентность generated mesh/exit/access configs после генерации: наличие expected файлов, stale dirs/files, ключи, сертификаты, OpenVPN UCI, firewall, routing и порты.
 
 ```bash
 ./tools/validate.py

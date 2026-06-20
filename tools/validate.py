@@ -251,7 +251,15 @@ def validate_openvpn_certs(cfg: ConfigData) -> None:
                 continue
 
             ca_dir = router_openvpn_ca_dir(cfg, router_name, group.name)
+            ca_key = ca_dir / "ca.key"
             ca_pem = ca_dir / "ca.pem"
+
+            if not ca_key.exists():
+                die(f"missing OpenVPN CA private key: {ca_key}")
+            if not ca_pem.exists():
+                die(f"missing OpenVPN CA certificate: {ca_pem}")
+
+            verify_key_matches_cert(ca_key, ca_pem)
             print_cert_cn(
                 f"OpenVPN CA {router_name}/{group.name}", ca_pem, DEFAULT_CA_CN
             )
@@ -2309,6 +2317,68 @@ def validate_openvpn_access(cfg: ConfigData) -> None:
                 )
 
 
+def validate_openvpn_uci(cfg: ConfigData) -> None:
+    for router_name in cfg.router_names:
+        groups = [
+            g for g in cfg.access.get(router_name, []) if g.protocol == PROTOCOL_OPENVPN
+        ]
+
+        path = router_path(cfg, router_name, "openvpn_uci")
+
+        if not groups:
+            if path.exists():
+                die(f"{path}: unexpected OpenVPN UCI file without OpenVPN access")
+            continue
+
+        if not path.exists():
+            die(f"missing generated OpenVPN UCI file: {path}")
+
+        parsed = parse_uci_file(path)
+        actual: dict[str, dict[str, object]] = {}
+
+        for block in parsed:
+            typ = str(block.get("type", ""))
+            name = str(block.get("name", ""))
+
+            if typ != PROTOCOL_OPENVPN:
+                die(f"{path}: unexpected UCI section type {typ!r}")
+            if name in actual:
+                die(f"{path}: duplicate OpenVPN section {name!r}")
+
+            actual[name] = block
+
+        expected_names = {g.name for g in groups}
+
+        missing = expected_names - set(actual)
+        if missing:
+            die(f"{path}: missing OpenVPN sections: {', '.join(sorted(missing))}")
+
+        stale = set(actual) - expected_names
+        if stale:
+            die(f"{path}: stale OpenVPN sections: {', '.join(sorted(stale))}")
+
+        for group in groups:
+            block = actual[group.name]
+            opts = block.get("options", {})
+            lists = block.get("lists", {})
+            where = f"{path}:{group.name}"
+
+            require_option(opts, "enabled", "1", where)
+            require_option(
+                opts,
+                "config",
+                f"/etc/openvpn/{group.name}/server.ovpn",
+                where,
+            )
+            require_option(opts, "cd", f"/etc/openvpn/{group.name}", where)
+
+            extra_opts = set(opts) - {"enabled", "config", "cd"}
+            if extra_opts:
+                die(f"{where}: unexpected options: {', '.join(sorted(extra_opts))}")
+            if lists:
+                die(f"{where}: unexpected list options")
+
+
 def validate_access_links(
     cfg: ConfigData, existing: dict[str, dict[str, dict[str, object]]]
 ) -> None:
@@ -2514,6 +2584,7 @@ def main() -> None:
 
     vprint("=== GENERATED FILE VALIDATION ===")
     validate_generated_files_exist(cfg)
+    validate_openvpn_uci(cfg)
 
     existing = load_existing_network_cfgs(cfg)
     validate_router_network_parse_clean(cfg)
