@@ -13,34 +13,16 @@ from tools.cli_common import (
     run_ssh_with_fallback,
     server_ssh_hosts,
 )
+from tools.common import build_config_data
 from tools.default import (
     CONFIG_PATH,
-    CONFIG_KEY_EXIT_HUBS,
-    CONFIG_KEY_NAME,
     SSH_TIMEOUT,
     SERVER_VERSION_COMMAND,
 )
 
 
 def config_exit_names(cfg: dict[str, object]) -> list[str]:
-    raw = cfg.get(CONFIG_KEY_EXIT_HUBS, [])
-    if not isinstance(raw, list):
-        die("config key 'exit_hubs' must be a list")
-
-    out: list[str] = []
-    seen: set[str] = set()
-    for item in raw:
-        if not isinstance(item, dict):
-            die("each exit_hubs entry must be an object")
-        name = item.get(CONFIG_KEY_NAME)
-        if not isinstance(name, str) or not name:
-            die("exit_hubs.name must be a non-empty string")
-        key = name.lower()
-        if key in seen:
-            die(f"duplicate exit_hubs.name: {name}")
-        seen.add(key)
-        out.append(name)
-    return out
+    return [hub.name for hub in build_config_data(cfg).exit_hubs]
 
 
 def selected_servers(cfg: dict[str, object], values: list[str]) -> list[str]:

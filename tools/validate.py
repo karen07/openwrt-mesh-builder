@@ -935,7 +935,7 @@ def expected_runtime_env_values(
         if key != hub.name or iface != expected_iface:
             die(
                 f"exit hub {hub.name!r} cannot be used as an exit-route target; "
-                "use a short uppercase alphanumeric name so the IPIP interface "
+                "use a short uppercase ASCII name containing A-Z, 0-9 or _ so the IPIP interface "
                 f"is {expected_iface!r}"
             )
         target_names.append(hub.name)

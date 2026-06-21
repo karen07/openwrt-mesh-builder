@@ -15,7 +15,7 @@ from tools.cli_common import (
     run_no_capture,
 )
 from tools.router_order import router_slug
-from tools.common import validate_config_known_keys
+from tools.common import build_config_data
 from tools.default import (
     CONFIG_KEY_ACCESS,
     CONFIG_KEY_NAME,
@@ -45,7 +45,7 @@ def out(args: list[str], cwd: Path | None = None) -> str:
 
 def load_config(config_path: Path) -> dict[str, object]:
     cfg = load_json_config(config_path)
-    validate_config_known_keys(cfg)
+    build_config_data(cfg)
     return cfg
 
 

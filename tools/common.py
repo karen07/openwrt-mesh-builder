@@ -389,6 +389,7 @@ MAC_RE = re.compile(r"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 CONFIG_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 EXIT_HUB_IDENTIFIER_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 FILE_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+CANONICAL_IPV4_RE = re.compile(r"^(?:0|[1-9][0-9]{0,2})(?:\.(?:0|[1-9][0-9]{0,2})){3}$")
 LINUX_IFACE_NAME_MAX_BYTES = 15
 EXIT_HUB_NAME_MAX_BYTES = 8
 FILE_IDENTIFIER_MAX_BYTES = 64
@@ -1030,6 +1031,8 @@ def cp_tree(src: Path, dst: Path) -> None:
 
 
 def parse_ipv4(ip: str) -> list[int]:
+    if not CANONICAL_IPV4_RE.fullmatch(ip):
+        raise ValueError(ip)
     parts = ip.split(".")
     if len(parts) != IPV4_OCTET_COUNT:
         raise ValueError(ip)
@@ -1037,6 +1040,10 @@ def parse_ipv4(ip: str) -> list[int]:
     if any(n < IPV4_OCTET_MIN or n > IPV4_OCTET_MAX for n in nums):
         raise ValueError(ip)
     return nums
+
+
+def canonical_ipv4(ip: str) -> str:
+    return ".".join(str(n) for n in parse_ipv4(ip))
 
 
 def ipv4_without_prefix(ip: str) -> str:
@@ -1063,10 +1070,9 @@ def normalize_listen_ip(value: object, where: str) -> str:
     if ":" in host:
         die(f"{where} must contain only IPv4 address without port: {host}")
     try:
-        parse_ipv4(host)
+        return canonical_ipv4(host)
     except ValueError:
-        die(f"{where} must be an IPv4 address when set: {host}")
-    return host
+        die(f"{where} must be a canonical IPv4 address when set: {host}")
 
 
 def load_bool(value: object, where: str, *, default: bool = False) -> bool:
@@ -1086,10 +1092,9 @@ def normalize_optional_exit_ip(value: object, where: str) -> str:
     if ":" in host:
         die(f"{where} must contain only IPv4 address without port: {host}")
     try:
-        parse_ipv4(host)
+        return canonical_ipv4(host)
     except ValueError:
-        die(f"{where} must be an IPv4 address when set: {host}")
-    return host
+        die(f"{where} must be a canonical IPv4 address when set: {host}")
 
 
 def stable_generated_network_for_key(
@@ -1504,9 +1509,9 @@ def mesh_link_key(hub_name: str, target_name: str) -> str:
 
 
 def ring_link_pairs(names: list[str]) -> list[tuple[str, str]]:
-    # Keep the caller-provided order.  For ring topologies the order is the
-    # clockwise order; callers should pass sorted(names) only when lexical order
-    # is intended.
+    # Keep the order provided by the caller.  The current config loader passes
+    # mesh hubs in lexical order, so mesh rings are lexical unless a different
+    # caller deliberately supplies another order.
     ordered = list(names)
     if len(ordered) < 2:
         return []

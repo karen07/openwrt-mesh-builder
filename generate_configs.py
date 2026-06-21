@@ -18,7 +18,7 @@ from tools.cli_common import (
     run_no_capture,
 )
 from tools.router_order import RouterDef, load_routers
-from tools.common import validate_config_known_keys
+from tools.common import build_config_data, validate_config_known_keys
 from tools.default import (
     CONFIG_PATH,
     AWG_PACKAGE_NAMES,
@@ -452,6 +452,7 @@ def main() -> None:
 
     cfg = load_json_config(Path(args.config))
     validate_config_known_keys(cfg)
+    build_config_data(cfg)
     routers = load_routers(cfg)
     ensure_example_router_dir()
 
