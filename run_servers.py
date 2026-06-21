@@ -151,7 +151,7 @@ def parse_args() -> argparse.Namespace:
         default="",
         help=(
             "server names to run on, comma- or space-separated; "
-            "quote spaces, for example --servers 'Exit01 Exit02'; default: all"
+            "quote spaces, for example --servers 'EGR01 REV01'; default: all"
         ),
     )
     ap.add_argument(

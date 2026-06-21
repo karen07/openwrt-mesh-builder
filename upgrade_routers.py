@@ -197,7 +197,7 @@ def main() -> None:
         "routers",
         nargs="*",
         help=(
-            "router names, for example: RouterA RouterB or RouterA,RouterB. "
+            "router names, for example: Spine01 Leaf01 or Spine01,Leaf01. "
             "If omitted or set to 'all', pushes to all routers"
         ),
     )

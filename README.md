@@ -4,7 +4,7 @@
 
 OpenWrt Spine-Leaf Mesh Builder собирает из обычных OpenWrt-роутеров и Linux-серверов маленький routed fabric. Spine здесь - роутеры с белым IP, leaf - роутеры за NAT или с серым IP, а exit - управляемые точки выхода в интернет. В результате получается не один VPN-туннель до одного сервера, а живая сеть: роутеры видят друг друга через overlay, leaf без белого IP становится достижимым из других LAN и access-сетей, reverse exit без белого IP участвует в egress, а пользовательский трафик получает несколько отказоустойчивых путей к интернету.
 
-Топология описывается в `config.json`. Проект выводит из неё OpenWrt overlay files, server configs, access-клиентов, SSH aliases, firewall rules, Babel routing, IPIP exit data-plane и firmware-образы.
+Топология описывается в `config.json`. Из неё генерируются OpenWrt overlay files, server configs, access-клиенты, SSH aliases, firewall rules, Babel routing и IPIP exit data-plane. OpenWrt firmware-образы собираются отдельной командой `./build_router_images.py`.
 
 Проект рассчитан на OpenWrt 25.12+ и AWG2/apk-only builds.
 
@@ -88,7 +88,7 @@ AWG/WG-линки дают защищённую связность и транс
 
 ## Что проект делает
 
-После генерации появляются:
+После `./generate_configs.py` появляются:
 
 - конфиги для OpenWrt-роутеров;
 - конфиги для exit-серверов;
@@ -98,8 +98,9 @@ AWG/WG-линки дают защищённую связность и транс
 - firewall-зоны, allow rules, fwmark и policy routing;
 - direct ipsets для трафика, который не надо отправлять через exit;
 - server guard rules против нежелательного direct выхода;
-- per-router и per-server SSH keys и SSH config;
-- готовые OpenWrt ImageBuilder-образы.
+- per-router и per-server SSH keys и SSH config.
+
+OpenWrt firmware-образы появляются отдельно после `./build_router_images.py` и складываются в `images/`.
 
 Сами шаблоны лежат в `routers/example` и `servers/example`. Конкретные узлы создаются рядом с ними после запуска `./generate_configs.py`.
 
@@ -108,22 +109,26 @@ AWG/WG-линки дают защищённую связность и транс
 Основные сущности в `config.json`:
 
 ```text
-routers       array: все OpenWrt-роутеры проекта
-mesh_hubs     array: публичные router-узлы со spine-ролью или access endpoint
-exit_hubs     array: серверы выхода в интернет
-access        object: пользовательские WG/AWG/OpenVPN-входы на router-узлах
+openwrt_version  версия OpenWrt, минимум 25.12
+device_profiles  соответствие профиля OpenWrt target/subtarget и apk arch
+packages         дополнительные глобальные пакеты для всех роутеров
+routers          все OpenWrt-роутеры проекта
+mesh_hubs        публичные router-узлы со spine-ролью или access endpoint
+exit_hubs        Linux-серверы выхода в интернет
+exit_order       глобальный приоритет exit-серверов
+access           пользовательские WG/AWG/OpenVPN-входы на router-узлах
 ```
 
 ### Router
 
 `routers` описывает все OpenWrt-устройства.
 
-У router обычно задаются:
+У router задаются:
 
 - `name` - имя узла;
-- `device_profile` - профиль из `device_profiles`;
-- `subnet` - LAN-сеть роутера, обычно `/24`;
-- `packages` - добавление или удаление пакетов только для этого роутера;
+- `device_profile` - обязательная ссылка на профиль из `device_profiles`;
+- `subnet` - LAN-сеть роутера, обычно canonical `/24`;
+- `packages` - per-router добавление или удаление дополнительных пакетов;
 - `wifi_2g`, `wifi_5g` - Wi-Fi параметры;
 - `allow_to_router` - к каким target-роутерам разрешён INPUT на сам роутер;
 - `allow_to_lan` - к каким target-роутерам разрешён FORWARD в их LAN;
@@ -131,24 +136,36 @@ access        object: пользовательские WG/AWG/OpenVPN-входы
 
 `allow_to_router` и `allow_to_lan` описывают исходящее разрешение от source-сети текущего роутера или access-группы к target-роутерам. Это не входящая ACL на source. Генератор добавляет firewall rules на target-роутере.
 
-Пример:
+Пример из текущего `config.json`:
 
 ```json
 {
-  "name": "Branch01",
+  "name": "Leaf01",
+  "device_profile": "asus_rt-ax53u",
   "subnet": "10.101.11.0/24",
-  "allow_to_router": ["Core01"],
-  "allow_to_lan": ["Core01", "Lab01"]
+  "allow_to_router": ["Spine01"]
 }
 ```
 
-В этом примере LAN `Branch01` может обращаться к самому роутеру `Core01`, а также форвардиться в LAN `Core01` и `Lab01`.
+В этом фрагменте LAN `Leaf01` может обращаться к самому роутеру `Spine01`.
+Пример доступа в LAN других роутеров есть у `Leaf04`:
+
+```json
+{
+  "name": "Leaf04",
+  "device_profile": "asus_rt-ax53u",
+  "subnet": "10.101.21.0/24",
+  "allow_to_lan": ["Spine01", "Leaf01"]
+}
+```
+
+В этом фрагменте LAN `Leaf04` может форвардиться в LAN `Spine01` и `Leaf01`.
 
 Директория роутера создаётся как lowercase slug:
 
 ```text
-Core01  -> routers/core01/
-Lab01   -> routers/lab01/
+Spine01  -> routers/spine01/
+Leaf03   -> routers/leaf03/
 ```
 
 ### Mesh hub / spine
@@ -157,22 +174,24 @@ Lab01   -> routers/lab01/
 
 ```json
 {
-  "name": "Core01",
+  "name": "Spine01",
   "listen_ip": "203.0.113.11"
 }
 ```
 
-Обычный `mesh_hub` становится spine/core узлом: на нём слушаются infra AmneziaWG-линки от leaf-роутеров, других spine и exit-серверов. Babel использует эти линки как routed overlay.
+Обычный `mesh_hub` становится spine-узлом: на нём слушаются infra AmneziaWG-линки от leaf-роутеров, других spine и exit-серверов. Babel использует эти линки как routed overlay.
 
 Если указать `access_only: true`, узел получает публичный endpoint только для пользовательских access-групп, но не становится spine:
 
 ```json
 {
-  "name": "AccessEdge01",
+  "name": "AccessOnly01",
   "listen_ip": "203.0.113.31",
   "access_only": true
 }
 ```
+
+`mesh_hubs[].name` всегда ссылается на существующий router. `listen_ip` задаётся canonical IPv4-адресом без порта и hostname. Один и тот же `listen_ip` нельзя использовать в нескольких `mesh_hubs`, включая `access_only` hubs.
 
 ### Exit hub
 
@@ -180,7 +199,7 @@ Lab01   -> routers/lab01/
 
 ```json
 {
-  "name": "Exit01",
+  "name": "EGR01",
   "listen_ip": "198.51.100.21",
   "exit_ip": "198.51.100.121"
 }
@@ -198,11 +217,18 @@ Lab01   -> routers/lab01/
 
 `exit_ip` - публичный egress-адрес для SNAT. Если `exit_ip` не задан, сервер использует MASQUERADE через default interface.
 
-Директория сервера сохраняет исходное имя:
+`listen_ip` и `exit_ip` задаются только как canonical usable unicast IPv4-адреса. Hostname и `ip:port` не используются в config-модели.
+
+Имя exit-сервера ограничено сильнее обычных имён: `A-Z`, `0-9`, `_`, первая буква `A-Z`, максимум 8 ASCII-байт. Это нужно, чтобы generated Linux IPIP device вида `ipip-ip<EXIT>` помещался в лимит 15 видимых байт.
+
+Директория сервера создаётся как lowercase slug:
 
 ```text
-Exit01 -> servers/Exit01/
+EGR01 -> servers/egr01/
+REV01 -> servers/rev01/
 ```
+
+Reverse-only exit без `listen_ip` первично деплоится руками. После bootstrap он получает generated node IP из `EXIT_NODE_SUPERNET4`, и дальнейший SSH/deploy может идти через `server_<exit-slug>_node`.
 
 ### Access
 
@@ -218,7 +244,7 @@ Exit01 -> servers/Exit01/
 
 ```json
 "access": {
-  "Core01": [
+  "Spine01": [
     {
       "name": "AdminWG",
       "protocol": "wireguard",
@@ -243,6 +269,8 @@ Access-группа должна висеть на router-узле с публи
 | `transit` | `TransitAccess` | Нет доступа к самому роутеру и LAN; разрешён DNS и транзит в Mesh/Exit/WAN |
 
 `allow_to_router` и `allow_to_lan` у access-группы работают так же, как у router. Source-сетью будет subnet access-группы, а target-роутеры берутся из соответствующего списка.
+
+Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, потому что этот диапазон принадлежит generated infra/exit tunnel ports.
 
 ## Быстрый старт
 
@@ -273,7 +301,7 @@ age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
 ./generate_configs.py --skip-awg-download --skip-package-sync
 ```
 
-Такой режим удобен для чтения generated tree, но это не полноценная подготовка к сборке. Полная генерация требует `wg`, для OpenVPN access нужен `openssl`, а dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
+Такой режим удобен, если AWG `.apk` и per-router package repos уже не нужны для текущей проверки. Hooks при этом всё равно запускаются, поэтому `tools/generate.py` всё ещё может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets. Для просмотра только синхронизированной template-структуры без generator hooks добавляй `--skip-hooks`. Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
 
 ## Как строятся линки
 
@@ -283,11 +311,11 @@ Infra-связи строятся поверх AmneziaWG.
 spine-spine       ring между публичными spine
 leaf -> spine     каждый leaf подключается ко всем spine
 router -> exit    каждый router подключается ко всем public exit
-exit -> spine     каждый exit подключается к публичным spine/core
+exit -> spine     каждый exit подключается к публичным spine
 exit-exit         ring между public exit-серверами
 ```
 
-Reverse exit без `listen_ip` не принимает входящие tunnel-связи от роутеров. Он сам поднимает outbound-туннели к публичным spine/core и становится доступен внутри overlay после bootstrap.
+Reverse exit без `listen_ip` не принимает входящие tunnel-связи от роутеров. Он сам поднимает outbound-туннели к публичным spine и становится доступен внутри overlay после bootstrap.
 
 На infra-линках не включается обычный default route. Они используются как транспорт для Babel и служебной маршрутизации.
 
@@ -344,7 +372,7 @@ Node-IP выбирается стабильно по имени exit-а, а не
 1. `routers.<name>.exit_order`, если задан;
 1. глобальный `exit_order` из `config.json`.
 
-`exit_order` влияет на приоритет выбора выхода, но не меняет сгенерированные announce/node prefixes.
+`exit_order` влияет на приоритет выбора выхода, но не меняет сгенерированные announce/node prefixes. Глобальный `exit_order` должен содержать все exit-серверы. Per-router `exit_order` может содержать только часть exit-ов; в этом случае роутер выбирает только из этого списка и не дополняет его глобальным порядком.
 
 На роутере `exit-route.sh` периодически проверяет достижимость exit marker-prefix через Babel и переключает активный выход. Traffic steering делается через policy routing:
 
@@ -419,16 +447,13 @@ server guard rule   -> если direct destination всё-таки пришёл 
 
 ### Для роутеров
 
-После `./generate_configs.py` для каждого router создаётся дерево:
+После `./generate_configs.py` для каждого router создаётся дерево managed/template-файлов:
 
 ```text
 routers/<router-slug>/
   files/etc/config/network_part
   files/etc/config/firewall_part
   files/etc/config/babeld
-  files/etc/config/openvpn
-  files/etc/wireguard/<AccessName>/clients/*.conf
-  files/etc/openvpn/<AccessName>/clients/*.ovpn
   files/etc/dropbear/authorized_keys
   files/etc/router-autoinstall.env
   files/etc/ipsets/direct-static.txt
@@ -439,17 +464,26 @@ routers/<router-slug>/
   packages/*.apk
 ```
 
-`routers/example` остаётся шаблоном. Конкретные роутеры создаются рядом с ним.
+Access-specific файлы появляются только на роутерах с соответствующими access-группами:
+
+```text
+files/etc/config/openvpn                         # только при OpenVPN access
+files/etc/openvpn/<AccessName>/server.ovpn       # только при OpenVPN access
+files/etc/openvpn/<AccessName>/clients/*.ovpn    # только при OpenVPN access
+files/etc/wireguard/<AccessName>/clients/*.conf  # при WireGuard или AmneziaWG access
+```
+
+`routers/example` остаётся шаблоном. Конкретные роутеры создаются рядом с ним в lowercase-директориях.
 
 ### Для exit-серверов
 
 Для каждого exit создаётся:
 
 ```text
-servers/<ExitName>/
+servers/<exit-slug>/
   etc/awg-server.env
   etc/amnezia/amneziawg/*.conf
-  etc/babel<exit-lower>.conf
+  etc/babel<exit-slug>.conf
   etc/ipsets/direct-static.txt
   etc/ipsets/direct.txt
   etc/systemd/system/*.service
@@ -458,7 +492,7 @@ servers/<ExitName>/
   root/.ssh/authorized_keys
 ```
 
-`servers/example` остаётся шаблоном. На exit-серверах весь runtime env для `awg-server.sh`, включая direct-list refresh settings и `BABELD_CONF`, находится в `etc/awg-server.env`.
+`servers/example` остаётся шаблоном. Конкретные exit-директории создаются в lowercase-виде: `EGR01 -> servers/egr01/`. На exit-серверах весь runtime env для `awg-server.sh`, включая direct-list refresh settings и `BABELD_CONF`, находится в `etc/awg-server.env`.
 
 ## Шаблоны, managed-секции и customization
 
@@ -470,7 +504,7 @@ servers/<ExitName>/
 # Unique part up to this line
 ```
 
-Всё выше marker-а считается локальной частью конкретного узла. Всё ниже marker-а обновляется из шаблона или генератора.
+Для merge-файлов `tools/sync_rules.py` синхронизирует общую tail-часть из `routers/example`, то есть всё после marker-а. Часть до marker-а остаётся узловой частью конкретного роутера, но `tools/generate.py` владеет своими managed UCI/bootstrap-блоками внутри этой части и переписывает их из `config.json`.
 
 Это касается прежде всего:
 
@@ -487,9 +521,9 @@ customization() {
 }
 ```
 
-Генератор обновляет внутри неё managed-блоки для LAN IP, hostname, DoH source address и Wi-Fi. Остальную свою логику можно добавлять туда же: UCI-настройки, sysctl, дополнительные firewall tweaks, init enable, локальные хаки под конкретное железо. Она выполнится на роутере при первом запуске образа, после общей подготовки и перед `uci commit`.
+Генератор обновляет внутри неё managed-блоки для LAN IP, hostname, DoH source address, Wi-Fi и OpenVPN/Babel hotplug. Свою router-specific логику можно добавлять туда же: UCI-настройки, sysctl, дополнительные firewall tweaks, init enable, локальные хаки под конкретное железо. Она выполнится на роутере при первом запуске образа, после общей подготовки и перед `uci commit`.
 
-Практическое правило: generated managed-блоки лучше не редактировать руками, а свою логику держать рядом в `customization()` или выше marker-а, если файл поддерживает marker.
+Практическое правило: generated managed-блоки редактируются через `config.json` и генератор, а ручная логика живёт рядом в `customization()` или в неменеджеренных UCI-блоках до marker-а. `tools/show_unmanaged.py` скрывает generated-блоки только при byte-exact совпадении с тем, что выводит генератор.
 
 Для проверки неожиданных unmanaged-частей:
 
@@ -502,7 +536,7 @@ customization() {
 
 Bootstrap-скрипт на OpenWrt при первом запуске образа:
 
-- сшивает `network_part`, `dhcp_part` и `firewall_part` с реальными UCI-файлами;
+- сшивает `network_part`, опциональный `dhcp_part` и `firewall_part` с реальными UCI-файлами;
 - настраивает `https-dns-proxy` и dnsmasq;
 - создаёт пользователя и группу `doh` с uid/gid `4453`;
 - увеличивает log buffer;
@@ -598,7 +632,7 @@ age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
 Проверить, что marker-ов не осталось в staging tree:
 
 ```bash
-./tools/secrets.py assert-no-markers routers/core01/files
+./tools/secrets.py assert-no-markers routers/spine01/files
 ```
 
 `ROUTER_SECRET_V1{...}` можно использовать в `config.json` и в любых generated/template файлах, которые попадают в конфиги роутеров или серверов. Главное, чтобы файл проходил через build/deploy staging.
@@ -606,7 +640,7 @@ age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
 Когда расшифровывается:
 
 - при сборке роутерного образа `build_router_images.py` копирует `routers/<slug>/files` во временную ImageBuilder-директорию, расшифровывает там и проверяет `assert-no-markers`;
-- при деплое серверов `deploy_servers.py` копирует `servers/<ExitName>` во временный staging-каталог, расшифровывает там и проверяет `assert-no-markers`.
+- при деплое серверов `deploy_servers.py` копирует `servers/<exit-slug>` во временный staging-каталог, расшифровывает там и проверяет `assert-no-markers`.
 
 В исходном дереве секреты должны оставаться зашифрованными.
 
@@ -623,10 +657,10 @@ age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
 Генерируются, например:
 
 ```text
-router_core01
-router_branch01
-server_exit01
-server_exit01_node
+router_spine01
+router_leaf01
+server_egr01
+server_egr01_node
 ```
 
 Router aliases:
@@ -640,23 +674,23 @@ router_<slug>
 Server aliases бывают двух типов:
 
 ```text
-server_<exit>       public/bootstrap alias
-server_<exit>_node  overlay node alias
+server_<exit-slug>       public/bootstrap alias
+server_<exit-slug>_node  overlay node alias
 ```
 
-`server_<exit>` нужен для первичного деплоя и обычно указывает на `listen_ip`, затем `exit_ip`, затем node IP, если публичного адреса нет.
+`server_<exit-slug>` нужен для первичного деплоя и обычно указывает на `listen_ip`, затем `exit_ip`, затем node IP, если публичного адреса нет.
 
-`server_<exit>_node` указывает на generated node IP из `EXIT_NODE_SUPERNET4`. Он полезен после bootstrap, особенно для reverse exit без public endpoint или когда SSH по public IP закрыт.
+`server_<exit-slug>_node` указывает на generated node IP из `EXIT_NODE_SUPERNET4`. Он полезен после bootstrap, особенно для reverse exit без public endpoint или когда SSH по public IP закрыт.
 
 Примеры:
 
 ```bash
-ssh -F ~/.ssh/router-autoinstall-demo/config router_core01
-ssh -F ~/.ssh/router-autoinstall-demo/config server_exit01
-ssh -F ~/.ssh/router-autoinstall-demo/config server_exit01_node
+ssh -F ~/.ssh/router-autoinstall-demo/config router_spine01
+ssh -F ~/.ssh/router-autoinstall-demo/config server_egr01
+ssh -F ~/.ssh/router-autoinstall-demo/config server_egr01_node
 ```
 
-Server tools по умолчанию используют `auto`: сначала пробуют `server_<exit>_node`, затем `server_<exit>`. Режим можно выбрать явно:
+Server tools по умолчанию используют `auto`: сначала пробуют `server_<exit-slug>_node`, затем `server_<exit-slug>`. Режим можно выбрать явно:
 
 ```bash
 ./deploy_servers.py --server-ssh-mode node
@@ -666,88 +700,108 @@ Server tools по умолчанию используют `auto`: сначала
 
 ## `config.json`
 
-Минимальная практическая структура:
+Текущий `config.json` содержит такую topology-модель:
+
+```text
+main_router: Spine01
+routers: Spine01, Spine02, Spine03, AccessOnly01, AccessOnly02, Leaf01, Leaf02, Leaf03, Leaf04
+mesh_hubs: Spine01, Spine02, Spine03
+access_only mesh_hubs: AccessOnly01, AccessOnly02
+exit_hubs: EGR01, EGR02, PUB01, REV01, REV02
+exit_order: EGR01, EGR02, PUB01, REV01, REV02
+access endpoints: Spine01, Spine02, AccessOnly01, AccessOnly02
+```
+
+Ключевые фрагменты текущего `config.json`:
 
 ```json
 {
   "openwrt_version": "25.12.4",
   "ssh_key_dir": "~/.ssh/router-autoinstall-demo",
   "secret_key": "~/.ssh/router-autoinstall-demo/router_secrets",
-  "main_router": "Core01",
-  "exit_order": ["Exit01"],
+  "main_router": "Spine01",
+  "exit_order": ["EGR01", "EGR02", "PUB01", "REV01", "REV02"],
+
+  "packages": [
+    "block-mount",
+    "htop",
+    "kmod-fs-vfat",
+    "kmod-usb-storage",
+    "luci-theme-material",
+    "tcpdump"
+  ],
 
   "device_profiles": {
     "asus_rt-ax59u": {
       "board": "mediatek/filogic",
       "arch": "aarch64_cortex-a53"
+    },
+    "asus_tuf-ax4200": {
+      "board": "mediatek/filogic",
+      "arch": "aarch64_cortex-a53"
+    },
+    "asus_rt-ax53u": {
+      "board": "ramips/mt7621",
+      "arch": "mipsel_24kc"
+    },
+    "xiaomi_mi-router-4a-gigabit-v2": {
+      "board": "ramips/mt7621",
+      "arch": "mipsel_24kc"
     }
-  },
-
-  "packages": [
-    "babeld",
-    "curl",
-    "iperf3",
-    "jq-full",
-    "luci",
-    "luci-app-https-dns-proxy",
-    "luci-app-watchcat",
-    "luci-proto-amneziawg",
-    "luci-proto-ipip"
-  ],
-
-  "routers": [
-    {
-      "name": "Core01",
-      "device_profile": "asus_rt-ax59u",
-      "subnet": "10.101.1.0/24",
-      "allow_to_router": ["all"],
-      "allow_to_lan": ["all"]
-    }
-  ],
-
-  "mesh_hubs": [
-    {
-      "name": "Core01",
-      "listen_ip": "203.0.113.11"
-    }
-  ],
-
-  "exit_hubs": [
-    {
-      "name": "Exit01",
-      "listen_ip": "198.51.100.21",
-      "exit_ip": "198.51.100.121"
-    }
-  ],
-
-  "access": {}
+  }
 }
 ```
 
-`packages` - это не весь base system OpenWrt, а список пакетов, который ImageBuilder должен добавить в образ. Для generated конфигов обычно нужны как минимум runtime packages для Babel, AWG/IPIP, DoH, curl и служебных проверок. Если используются WireGuard access или OpenVPN access, добавь соответствующие пакеты per-router:
+Полный список роутеров, exit-ов, access-групп и Wi-Fi-секретов лежит в самом `config.json`.
 
-```json
-{
-  "name": "Core01",
-  "packages": ["+luci-proto-wireguard", "+openvpn-openssl"]
-}
+`packages` в `config.json` - это дополнительные user-facing пакеты. Managed runtime-пакеты проекта добавляются автоматически из `tools/default.py`:
+
+```text
+babeld
+curl
+iperf3
+jq-full
+luci
+luci-app-https-dns-proxy
+luci-app-watchcat
+luci-proto-amneziawg
+luci-proto-ipip
 ```
+
+Access-протоколы добавляют свои managed-пакеты на тот роутер, где есть соответствующая access-группа:
+
+| Protocol | Auto package |
+|---|---|
+| `wireguard` | `luci-proto-wireguard` |
+| `openvpn` | `openvpn-openssl` |
+| `amneziawg` | использует already-required AWG packages |
+
+Если на одном роутере есть и WireGuard access, и OpenVPN access, в итоговый package set попадают оба пакета: `luci-proto-wireguard` и `openvpn-openssl`. Указывать их руками через `+` не требуется.
 
 Глобальные `packages` пишутся без префиксов. Per-router overrides используют `+` и `-`:
 
 ```json
 {
-  "name": "Branch02",
-  "packages": ["-tcpdump", "+luci-proto-wireguard"]
+  "name": "Leaf02",
+  "device_profile": "xiaomi_mi-router-4a-gigabit-v2",
+  "subnet": "10.101.12.0/24",
+  "packages": [
+    "-block-mount",
+    "-kmod-fs-vfat",
+    "-kmod-usb-storage",
+    "-tcpdump",
+    "+nano"
+  ]
 }
 ```
+
+Удалять managed-required packages нельзя. Удаление пакета, которого нет в итоговом package set роутера, тоже считается ошибкой config-а.
 
 ### Top-level keys
 
 Поддерживаемые top-level keys:
 
 ```text
-name
 ssh_key_dir
 secret_key
 openwrt_version
@@ -774,7 +828,27 @@ access
 }
 ```
 
-`board` используется для выбора OpenWrt ImageBuilder. `arch` используется для AWG `.apk` packages.
+`board` используется для выбора OpenWrt ImageBuilder и всегда имеет вид `target/subtarget`. `arch` используется для AWG `.apk` packages. Profile name является безопасным ASCII identifier. `board` segments и `arch` являются безопасными ASCII path segments; `.` и `..` как path segment не принимаются.
+
+### Правила валидации config
+
+`build_config_data()` является общим fail-fast слоем для основных entrypoint-ов. Он проверяет, что:
+
+- `openwrt_version` задан и не ниже `25.12`;
+- `main_router` задан и ссылается на существующий router;
+- router/access имена состоят только из `A-Za-z0-9_` и проверяются через generated Linux interface names;
+- `router.name` используется как generated `<router>In`, поэтому имя router-а эффективно ограничено 13 ASCII-байтами;
+- обычный non-`access_only` `mesh_hubs[].name` также используется как `<hub>Out`, поэтому для spine/hub-а эффективный лимит имени - 12 ASCII-байт;
+- access group `name` используется как interface name напрямую и ограничен 15 ASCII-байтами;
+- `exit_hubs.name` использует `A-Z`, `0-9`, `_`, начинается с буквы и имеет максимум 8 ASCII-байт;
+- router/server directory slugs не конфликтуют case-insensitive;
+- `mesh_hubs[].name` ссылается на существующий router;
+- `listen_ip` и `exit_ip` являются canonical usable unicast IPv4-адресами;
+- router/access subnets записаны canonical и не пересекаются между собой и служебными пулами;
+- global `exit_order` перечисляет все exit hubs ровно по одному разу;
+- per-router `exit_order`, если задан, перечисляет непустое подмножество exit hubs без дублей и неизвестных имён; отсутствующие exit-ы для этого router-а не используются;
+- access ports не попадают в generated infra AWG port range;
+- package names и router package overrides имеют безопасный формат.
 
 ### Wi-Fi
 
@@ -841,8 +915,8 @@ access
 
 ```bash
 ./deploy_servers.py
-./deploy_servers.py Exit01 Exit03
-./deploy_servers.py --server-ssh-mode node Exit04
+./deploy_servers.py EGR01 PUB01
+./deploy_servers.py --server-ssh-mode node REV01
 ./deploy_servers.py --replace-authorized-keys
 ./deploy_servers.py --ssh-connect-timeout 10
 ```
@@ -866,8 +940,8 @@ access
 
 ```bash
 ./build_router_images.py
-./build_router_images.py Core01
-./build_router_images.py Core01,Branch01 --version 25.12.4
+./build_router_images.py Spine01
+./build_router_images.py Spine01,Leaf01 --version 25.12.4
 ```
 
 Результат складывается в `images/`:
@@ -885,7 +959,7 @@ images/<router-slug>_<openwrt-version>_<git>_<timestamp>_factory.bin
 
 ```bash
 ./upgrade_routers.py e47e68e
-./upgrade_routers.py e47e68e Core01 Branch01
+./upgrade_routers.py e47e68e Spine01 Leaf01
 ./upgrade_routers.py e47e68e --result-dir images --remote-dir /tmp
 ```
 
@@ -913,7 +987,7 @@ leaf routers -> mesh hubs except main_router -> main_router
 
 ```bash
 ./run_servers.py
-./run_servers.py --servers Exit01,Exit04 uptime
+./run_servers.py --servers EGR01,REV01 uptime
 ./run_servers.py --server-ssh-mode node 'systemctl status awg-server-network'
 ```
 
@@ -953,13 +1027,13 @@ leaf routers -> mesh hubs except main_router -> main_router
 
 ### SVG
 
-`render_topology.py` строит SVG-карты.
+`render_topology_2d.py` строит SVG-карты.
 
 По measured JSON:
 
 ```bash
 ./collect_link_speeds.py --progress --json-out link-speeds.json
-./render_topology.py --speeds-json link-speeds.json
+./render_topology_2d.py --speeds-json link-speeds.json
 ```
 
 По умолчанию создаются:
@@ -975,31 +1049,31 @@ Topology-only без замеров:
 
 ```bash
 # По реально generated AWG/UCI файлам
-./render_topology.py --topology-only --topology-source generated --out topology.svg
+./render_topology_2d.py --topology-only --topology-source generated --out topology.svg
 
 # По плановой topology из config.json
-./render_topology.py --topology-only --topology-source config --out topology.svg
+./render_topology_2d.py --topology-only --topology-source config --out topology.svg
 ```
 
 Выбор конкретной SVG-карты:
 
 ```bash
-./render_topology.py --only overview
-./render_topology.py --only from
-./render_topology.py --only to
+./render_topology_2d.py --only overview
+./render_topology_2d.py --only from
+./render_topology_2d.py --only to
 ```
 
 Порог degraded:
 
 ```bash
-./render_topology.py --degraded-mbps 20
+./render_topology_2d.py --degraded-mbps 20
 ```
 
 Подписи скоростей на основных картах:
 
 ```bash
-./render_topology.py --main-label-mode problems
-./render_topology.py --main-label-mode all
+./render_topology_2d.py --main-label-mode problems
+./render_topology_2d.py --main-label-mode all
 ```
 
 ### 3D HTML
@@ -1036,7 +1110,7 @@ iperf3
 jq
 ```
 
-На exit-серверах предполагаются Linux, systemd, root-доступ, AmneziaWG tooling, Babel и ipset/nftables tooling, которые используются generated scripts.
+На exit-серверах предполагается Ubuntu/Debian-compatible Linux с systemd, root-доступом и `apt-get`: шаблонный `servers/example/root/deploy.sh` ставит Babel, ipset/iptables tooling, iperf3, jq и AmneziaWG из PPA Amnezia. Если используется другой дистрибутив, нужно адаптировать `servers/example/root/deploy.sh` под его package manager и имена сервисов.
 
 ## Типовой рабочий цикл
 
@@ -1065,7 +1139,7 @@ ls -lh images/
 
 # 8. Проверяем links и рисуем карту
 ./collect_link_speeds.py --progress --json-out link-speeds.json
-./render_topology.py --speeds-json link-speeds.json --main-label-mode problems
+./render_topology_2d.py --speeds-json link-speeds.json --main-label-mode problems
 ./render_topology_3d.py --speeds-json link-speeds.json
 ```
 
@@ -1092,13 +1166,15 @@ python3 -m py_compile *.py tools/*.py
 ## Что важно помнить
 
 - `routers/example` и `servers/example` - шаблоны, а не целевые узлы.
-- Router directories всегда lowercase: `routers/core01`, `routers/branch01`.
-- Server directories сохраняют имя: `servers/Exit01`.
+- Router directories всегда lowercase: `routers/spine01`, `routers/leaf01`.
+- Server directories всегда lowercase: `servers/egr01`, `servers/rev01`.
 - `allow_to_router` разрешает INPUT на target-роутер, а `allow_to_lan` разрешает FORWARD в LAN target-роутера.
 - `exit_order` задаёт приоритет выхода, но не адресацию.
 - Если все exit недоступны, `exit-route.sh` ставит `network.exit200.disabled=1`, и трафик возвращается на main default path.
-- Reverse exit без `listen_ip` доступен через generated node-IP после bootstrap.
-- `server_<exit>_node` - overlay alias, `server_<exit>` - public/bootstrap alias.
+- Reverse exit без `listen_ip` первично деплоится руками, а после bootstrap доступен через generated node-IP.
+- `server_<exit-slug>_node` - overlay alias, `server_<exit-slug>` - public/bootstrap alias; exit alias пишется lowercase, например `server_egr01`.
+- `packages` в `config.json` - дополнительные пакеты; обязательные runtime-пакеты и access-пакеты добавляются автоматически.
+- `wireguard` access добавляет `luci-proto-wireguard`, `openvpn` access добавляет `openvpn-openssl`; если на роутере есть оба access-типа, добавляются оба пакета.
 - `--force` пересоздаёт mesh/exit tunnel keys; access secrets сохраняются.
 - Секреты должны оставаться в исходном дереве как `ROUTER_SECRET_V1{...}` и расшифровываться только в staging/build/deploy.
 - Любую router-specific логику можно добавлять в `customization()` внутри `99-firstboot-custom`.
