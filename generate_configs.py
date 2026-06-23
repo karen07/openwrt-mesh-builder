@@ -5,7 +5,6 @@ sys.dont_write_bytecode = True
 import argparse
 import filecmp
 import shutil
-import tarfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +29,10 @@ from tools.default import (
     ROUTER_PACKAGES_DIRNAME,
 )
 from tools.sync_rules import ensure_router_from_example, sync_router
+from tools.ensure_ssh_keys import main as ensure_ssh_keys_main
+from tools.generate import main as generate_main
+from tools.show_unmanaged import main as show_unmanaged_main
+from tools.validate import main as validate_main
 
 
 @dataclass(frozen=True)
@@ -149,38 +152,6 @@ def ensure_awg_packages(
 
         seen.add(key)
         ensure_named_awg_packages_for_profile(version, profile)
-
-
-def parse_pkginfo(text: str, apk_file: Path) -> ApkMeta:
-    fields: dict[str, str] = {}
-
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-
-        if not line or line.startswith("#"):
-            continue
-
-        if "=" not in line:
-            continue
-
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip("'\"")
-
-        if key and key not in fields:
-            fields[key] = value
-
-    name = fields.get("pkgname")
-    version = fields.get("pkgver")
-    arch = fields.get("arch")
-
-    if not name or not version or not arch:
-        die(
-            f"incomplete apk metadata in {apk_file}: "
-            f"pkgname={name!r}, pkgver={version!r}, arch={arch!r}"
-        )
-
-    return ApkMeta(name=name, version=version, arch=arch)
 
 
 ADB_SCHEMA_PACKAGE = 0x676B6370
@@ -409,36 +380,11 @@ def parse_apk_v3_metadata(apk_file: Path) -> ApkMeta:
     return parse_apk_v3_pkginfo_adb(adb_data, apk_file)
 
 
-def parse_legacy_tar_apk_metadata(apk_file: Path) -> ApkMeta:
-    with tarfile.open(apk_file, "r:*") as tar:
-        for member in tar:
-            if Path(member.name).name != ".PKGINFO":
-                continue
-
-            extracted = tar.extractfile(member)
-            if extracted is None:
-                break
-
-            text = extracted.read().decode("utf-8", errors="replace")
-            return parse_pkginfo(text, apk_file)
-
-    raise ValueError("failed to find .PKGINFO")
-
-
 def apk_metadata(apk_file: Path) -> ApkMeta:
-    errors: list[str] = []
-
     try:
         return parse_apk_v3_metadata(apk_file)
     except Exception as e:
-        errors.append(f"APK v3 parser: {e}")
-
-    try:
-        return parse_legacy_tar_apk_metadata(apk_file)
-    except Exception as e:
-        errors.append(f"legacy tar parser: {e}")
-
-    die(f"failed to read apk metadata from {apk_file}: " + "; ".join(errors))
+        die(f"failed to read APK v3 metadata from {apk_file}: {e}")
 
 
 def apk_canonical_name(apk_file: Path, expected_arch: str) -> str:
@@ -603,14 +549,14 @@ def main() -> None:
     if not args.skip_hooks:
         config_arg = str(Path(args.config))
 
-        generate_args = ["./tools/generate.py", "--config", config_arg]
+        generate_args = ["--config", config_arg]
         if args.force:
             generate_args.append("--force")
 
-        run(generate_args)
-        run(["./tools/ensure_ssh_keys.py", "--config", config_arg])
-        run(["./tools/validate.py", "--config", config_arg])
-        run(["./tools/show_unmanaged.py", "--config", config_arg])
+        generate_main(generate_args)
+        ensure_ssh_keys_main(["--config", config_arg])
+        validate_main(["--config", config_arg])
+        show_unmanaged_main(["--config", config_arg])
 
 
 if __name__ == "__main__":

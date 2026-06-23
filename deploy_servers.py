@@ -12,9 +12,11 @@ from pathlib import Path
 try:
     from tools.cli_common import load_json_config, server_ssh_hosts, ssh_config_args
     from tools.common import build_config_data, server_exit_dir
+    from tools.secrets import assert_no_markers, decrypt_tree
 except ImportError:
     from cli_common import load_json_config, server_ssh_hosts, ssh_config_args
     from common import build_config_data, server_exit_dir
+    from secrets import assert_no_markers, decrypt_tree
 
 try:
     from tools.default import (
@@ -91,17 +93,6 @@ def resolve_config_path(config_path: str) -> Path:
     return project_root() / path
 
 
-def run_secrets_tool(config_path: Path, *args: str) -> None:
-    root = project_root()
-    tool = root / "tools" / "secrets.py"
-    rc = subprocess.run(
-        [sys.executable, str(tool), "--config", str(config_path), *args],
-        check=False,
-    ).returncode
-    if rc != 0:
-        die(f"secrets tool failed with exit code {rc}")
-
-
 def copy_server_tree(src: Path, dst: Path) -> None:
     entries = [
         path
@@ -154,8 +145,8 @@ def stage_server_files(name: str, src: Path, tmp_root: Path, config_path: Path) 
         encoding="utf-8",
     )
 
-    run_secrets_tool(config_path, "decrypt-tree", str(stage))
-    run_secrets_tool(config_path, "assert-no-markers", str(stage))
+    decrypt_tree([stage], config_path=config_path)
+    assert_no_markers([stage])
 
     return stage
 

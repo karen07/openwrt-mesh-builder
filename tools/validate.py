@@ -2695,7 +2695,7 @@ def validate_router_packages(raw_cfg: dict[str, object], cfg: ConfigData) -> Non
 # ============================================================
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     global VERBOSE
 
     ap = argparse.ArgumentParser(
@@ -2712,7 +2712,7 @@ def main() -> None:
         action="store_true",
         help="enable verbose output",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     VERBOSE = args.verbose
 

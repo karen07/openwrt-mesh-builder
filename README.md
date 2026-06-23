@@ -278,20 +278,17 @@ Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, по
 # 1. Описать сеть
 vim config.json
 
-# 2. Создать age identity, если используются ROUTER_SECRET_V1-секреты
-mkdir -p ~/.ssh/router-autoinstall-demo
-age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
-
-# 3. Сгенерировать конфиги, ключи и проверки
+# 2. Сгенерировать конфиги, ключи и проверки
+# Age identity из config.secret_key создаётся автоматически, если его ещё нет.
 ./generate_configs.py
 
-# 4. Задеплоить exit-серверы
+# 3. Задеплоить exit-серверы
 ./deploy_servers.py
 
-# 5. Собрать OpenWrt firmware-образы
+# 4. Собрать OpenWrt firmware-образы
 ./build_router_images.py
 
-# 6. Обновить роутеры найденной git-версией образов
+# 5. Обновить роутеры найденной git-версией образов
 ./upgrade_routers.py <git-short-hash>
 ```
 
@@ -611,11 +608,7 @@ ROUTER_SECRET_V1{...}
 "secret_key": "~/.ssh/router-autoinstall-demo/router_secrets"
 ```
 
-Создать identity:
-
-```bash
-age-keygen -o ~/.ssh/router-autoinstall-demo/router_secrets
-```
+Если identity-файла ещё нет, он создаётся автоматически через `age-keygen -o` по пути из `config.secret_key`.
 
 Зашифровать значение:
 
@@ -1097,7 +1090,6 @@ ssh, scp, ssh-keygen
 age, age-keygen
 wg
 openssl
-wget
 tar с поддержкой zst
 make
 ```

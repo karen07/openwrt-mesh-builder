@@ -2221,7 +2221,7 @@ def update_babeld(
 # ============================================================
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Generator: mesh/exit AmneziaWG + access WireGuard/AmneziaWG/OpenVPN + "
@@ -2243,7 +2243,7 @@ def main() -> None:
         action="store_true",
         help="print detailed generation information",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     raw_cfg = load_json_config(Path(args.config))
     cfg = build_config_data(raw_cfg)

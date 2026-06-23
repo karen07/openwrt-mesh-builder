@@ -69,6 +69,20 @@ def load_config(path: Path) -> dict[str, object]:
     return data
 
 
+def ensure_age_identity_file(path: Path) -> Path:
+    if path.exists():
+        if not path.is_file():
+            die(f"age identity path exists but is not a file: {path}")
+        return path
+
+    need("age-keygen")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    run_checked(["age-keygen", "-o", str(path)])
+    path.chmod(0o600)
+    print(f"Generated age identity: {path}")
+    return path
+
+
 def identity_path(config_path: Path = CONFIG_PATH) -> Path:
     config_path = config_path.expanduser()
     cfg = load_config(config_path)
@@ -80,12 +94,7 @@ def identity_path(config_path: Path = CONFIG_PATH) -> Path:
         )
 
     path = expand_config_path(raw.strip(), config_path=config_path)
-    if not path.is_file():
-        die(
-            "age identity file is missing: "
-            f"{path}. Set config.{CONFIG_KEY_SECRET_KEY} to the age identity file path"
-        )
-    return path
+    return ensure_age_identity_file(path)
 
 
 def b64u_encode(data: bytes) -> str:
@@ -256,7 +265,7 @@ def cmd_decrypt(args: argparse.Namespace) -> None:
     print(decrypt_text(text, config_path=args.config), end="")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description="Encrypt/decrypt ROUTER_SECRET_V1{ciphertext} markers"
     )
@@ -293,7 +302,7 @@ def main() -> None:
     p.add_argument("paths", nargs="+", type=Path)
     p.set_defaults(func=lambda args: assert_no_markers(args.paths))
 
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     args.func(args)
 
 

@@ -4,6 +4,7 @@ import sys
 sys.dont_write_bytecode = True
 import argparse
 import shutil
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from tools.common import (
     build_config_data,
     normalize_openwrt_version,
 )
+from tools.secrets import assert_no_markers, decrypt_tree
 from tools.default import (
     CONFIG_PATH,
     IMAGES_DIR,
@@ -41,6 +43,25 @@ def sh(args: list[str], cwd: Path | None = None) -> None:
 
 def out(args: list[str], cwd: Path | None = None) -> str:
     return run_checked(args, cwd=cwd).strip()
+
+
+def download_binary(url: str, dst: Path) -> None:
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    tmp.unlink(missing_ok=True)
+
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read()
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        die(f"failed to download {url}: {e}")
+
+    if not data:
+        tmp.unlink(missing_ok=True)
+        die(f"failed to download {url}: empty response")
+
+    tmp.write_bytes(data)
+    tmp.replace(dst)
 
 
 def load_config(config_path: Path) -> ConfigData:
@@ -226,7 +247,7 @@ def build_router(
     print(f"Downloading from: {dl_url}")
 
     if not dl_local.exists():
-        sh(["wget", "-q", "-O", str(dl_local), dl_url])
+        download_binary(dl_url, dl_local)
 
     build_dir = router_dir / file_name_tmp
 
@@ -242,16 +263,8 @@ def build_router(
     shutil.copytree(files_dir, staged_files)
     shutil.copytree(packages_dir, staged_packages)
 
-    run_no_capture(
-        [
-            "./tools/secrets.py",
-            "--config",
-            str(config_path),
-            "decrypt-tree",
-            str(staged_files),
-        ]
-    )
-    run_no_capture(["./tools/secrets.py", "assert-no-markers", str(staged_files)])
+    decrypt_tree([staged_files], config_path=config_path)
+    assert_no_markers([staged_files])
 
     etc_dir = staged_files / "etc"
     etc_dir.mkdir(parents=True, exist_ok=True)

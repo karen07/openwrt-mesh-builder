@@ -745,7 +745,7 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Show unmanaged parts above marker in router managed files. "
@@ -764,7 +764,7 @@ def main() -> None:
         action="store_true",
         help="print full unmanaged report after its sha256 hash when unmanaged content exists",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     raw_cfg = load_json_config(Path(args.config))
     cfg = build_config_data(raw_cfg)

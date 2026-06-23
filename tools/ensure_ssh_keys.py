@@ -254,7 +254,7 @@ def write_ssh_config(
     print(f"Writing SSH config: {ssh_config_path}")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description=(
             "Generate per-router/per-server SSH keys, authorized_keys, "
@@ -266,7 +266,7 @@ def main() -> None:
         default=str(CONFIG_PATH),
         help="path to JSON config file (default: config.json)",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     need("ssh-keygen")
 
