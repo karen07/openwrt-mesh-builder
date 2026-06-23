@@ -5,12 +5,13 @@ sys.dont_write_bytecode = True
 import argparse
 import re
 import shutil
-import urllib.request
 from pathlib import Path
 
 try:
+    from .cli_common import urlopen_insecure
     from .common import *
 except ImportError:
+    from cli_common import urlopen_insecure
     from common import *
 
 
@@ -1458,7 +1459,7 @@ def normalize_ipset_lines(lines: list[str]) -> list[str]:
 
 def download_text_lines(url: str) -> list[str]:
     try:
-        with urllib.request.urlopen(url, timeout=30) as response:
+        with urlopen_insecure(url, timeout=30) as response:
             text = response.read().decode("utf-8")
     except Exception as e:
         die(f"failed to download {url}: {e}")
@@ -2248,7 +2249,7 @@ def main() -> None:
     raw_cfg = load_json_config(Path(args.config))
     cfg = build_config_data(raw_cfg)
 
-    need("wg", "openssl")
+    need("openssl")
     existing = load_existing_network_cfgs(cfg)
 
     secrets_force = args.force

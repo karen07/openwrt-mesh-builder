@@ -211,11 +211,11 @@ def public_key_or_die(priv: str, where: str) -> str:
     if not priv:
         die(f"{where}: empty private key")
     try:
-        return sh(["wg", "pubkey"], input_text=priv + "\n")
-    except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or "").strip() if hasattr(e, "stderr") else ""
-        suffix = f": {stderr}" if stderr else ""
-        die(f"{where}: invalid WireGuard/AmneziaWG private key{suffix}")
+        return public_key_from_private(priv)
+    except SystemExit:
+        raise
+    except Exception as e:
+        die(f"{where}: invalid WireGuard/AmneziaWG private key: {e}")
 
 
 def verify_private_public(priv: str, expected_pub: str, where: str) -> None:
@@ -2722,7 +2722,7 @@ def main() -> None:
     cfg = build_config_data(raw_cfg)
     validate_router_packages(raw_cfg, cfg)
 
-    need("wg", "openssl")
+    need("openssl")
 
     vprint("=== GENERATED FILE VALIDATION ===")
     validate_generated_files_exist(cfg)

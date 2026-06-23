@@ -3,6 +3,7 @@ import sys
 
 sys.dont_write_bytecode = True
 import argparse
+import importlib
 import shutil
 import tempfile
 from datetime import datetime
@@ -10,10 +11,15 @@ import subprocess
 from pathlib import Path
 
 try:
-    from tools.cli_common import load_json_config, server_ssh_hosts, ssh_config_args
+    from tools.cli_common import (
+        git_short_hash,
+        load_json_config,
+        server_ssh_hosts,
+        ssh_config_args,
+    )
     from tools.common import build_config_data, server_exit_dir
 except ImportError:
-    from cli_common import load_json_config, server_ssh_hosts, ssh_config_args
+    from cli_common import git_short_hash, load_json_config, server_ssh_hosts, ssh_config_args
     from common import build_config_data, server_exit_dir
 
 try:
@@ -58,21 +64,7 @@ def interactive_ssh_timeout_args(connect_timeout: int) -> list[str]:
 
 
 def git_short() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except Exception:
-        return "unknown"
-
-    if result.returncode != 0:
-        return "unknown"
-
-    value = result.stdout.strip()
-    return value or "unknown"
+    return git_short_hash(project_root())
 
 
 def server_deploy_version() -> str:
@@ -92,14 +84,13 @@ def resolve_config_path(config_path: str) -> Path:
 
 
 def run_secrets_tool(config_path: Path, *args: str) -> None:
-    root = project_root()
-    tool = root / "tools" / "secrets.py"
-    rc = subprocess.run(
-        [sys.executable, str(tool), "--config", str(config_path), *args],
-        check=False,
-    ).returncode
-    if rc != 0:
-        die(f"secrets tool failed with exit code {rc}")
+    module = importlib.import_module("tools.secrets")
+    old_argv = sys.argv
+    sys.argv = ["secrets.py", "--config", str(config_path), *args]
+    try:
+        module.main()
+    finally:
+        sys.argv = old_argv
 
 
 def copy_server_tree(src: Path, dst: Path) -> None:

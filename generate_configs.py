@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
+import struct
 import sys
+import zlib
 
 sys.dont_write_bytecode = True
 import argparse
 import filecmp
+import importlib
 import shutil
 import tarfile
 import urllib.request
@@ -14,8 +17,7 @@ from tools.cli_common import (
     clear_screen,
     die,
     load_json_config,
-    run_checked,
-    run_no_capture,
+    urlopen_insecure,
 )
 from tools.common import ConfigData, DeviceProfile, RouterDef, build_config_data
 from tools.default import (
@@ -39,6 +41,25 @@ class ApkMeta:
     arch: str
 
 
+ADB_FORMAT_MAGIC = b"ADB."
+ADB_COMPRESSED_DEFLATE_MAGIC = b"ADBd"
+ADB_COMPRESSED_CUSTOM_MAGIC = b"ADBc"
+ADB_SCHEMA_PACKAGE = 0x676B6370
+ADB_BLOCK_ALIGNMENT = 8
+ADB_BLOCK_ADB = 0
+ADB_BLOCK_EXT = 3
+ADB_COMP_NONE = 0
+ADB_COMP_DEFLATE = 1
+ADB_TYPE_BLOB_8 = 0x80000000
+ADB_TYPE_BLOB_16 = 0x90000000
+ADB_TYPE_BLOB_32 = 0xA0000000
+ADB_TYPE_OBJECT = 0xE0000000
+ADB_TYPE_MASK = 0xF0000000
+ADB_VALUE_MASK = 0x0FFFFFFF
+ADBI_PKG_PKGINFO = 0x01
+ADBI_PI_NAME = 0x01
+ADBI_PI_VERSION = 0x02
+ADBI_PI_ARCH = 0x05
 def run(
     args: list[str],
     cwd: Path | None = None,
@@ -53,6 +74,16 @@ def run(
 def ensure_example_router_dir() -> None:
     if not EXAMPLE_ROUTER_DIR.is_dir():
         die(f"missing example router directory: {EXAMPLE_ROUTER_DIR}")
+
+
+def run_python_main(module_name: str, args: list[str]) -> None:
+    module = importlib.import_module(module_name)
+    old_argv = sys.argv
+    sys.argv = [module_name.rsplit(".", 1)[-1] + ".py", *args]
+    try:
+        module.main()
+    finally:
+        sys.argv = old_argv
 
 
 def router_device_profile(cfg: ConfigData, router: RouterDef) -> DeviceProfile:
@@ -83,7 +114,7 @@ def download_binary(url: str, dst: Path) -> bool:
     tmp.unlink(missing_ok=True)
 
     try:
-        with urllib.request.urlopen(url, timeout=60) as response:
+        with urlopen_insecure(url, timeout=60) as response:
             data = response.read()
     except Exception:
         tmp.unlink(missing_ok=True)
@@ -151,6 +182,45 @@ def ensure_awg_packages(
         ensure_named_awg_packages_for_profile(version, profile)
 
 
+def adb_decompress(data: bytes, apk_file: Path) -> bytes:
+    if data.startswith(ADB_FORMAT_MAGIC):
+        return data
+
+    if data.startswith(ADB_COMPRESSED_DEFLATE_MAGIC):
+        try:
+            return zlib.decompress(data[4:], -zlib.MAX_WBITS)
+        except zlib.error as e:
+            die(f"failed to decompress apk metadata from {apk_file}: {e}")
+
+    if data.startswith(ADB_COMPRESSED_CUSTOM_MAGIC):
+        if len(data) < 6:
+            die(f"truncated apk compression header: {apk_file}")
+
+        alg = data[4]
+        payload = data[6:]
+
+        if alg == ADB_COMP_NONE:
+            return payload
+
+        if alg == ADB_COMP_DEFLATE:
+            try:
+                return zlib.decompress(payload, -zlib.MAX_WBITS)
+            except zlib.error as e:
+                die(f"failed to decompress apk metadata from {apk_file}: {e}")
+
+        die(
+            f"unsupported apk metadata compression in {apk_file}: "
+            "only none and deflate are supported without external dependencies"
+        )
+
+    die(f"unsupported apk metadata format: {apk_file}")
+
+
+def read_u32(data: bytes, offset: int, apk_file: Path) -> int:
+    if offset < 0 or offset + 4 > len(data):
+        die(f"truncated apk metadata in {apk_file}")
+    return struct.unpack_from("<I", data, offset)[0]
+
 def parse_pkginfo(text: str, apk_file: Path) -> ApkMeta:
     fields: dict[str, str] = {}
 
@@ -212,7 +282,102 @@ class AdbValue:
 def uint_from(data: bytes | bytearray) -> int:
     return int.from_bytes(data, "little", signed=False)
 
+def adb_value_type(value: int) -> int:
+    return value & ADB_TYPE_MASK
 
+
+def adb_value_offset(value: int) -> int:
+    return value & ADB_VALUE_MASK
+
+
+def adb_read_object(data: bytes, value: int, apk_file: Path) -> list[int]:
+    if adb_value_type(value) != ADB_TYPE_OBJECT:
+        die(f"bad apk metadata object in {apk_file}")
+
+    offset = adb_value_offset(value)
+    count = read_u32(data, offset, apk_file)
+    if count == 0:
+        die(f"empty apk metadata object in {apk_file}")
+
+    end = offset + count * 4
+    if end > len(data):
+        die(f"truncated apk metadata object in {apk_file}")
+
+    return list(struct.unpack_from(f"<{count}I", data, offset))
+
+
+def adb_object_field(values: list[int], index: int) -> int:
+    if index >= len(values):
+        return 0
+    return values[index]
+
+
+def adb_read_blob(data: bytes, value: int, apk_file: Path) -> str:
+    value_type = adb_value_type(value)
+    offset = adb_value_offset(value)
+
+    if value_type == ADB_TYPE_BLOB_8:
+        if offset + 1 > len(data):
+            die(f"truncated apk metadata blob in {apk_file}")
+        size = data[offset]
+        start = offset + 1
+    elif value_type == ADB_TYPE_BLOB_16:
+        if offset + 2 > len(data):
+            die(f"truncated apk metadata blob in {apk_file}")
+        size = struct.unpack_from("<H", data, offset)[0]
+        start = offset + 2
+    elif value_type == ADB_TYPE_BLOB_32:
+        size = read_u32(data, offset, apk_file)
+        start = offset + 4
+    else:
+        die(f"bad apk metadata blob in {apk_file}")
+
+    end = start + size
+    if end > len(data):
+        die(f"truncated apk metadata blob in {apk_file}")
+
+    try:
+        return data[start:end].decode("utf-8")
+    except UnicodeDecodeError as e:
+        die(f"bad apk metadata text in {apk_file}: {e}")
+
+
+def adb_first_block_payload(data: bytes, apk_file: Path) -> bytes:
+    if len(data) < 8 or data[:4] != ADB_FORMAT_MAGIC:
+        die(f"bad apk metadata header: {apk_file}")
+
+    schema = read_u32(data, 4, apk_file)
+    if schema != ADB_SCHEMA_PACKAGE:
+        die(f"unsupported apk metadata schema in {apk_file}: 0x{schema:08x}")
+
+    offset = 8
+    if offset + 4 > len(data):
+        die(f"missing apk metadata block: {apk_file}")
+
+    type_size = read_u32(data, offset, apk_file)
+    block_type = type_size >> 30
+    raw_size = type_size & 0x3FFFFFFF
+    header_size = 4
+
+    if block_type == ADB_BLOCK_EXT:
+        if offset + 16 > len(data):
+            die(f"truncated apk metadata extended block: {apk_file}")
+        block_type = raw_size
+        raw_size = struct.unpack_from("<Q", data, offset + 8)[0]
+        header_size = 16
+
+    if block_type != ADB_BLOCK_ADB:
+        die(f"missing apk metadata ADB block: {apk_file}")
+
+    if raw_size < header_size:
+        die(f"bad apk metadata block size: {apk_file}")
+
+    end = offset + raw_size
+    padded_end = offset + ((raw_size + ADB_BLOCK_ALIGNMENT - 1) // ADB_BLOCK_ALIGNMENT) * ADB_BLOCK_ALIGNMENT
+    if end > len(data) or padded_end > len(data):
+        die(f"truncated apk metadata block: {apk_file}")
+
+    return data[offset + header_size : end]
 def adb_value_from_u32(value: int) -> AdbValue | None:
     if value == 0:
         return None
@@ -377,6 +542,28 @@ def apk_v3_payload(data: bytes) -> bytes:
 
     raise ValueError(f"unknown APK v3 compression marker: 0x{compression:02x}")
 
+def apk_metadata(apk_file: Path) -> ApkMeta:
+    adb_data = adb_decompress(apk_file.read_bytes(), apk_file)
+    block = adb_first_block_payload(adb_data, apk_file)
+
+    if len(block) < 8:
+        die(f"truncated apk package metadata: {apk_file}")
+    if block[0] != 0:
+        die(f"incompatible apk package metadata version: {apk_file}")
+
+    root_value = read_u32(block, 4, apk_file)
+    package = adb_read_object(block, root_value, apk_file)
+    pkginfo_value = adb_object_field(package, ADBI_PKG_PKGINFO)
+    pkginfo = adb_read_object(block, pkginfo_value, apk_file)
+
+    name = adb_read_blob(block, adb_object_field(pkginfo, ADBI_PI_NAME), apk_file)
+    version = adb_read_blob(block, adb_object_field(pkginfo, ADBI_PI_VERSION), apk_file)
+    arch = adb_read_blob(block, adb_object_field(pkginfo, ADBI_PI_ARCH), apk_file)
+
+    if not name or not version or not arch:
+        die(f"incomplete apk metadata in: {apk_file}")
+
+    return ApkMeta(name=name, version=version, arch=arch)
 
 def parse_apk_v3_metadata(apk_file: Path) -> ApkMeta:
     payload = apk_v3_payload(apk_file.read_bytes())
@@ -603,14 +790,14 @@ def main() -> None:
     if not args.skip_hooks:
         config_arg = str(Path(args.config))
 
-        generate_args = ["./tools/generate.py", "--config", config_arg]
+        generate_args = ["--config", config_arg]
         if args.force:
             generate_args.append("--force")
 
-        run(generate_args)
-        run(["./tools/ensure_ssh_keys.py", "--config", config_arg])
-        run(["./tools/validate.py", "--config", config_arg])
-        run(["./tools/show_unmanaged.py", "--config", config_arg])
+        run_python_main("tools.generate", generate_args)
+        run_python_main("tools.ensure_ssh_keys", ["--config", config_arg])
+        run_python_main("tools.validate", ["--config", config_arg])
+        run_python_main("tools.show_unmanaged", ["--config", config_arg])
 
 
 if __name__ == "__main__":

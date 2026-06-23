@@ -3,16 +3,19 @@ import sys
 
 sys.dont_write_bytecode = True
 import argparse
+import importlib
 import shutil
+import tarfile
 from datetime import datetime
 from pathlib import Path
 
 from tools.cli_common import (
     die,
+    git_short_hash,
     load_json_config,
     parse_csv_names,
-    run_checked,
     run_no_capture,
+    urlopen_insecure,
 )
 from tools.common import (
     ConfigData,
@@ -39,8 +42,14 @@ def sh(args: list[str], cwd: Path | None = None) -> None:
     run_no_capture(args, cwd=cwd)
 
 
-def out(args: list[str], cwd: Path | None = None) -> str:
-    return run_checked(args, cwd=cwd).strip()
+def run_python_main(module_name: str, args: list[str]) -> None:
+    module = importlib.import_module(module_name)
+    old_argv = sys.argv
+    sys.argv = [module_name.rsplit(".", 1)[-1] + ".py", *args]
+    try:
+        module.main()
+    finally:
+        sys.argv = old_argv
 
 
 def load_config(config_path: Path) -> ConfigData:
@@ -112,10 +121,33 @@ def config_version(cfg_data: ConfigData, override: str | None) -> str:
 
 
 def git_short() -> str:
+    return git_short_hash(Path(__file__).resolve().parent)
+
+
+def download_file(url: str, dst: Path) -> None:
+    tmp = dst.with_suffix(dst.suffix + ".tmp")
+    tmp.unlink(missing_ok=True)
+
     try:
-        return out(["git", "rev-parse", "--short", "HEAD"])
+        with urlopen_insecure(url, timeout=120) as response:
+            with tmp.open("wb") as out:
+                shutil.copyfileobj(response, out)
     except Exception:
-        return "unknown"
+        tmp.unlink(missing_ok=True)
+        raise
+
+    tmp.replace(dst)
+
+
+def extract_tar_archive(archive: Path, dst_dir: Path) -> None:
+    try:
+        with tarfile.open(archive, "r:*") as tar:
+            tar.extractall(dst_dir, filter="data")
+    except tarfile.ReadError as e:
+        die(
+            f"cannot extract {archive} with Python stdlib: {e}. "
+            "Use a Python version with tar.zst support or unpack it manually."
+        )
 
 
 def find_router(cfg: ConfigData, name: str) -> RouterDef:
@@ -226,12 +258,12 @@ def build_router(
     print(f"Downloading from: {dl_url}")
 
     if not dl_local.exists():
-        sh(["wget", "-q", "-O", str(dl_local), dl_url])
+        download_file(dl_url, dl_local)
 
     build_dir = router_dir / file_name_tmp
 
     if not build_dir.is_dir():
-        sh(["tar", "-xf", str(dl_local), "-C", str(router_dir)])
+        extract_tar_archive(dl_local, router_dir)
 
     shutil.rmtree(build_dir / ROUTER_FILES_DIRNAME, ignore_errors=True)
     shutil.rmtree(build_dir / ROUTER_PACKAGES_DIRNAME, ignore_errors=True)
@@ -242,16 +274,11 @@ def build_router(
     shutil.copytree(files_dir, staged_files)
     shutil.copytree(packages_dir, staged_packages)
 
-    run_no_capture(
-        [
-            "./tools/secrets.py",
-            "--config",
-            str(config_path),
-            "decrypt-tree",
-            str(staged_files),
-        ]
+    run_python_main(
+        "tools.secrets",
+        ["--config", str(config_path), "decrypt-tree", str(staged_files)],
     )
-    run_no_capture(["./tools/secrets.py", "assert-no-markers", str(staged_files)])
+    run_python_main("tools.secrets", ["assert-no-markers", str(staged_files)])
 
     etc_dir = staged_files / "etc"
     etc_dir.mkdir(parents=True, exist_ok=True)

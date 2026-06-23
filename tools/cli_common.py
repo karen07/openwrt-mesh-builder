@@ -5,8 +5,10 @@ sys.dont_write_bytecode = True
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import tempfile
+import urllib.request
 from pathlib import Path
 
 try:
@@ -50,9 +52,66 @@ def need(*names: str) -> None:
             die(f"command not found: {name}")
 
 
+def urlopen_insecure(url: str, timeout: int):
+    ctx = ssl._create_unverified_context()
+    return urllib.request.urlopen(url, timeout=timeout, context=ctx)
+
+
 def clear_screen(enabled: bool) -> None:
     if enabled:
-        subprocess.run(["clear"], check=False)
+        print("\033[2J\033[H", end="")
+
+
+def find_git_dir(start: Path | None = None) -> Path | None:
+    current = (start or Path.cwd()).resolve()
+
+    for directory in (current, *current.parents):
+        git_path = directory / ".git"
+        if git_path.is_dir():
+            return git_path
+        if git_path.is_file():
+            text = git_path.read_text(encoding="utf-8", errors="replace").strip()
+            prefix = "gitdir:"
+            if text.lower().startswith(prefix):
+                resolved = (directory / text[len(prefix) :].strip()).resolve()
+                if resolved.is_dir():
+                    return resolved
+
+    return None
+
+
+def git_short_hash(start: Path | None = None, length: int = 7) -> str:
+    git_dir = find_git_dir(start)
+    if git_dir is None:
+        return "unknown"
+
+    head = git_dir / "HEAD"
+    if not head.is_file():
+        return "unknown"
+
+    text = head.read_text(encoding="utf-8", errors="replace").strip()
+    if not text:
+        return "unknown"
+
+    if not text.startswith("ref:"):
+        return text[:length]
+
+    ref = text.removeprefix("ref:").strip()
+    ref_path = git_dir / ref
+    if ref_path.is_file():
+        value = ref_path.read_text(encoding="utf-8", errors="replace").strip()
+        return value[:length] if value else "unknown"
+
+    packed_refs = git_dir / "packed-refs"
+    if packed_refs.is_file():
+        for line in packed_refs.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line or line.startswith("#") or line.startswith("^"):
+                continue
+            parts = line.split()
+            if len(parts) == 2 and parts[1] == ref:
+                return parts[0][:length]
+
+    return "unknown"
 
 
 def command_from_argv(argv: list[str]) -> str:
@@ -248,12 +307,6 @@ def run_no_capture(args: list[str], cwd: Path | None = None) -> None:
     rc = subprocess.run(args, cwd=cwd, check=False).returncode
     if rc != 0:
         die(f"command failed: {' '.join(args)}")
-
-
-def run_local_script(path: str) -> None:
-    rc = subprocess.run([path], check=False).returncode
-    if rc != 0:
-        die(f"{path} exited with code {rc}")
 
 
 def run_ssh(

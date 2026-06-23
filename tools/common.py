@@ -2,8 +2,10 @@
 import sys
 
 sys.dont_write_bytecode = True
+import base64
 import ipaddress
 import json
+import os
 import random
 import re
 import shutil
@@ -3431,12 +3433,85 @@ def parse_existing_tunnel_conf(path: Path) -> tuple[str | None, str | None]:
     return priv, (public_key_from_private(priv) if priv else None)
 
 
+X25519_FIELD_SIZE = 2**255 - 19
+X25519_BASE_POINT = 9
+
+
+def clamp_x25519_private_key(raw: bytes) -> bytes:
+    if len(raw) != 32:
+        die("WireGuard private key must decode to 32 bytes")
+
+    key = bytearray(raw)
+    key[0] &= 248
+    key[31] &= 127
+    key[31] |= 64
+    return bytes(key)
+
+
+def decode_wireguard_key(value: str, where: str) -> bytes:
+    try:
+        raw = base64.b64decode(value.strip(), validate=True)
+    except Exception as e:
+        die(f"{where}: invalid base64 WireGuard/AmneziaWG key: {e}")
+
+    if len(raw) != 32:
+        die(f"{where}: WireGuard/AmneziaWG key must decode to 32 bytes")
+
+    return raw
+
+
+def x25519_public_key(private_key: bytes) -> bytes:
+    scalar = clamp_x25519_private_key(private_key)
+    x1 = X25519_BASE_POINT
+    x2 = 1
+    z2 = 0
+    x3 = x1
+    z3 = 1
+    swap = 0
+
+    def cswap(bit: int, left: int, right: int) -> tuple[int, int]:
+        mask = -bit
+        dummy = mask & (left ^ right)
+        return left ^ dummy, right ^ dummy
+
+    for bit_index in range(254, -1, -1):
+        bit = (scalar[bit_index // 8] >> (bit_index & 7)) & 1
+        swap ^= bit
+        x2, x3 = cswap(swap, x2, x3)
+        z2, z3 = cswap(swap, z2, z3)
+        swap = bit
+
+        a = (x2 + z2) % X25519_FIELD_SIZE
+        aa = (a * a) % X25519_FIELD_SIZE
+        b = (x2 - z2) % X25519_FIELD_SIZE
+        bb = (b * b) % X25519_FIELD_SIZE
+        e = (aa - bb) % X25519_FIELD_SIZE
+        c = (x3 + z3) % X25519_FIELD_SIZE
+        d = (x3 - z3) % X25519_FIELD_SIZE
+        da = (d * a) % X25519_FIELD_SIZE
+        cb = (c * b) % X25519_FIELD_SIZE
+
+        x3 = ((da + cb) ** 2) % X25519_FIELD_SIZE
+        z3 = (x1 * ((da - cb) ** 2)) % X25519_FIELD_SIZE
+        x2 = (aa * bb) % X25519_FIELD_SIZE
+        z2 = (e * (aa + 121665 * e)) % X25519_FIELD_SIZE
+
+    x2, x3 = cswap(swap, x2, x3)
+    z2, z3 = cswap(swap, z2, z3)
+
+    inverse = pow(z2, X25519_FIELD_SIZE - 2, X25519_FIELD_SIZE)
+    return ((x2 * inverse) % X25519_FIELD_SIZE).to_bytes(32, "little")
+
+
 def gen_private_key() -> str:
-    return sh(["wg", "genkey"])
+    raw = clamp_x25519_private_key(os.urandom(32))
+    return base64.b64encode(raw).decode("ascii")
 
 
 def public_key_from_private(private_key: str) -> str:
-    return sh(["wg", "pubkey"], input_text=private_key + "\n")
+    raw = decode_wireguard_key(private_key, "WireGuard/AmneziaWG private key")
+    public = x25519_public_key(raw)
+    return base64.b64encode(public).decode("ascii")
 
 
 def openssl_req_subject(cn: str) -> str:
