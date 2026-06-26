@@ -1068,19 +1068,25 @@ leaf routers -> mesh hubs except main_router -> main_router
 
 `render_topology_2d.py` строит SVG-карты.
 
-По measured JSON:
+Без аргументов читает `link-speeds.json` и строит полный measured view: topology + две speed-карты. Это такое же default-поведение, как у `render_topology_3d.py`, только 2D renderer пишет несколько SVG-файлов. Если `link-speeds.json` ещё нет, сначала соберите замеры или используйте `--topology-only`.
 
 ```bash
 ./collect_link_speeds.py --progress --json-out link-speeds.json
-./render_topology_2d.py --speeds-json link-speeds.json
+./render_topology_2d.py
 ```
 
-По умолчанию файлы пишутся в `topology/`. Для speed view создаются:
+Другой файл с замерами можно передать явно:
+
+```bash
+./render_topology_2d.py --speeds-json /path/to/link-speeds.json
+```
+
+По умолчанию файлы пишутся в `topology/`. Для measured speed view создаются:
 
 ```text
-topology/topology_2d-overview.svg
-topology/topology_2d_speed_from.svg
-topology/topology_2d_speed_to.svg
+topology/topology_2d_topology.svg
+topology/topology_2d_from.svg
+topology/topology_2d_to.svg
 ```
 
 `from` показывает качество направления от выбранного узла. `to` показывает качество направления к нему.
@@ -1088,11 +1094,11 @@ topology/topology_2d_speed_to.svg
 Topology-only без замеров:
 
 ```bash
-# По реально generated AWG/UCI файлам
-./render_topology_2d.py --topology-only --topology-source generated
-
 # По плановой topology из config.json
 ./render_topology_2d.py --topology-only --topology-source config
+
+# По реально generated AWG/UCI файлам после ./generate_configs.py
+./render_topology_2d.py --topology-only --topology-source generated
 ```
 
 Topology-only пишет один SVG:
@@ -1104,23 +1110,12 @@ topology/topology_2d.svg
 Выбор конкретной SVG-карты:
 
 ```bash
-./render_topology_2d.py --only overview
+./render_topology_2d.py --only topology
 ./render_topology_2d.py --only from
 ./render_topology_2d.py --only to
 ```
 
-Порог degraded:
-
-```bash
-./render_topology_2d.py --degraded-mbps 20
-```
-
-Подписи скоростей на основных картах:
-
-```bash
-./render_topology_2d.py --main-label-mode problems
-./render_topology_2d.py --main-label-mode all
-```
+Подписи скоростей на основных measured-картах сейчас не выводятся: цвет и tooltip на SVG-линке являются источником информации о скорости.
 
 ### 3D HTML
 
@@ -1189,14 +1184,14 @@ ls -lh images/
 ./run_servers.py --no-clear
 
 # 8. Собираем текущие скорости и рендерим measured topology
-./collect_link_speeds.py
+./collect_link_speeds.py --progress --json-out link-speeds.json
 ./render_topology_2d.py
 ./render_topology_3d.py
 
-# 8. Проверяем links и рисуем карту
-./collect_link_speeds.py --progress --json-out link-speeds.json
-./render_topology_2d.py --speeds-json link-speeds.json --main-label-mode problems
-./render_topology_3d.py --speeds-json link-speeds.json
+# 8. Проверяем links и рисуем карту из нестандартного JSON
+./collect_link_speeds.py --progress --json-out /tmp/link-speeds.json
+./render_topology_2d.py --speeds-json /tmp/link-speeds.json
+./render_topology_3d.py --speeds-json /tmp/link-speeds.json
 ```
 
 ## Полезные проверки

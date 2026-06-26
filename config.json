@@ -1,7 +1,8 @@
 {
     "openwrt_version": "25.12.4",
     "ssh_key_dir": "~/.ssh/router-autoinstall-demo",
-    "secret_key": "~/.ssh/router-autoinstall-demo/router_secrets",
+    "secrets_key_path": "~/.ssh/router-autoinstall-demo/secrets.key",
+    "materials_key_path": "~/.ssh/router-autoinstall-demo/materials.key",
     "packages": [
         "block-mount",
         "htop",
@@ -46,8 +47,8 @@
                 "key": "Example-Spine01-2G"
             },
             "wifi_5g": {
-                "ssid": "ROUTER_SECRET_V1{YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSBCeGp1NHcveVBmTDB5OXZReDEvY1J0cEpHSTdpR3pJSVRhT3RKN0h5MTJBCkZtdDVaWU5jOThBd3hGbHBvU0dYbkF1ZXcyNWVCTStWVXJaY0FPc1I3Z3MKLS0tIGIvMWlNczlFeE96NWVQMWozbnhqVysvQ2p3dHhjOEFIaVdFS3l3NUlSNFUKieeVskg0HBrMDYP8c42HQLYyFJYGkoJmEkyHeltjQDl5nO_f}",
-                "key": "ROUTER_SECRET_V1{YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0-IFgyNTUxOSBOT2xqSjlTNnBoZ3JZb0VjS2R1YXlOWDdmYmZxZHptV1FpS0NlVjZndEhZCm9YNGlVanprT1E4VEREV2pFaWlyNzZRRjVIQ2hzVjgvdTVaZmRIWXovWEkKLS0tIFNWNlN0ZEhLbnA3OXVvVTI1d29pOCsvcld2ZmI3T2xSdG9qdUxqSlNwSU0K_zbSd3AtQu7dMS9xfGmtJxlB9pEYFvjOse56tl3TqZM3mKi3rSYeQQ}",
+                "ssid": "Example-Spine01-5G",
+                "key": "Example-Spine01-5G",
                 "blocked_macs": [
                     "02:00:00:01:00:01",
                     "02:00:00:01:00:02"

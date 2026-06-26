@@ -68,7 +68,7 @@ def build_svgs(args: argparse.Namespace) -> list[SvgFile]:
     speeds = SpeedIndex(rows)
     svgs: list[SvgFile] = []
 
-    if args.topology_only or args.only == "topology":
+    if args.topology_only or args.only in {"all", "topology"}:
         svgs.append(
             SvgFile(
                 name="topology",
@@ -115,7 +115,8 @@ def build_svgs(args: argparse.Namespace) -> list[SvgFile]:
     return svgs
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(
         description="Render measured or configured topology SVGs"
     )
@@ -127,24 +128,35 @@ def main() -> None:
         default="all",
         help="which SVG to write",
     )
+    # Deprecated compatibility switches. The current SVG renderer uses link
+    # colors and SVG tooltips, not inline speed labels/degraded classes. Keep
+    # accepting old command lines, but do not advertise no-op flags in --help.
     ap.add_argument(
         "--degraded-mbps",
         type=float,
         default=1.0,
-        help="positive speed below this value is treated as degraded",
+        help=argparse.SUPPRESS,
     )
     ap.add_argument(
         "--main-label-mode",
         choices=("none", "problems", "all"),
         default="none",
-        help="speed labels on topology_2d_from/to SVGs",
+        help=argparse.SUPPRESS,
     )
 
-    args = ap.parse_args()
+    args = ap.parse_args(raw_argv)
+
+    if args.topology_only and args.only in {"from", "to"}:
+        die(f"--only {args.only} requires measured --speeds-json data")
 
     if args.degraded_mbps < 0:
         die("--degraded-mbps must be non-negative")
 
+    return args
+
+
+def main() -> None:
+    args = parse_args()
     svgs = build_svgs(args)
     out_path = resolved_output_path(args.out, topology_2d_path())
     paths = output_paths(out_path)

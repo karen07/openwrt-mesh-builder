@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+try:
+    from .process import die
+except ImportError:
+    from process import die  # type: ignore
 
 STATUS_UP = "up"
 STATUS_TARGET = "target"
@@ -163,7 +169,24 @@ def format_ts(ts: int | float | None) -> str:
 
 
 def load_speed_rows(path: Path) -> tuple[list[SpeedRow], int | None, int | None]:
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        die(
+            f"{path}: file not found; run ./collect_link_speeds.py --json-out {path} "
+            "or use --topology-only"
+        )
+    except OSError as exc:
+        die(f"{path}: cannot read file: {exc}")
+
+    try:
+        raw = json.loads(text)
+    except JSONDecodeError as exc:
+        die(f"{path}: invalid JSON: {exc}")
+
+    if not isinstance(raw, dict):
+        die(f"{path}: expected JSON object with rows list")
+
     rows_raw = raw.get("rows")
     if not isinstance(rows_raw, list):
         die(f"{path}: expected JSON object with rows list")
