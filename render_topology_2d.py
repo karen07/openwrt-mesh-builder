@@ -29,10 +29,16 @@ from tools.topology_data import (
 
 
 def output_paths(out_path: Path) -> dict[str, Path]:
+    stem = out_path.stem
+    for suffix in ("_topology", "_from", "_to"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+
     return {
-        "topology": out_path.with_name(f"{out_path.stem}_topology{out_path.suffix}"),
-        "from": out_path.with_name(f"{out_path.stem}_from{out_path.suffix}"),
-        "to": out_path.with_name(f"{out_path.stem}_to{out_path.suffix}"),
+        "topology": out_path.with_name(f"{stem}_topology{out_path.suffix}"),
+        "from": out_path.with_name(f"{stem}_from{out_path.suffix}"),
+        "to": out_path.with_name(f"{stem}_to{out_path.suffix}"),
     }
 
 

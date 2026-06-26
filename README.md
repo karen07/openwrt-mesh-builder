@@ -1,6 +1,6 @@
 # OpenWrt Spine-Leaf Mesh Builder
 
-![Topology](./topology/topology_2d.svg)
+![Topology](./topology/topology_2d_topology.svg)
 
 OpenWrt Spine-Leaf Mesh Builder собирает из обычных OpenWrt-роутеров и Linux-серверов маленький routed fabric. Spine здесь - роутеры с белым IP, leaf - роутеры за NAT или с серым IP, а exit - управляемые точки выхода в интернет. В результате получается не один VPN-туннель до одного сервера, а живая сеть: роутеры видят друг друга через overlay, leaf без белого IP становится достижимым из других LAN и access-сетей, reverse exit без белого IP участвует в egress, а пользовательский трафик получает несколько отказоустойчивых путей к интернету.
 
@@ -1101,10 +1101,10 @@ Topology-only без замеров:
 ./render_topology_2d.py --topology-only --topology-source generated
 ```
 
-Topology-only пишет один SVG:
+Topology-only пишет один SVG по умолчанию:
 
 ```text
-topology/topology_2d.svg
+topology/topology_2d_topology.svg
 ```
 
 Выбор конкретной SVG-карты:
