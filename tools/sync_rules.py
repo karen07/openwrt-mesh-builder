@@ -2,15 +2,15 @@
 import sys
 
 sys.dont_write_bytecode = True
-import filecmp
 import re
 import shutil
 import tempfile
 from pathlib import Path
 
 try:
-    from .cli_common import die
+    from .process import die
     from .common import RouterDef
+    from .file_ops import copy_file_if_changed, remove_path
     from .default import (
         FILE_MODE_MASK,
         FIREWALL_MARKER,
@@ -19,8 +19,9 @@ try:
         SYNC_MERGE_FILES,
     )
 except ImportError:
-    from cli_common import die
+    from process import die
     from common import RouterDef
+    from file_ops import copy_file_if_changed, remove_path  # type: ignore
     from default import (
         FILE_MODE_MASK,
         FIREWALL_MARKER,
@@ -64,17 +65,6 @@ def write_text_if_changed(path: Path, text: str) -> None:
     tmp_path.replace(path)
 
 
-def remove_path(path: Path) -> None:
-    if not path.exists():
-        return
-
-    print(f"Removing {path}")
-    if path.is_dir():
-        shutil.rmtree(path)
-    else:
-        path.unlink()
-
-
 def copy_tree_initial(src: Path, dst: Path) -> None:
     if dst.exists():
         return
@@ -87,19 +77,6 @@ def copy_tree_initial(src: Path, dst: Path) -> None:
 
 def ensure_router_from_example(source_dir: Path, target: RouterDef) -> None:
     copy_tree_initial(source_dir, target.path)
-
-
-def copy_file_if_changed(src: Path, dst: Path) -> None:
-    if not src.exists() or not src.is_file():
-        die(f"source file does not exist: {src}")
-
-    dst.parent.mkdir(parents=True, exist_ok=True)
-
-    if dst.exists() and dst.is_file() and filecmp.cmp(src, dst, shallow=False):
-        return
-
-    print(f"Updating {dst}")
-    shutil.copy2(src, dst)
 
 
 def merge_after_mark(dst: Path, src: Path) -> None:

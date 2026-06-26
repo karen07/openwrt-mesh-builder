@@ -6,30 +6,34 @@ import argparse
 import shutil
 import tempfile
 from datetime import datetime
-import subprocess
 from pathlib import Path
 
 try:
-    from tools.cli_common import load_json_config, server_ssh_hosts, ssh_config_args
-    from tools.common import build_config_data, server_exit_dir
+    from tools.config_io import load_json_config
+    from tools.process import die, need
+    from tools.common import server_exit_dir
+    from tools.remote_exec import (
+        run_interactive_ssh,
+        scp_paths_interactive,
+    )
+    from tools.remote_hosts import SERVER_SSH_MODE_CHOICES, server_ssh_hosts
+    from tools.default import CONFIG_PATH, REMOTE_DEPLOY_COMMAND, REMOTE_ROOT
+    from tools.git_utils import git_short
     from tools.secrets import assert_no_markers, decrypt_tree
+    from tools.targets import selected_servers
 except ImportError:
-    from cli_common import load_json_config, server_ssh_hosts, ssh_config_args
-    from common import build_config_data, server_exit_dir
+    from config_io import load_json_config
+    from process import die, need
+    from common import server_exit_dir
+    from remote_exec import (
+        run_interactive_ssh,
+        scp_paths_interactive,
+    )
+    from remote_hosts import SERVER_SSH_MODE_CHOICES, server_ssh_hosts
+    from default import CONFIG_PATH, REMOTE_DEPLOY_COMMAND, REMOTE_ROOT
+    from git_utils import git_short
     from secrets import assert_no_markers, decrypt_tree
-
-try:
-    from tools.default import (
-        CONFIG_PATH,
-        REMOTE_DEPLOY_COMMAND,
-        REMOTE_ROOT,
-    )
-except ImportError:
-    from default import (
-        CONFIG_PATH,
-        REMOTE_DEPLOY_COMMAND,
-        REMOTE_ROOT,
-    )
+    from targets import selected_servers
 
 
 class DeployError(Exception):
@@ -37,44 +41,6 @@ class DeployError(Exception):
 
 
 DEFAULT_SSH_CONNECT_TIMEOUT_SEC = 5
-
-
-def die(msg: str) -> None:
-    print(f"ERROR: {msg}", file=sys.stderr)
-    sys.exit(1)
-
-
-def need_cmd(*names: str) -> None:
-    for name in names:
-        if shutil.which(name) is None:
-            die(f"command not found: {name}")
-
-
-def interactive_ssh_timeout_args(connect_timeout: int) -> list[str]:
-    return [
-        "-o",
-        f"ConnectTimeout={connect_timeout}",
-        "-o",
-        "ConnectionAttempts=1",
-    ]
-
-
-def git_short() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except Exception:
-        return "unknown"
-
-    if result.returncode != 0:
-        return "unknown"
-
-    value = result.stdout.strip()
-    return value or "unknown"
 
 
 def server_deploy_version() -> str:
@@ -151,38 +117,6 @@ def stage_server_files(name: str, src: Path, tmp_root: Path, config_path: Path) 
     return stage
 
 
-def config_exit_names(cfg: dict[str, object]) -> list[str]:
-    return [hub.name for hub in build_config_data(cfg).exit_hubs]
-
-
-def selected_servers(cfg: dict[str, object], argv: list[str]) -> list[str]:
-    configured = config_exit_names(cfg)
-    by_lc = {name.lower(): name for name in configured}
-
-    if not argv:
-        return configured
-
-    out: list[str] = []
-    seen: set[str] = set()
-
-    for arg in argv:
-        for item in arg.replace(",", " ").split():
-            if not item:
-                continue
-
-            name = by_lc.get(item.lower())
-            if name is None:
-                die(f"unknown server in selected config: {item}")
-
-            key = name.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(name)
-
-    return out
-
-
 def copy_server_files(
     name: str,
     host: str,
@@ -198,17 +132,13 @@ def copy_server_files(
 
     # Intentionally do not capture stdio:
     # scp must be able to ask for password / host-key confirmation.
-    rc = subprocess.run(
-        [
-            "scp",
-            *ssh_config_args(config_path),
-            *interactive_ssh_timeout_args(connect_timeout),
-            "-rp",
-            *(str(path) for path in entries),
-            f"{host}:{REMOTE_ROOT}",
-        ],
-        check=False,
-    ).returncode
+    rc = scp_paths_interactive(
+        entries,
+        host,
+        REMOTE_ROOT,
+        config_path=config_path,
+        connect_timeout=connect_timeout,
+    )
 
     if rc != 0:
         raise DeployError(f"scp failed for {name} via {host} with exit code {rc}")
@@ -236,28 +166,29 @@ def install_server_authorized_keys(
         action = "replace"
     else:
         remote_cmd = (
-            "mkdir -p /root/.ssh && "
-            "chmod 0700 /root/.ssh && "
-            "touch /root/.ssh/authorized_keys && "
-            "chmod 0600 /root/.ssh/authorized_keys && "
-            "printf '\n' >> /root/.ssh/authorized_keys && "
-            "cat >> /root/.ssh/authorized_keys && "
-            "printf '\n' >> /root/.ssh/authorized_keys && "
+            "set -eu; "
+            "tmp=$(mktemp); "
+            "merged=$(mktemp); "
+            'trap \'rm -f "$tmp" "$merged"\' EXIT; '
+            'cat > "$tmp"; '
+            "mkdir -p /root/.ssh; "
+            "chmod 0700 /root/.ssh; "
+            "touch /root/.ssh/authorized_keys; "
+            "chmod 0600 /root/.ssh/authorized_keys; "
+            'cat /root/.ssh/authorized_keys "$tmp" | '
+            "awk 'NF && !seen[$0]++' > \"$merged\"; "
+            'cat "$merged" > /root/.ssh/authorized_keys; '
             "chmod 0600 /root/.ssh/authorized_keys"
         )
-        action = "append"
+        action = "merge"
 
-    rc = subprocess.run(
-        [
-            "ssh",
-            *ssh_config_args(config_path),
-            *interactive_ssh_timeout_args(connect_timeout),
-            host,
-            remote_cmd,
-        ],
-        input=auth_data,
-        check=False,
-    ).returncode
+    rc = run_interactive_ssh(
+        host,
+        remote_cmd,
+        config_path=config_path,
+        connect_timeout=connect_timeout,
+        input_data=auth_data,
+    )
 
     if rc != 0:
         raise DeployError(
@@ -274,16 +205,12 @@ def run_remote_deploy(
 ) -> None:
     # Intentionally do not capture stdio:
     # ssh must be able to ask for password / host-key confirmation.
-    rc = subprocess.run(
-        [
-            "ssh",
-            *ssh_config_args(config_path),
-            *interactive_ssh_timeout_args(connect_timeout),
-            host,
-            REMOTE_DEPLOY_COMMAND,
-        ],
-        check=False,
-    ).returncode
+    rc = run_interactive_ssh(
+        host,
+        REMOTE_DEPLOY_COMMAND,
+        config_path=config_path,
+        connect_timeout=connect_timeout,
+    )
 
     if rc != 0:
         raise DeployError(
@@ -305,7 +232,8 @@ def deploy_one_to_host(
     print(f"==> Preparing {name} for {host}")
 
     with tempfile.TemporaryDirectory(
-        prefix=f"router-autoinstall-server-{name}-"
+        prefix=f".server-deploy-{name}-",
+        dir=Path.cwd(),
     ) as tmp:
         tmp_root = Path(tmp)
         stage = stage_server_files(name, src, tmp_root, config_path)
@@ -398,12 +326,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help=(
             "replace remote /root/.ssh/authorized_keys with the staged file; "
-            "by default staged keys are appended"
+            "by default staged keys are merged without duplicates"
         ),
     )
     parser.add_argument(
         "--server-ssh-mode",
-        choices=("auto", "node", "public"),
+        choices=SERVER_SSH_MODE_CHOICES,
         default="auto",
         help=(
             "server SSH alias mode: auto tries server_<name>_node first "
@@ -428,7 +356,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> None:
     args = parse_args(argv)
-    need_cmd("scp", "ssh")
+    need("scp", "ssh")
     config_path = resolve_config_path(args.config)
     cfg = load_json_config(config_path)
 

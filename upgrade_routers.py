@@ -6,15 +6,11 @@ import argparse
 import shlex
 from pathlib import Path
 
-from tools.cli_common import (
-    ask_yes_no,
-    clear_screen,
-    die,
-    load_json_config,
-    parse_csv_names,
-    run_ssh,
-    scp_to_host,
-)
+from tools.cli_common import ask_yes_no, clear_screen, parse_csv_names
+from tools.config_io import load_json_config
+from tools.process import die
+from tools.remote_exec import run_captured_remote, scp_path_captured
+from tools.git_utils import git_short
 from tools.router_order import RouterDef, build_router_order, router_slug
 from tools.default import (
     CONFIG_PATH,
@@ -25,22 +21,6 @@ from tools.default import (
     IMAGES_DIR as RESULT_DIR,
     REMOTE_UPLOAD_DIR,
 )
-
-
-def scp_to_router(
-    local_path: Path,
-    router: RouterDef,
-    remote_dir: str,
-    scp_timeout: int,
-    config_path: str | Path = CONFIG_PATH,
-) -> tuple[int, str, str]:
-    return scp_to_host(
-        local_path=local_path,
-        remote_host=router.ssh_host,
-        remote_dir=remote_dir,
-        scp_timeout=scp_timeout,
-        config_path=config_path,
-    )
 
 
 def find_image_for_router(
@@ -95,16 +75,17 @@ def copy_images(
             print()
             continue
 
-        rc, _out, err = scp_to_router(
-            local_path=image_path,
-            router=router,
-            remote_dir=remote_dir,
+        result = scp_path_captured(
+            router.name,
+            image_path,
+            router.ssh_host,
+            remote_dir,
             scp_timeout=scp_timeout,
             config_path=config_path,
         )
 
-        if rc != 0:
-            msg = err.strip() or f"scp exited with code {rc}"
+        if not result.ok:
+            msg = result.error_text()
             failed[router.name] = msg
             print(f"  FAIL: {msg}")
         else:
@@ -142,6 +123,27 @@ def filter_routers_by_names(
     return [router for router in routers if router.name.lower() in wanted]
 
 
+def resolve_git_version_and_router_names(
+    routers: list[RouterDef],
+    git_version_arg: str | None,
+    router_args: list[str],
+) -> tuple[str, list[str]]:
+    router_names = parse_csv_names(router_args)
+    if git_version_arg is None:
+        return git_short(), router_names
+
+    known_router_names = {router.name.lower() for router in routers}
+    all_positional_names = parse_csv_names([git_version_arg, *router_args])
+    all_positional_names_are_routers = all_positional_names == [] or all(
+        name.lower() in known_router_names for name in all_positional_names
+    )
+
+    if all_positional_names_are_routers:
+        return git_short(), all_positional_names
+
+    return git_version_arg, router_names
+
+
 def start_upgrades(
     routers: list[RouterDef],
     copied: dict[str, Path],
@@ -162,15 +164,16 @@ def start_upgrades(
         print(f"{router.name} ({router.ssh_host})")
         print(f"  start: {remote_image}")
 
-        rc, _out, err = run_ssh(
-            host=router.ssh_host,
-            command=remote_cmd,
+        result = run_captured_remote(
+            router.name,
+            (router.ssh_host,),
+            remote_cmd,
             ssh_timeout=ssh_timeout,
             config_path=config_path,
         )
 
-        if rc != 0:
-            msg = err.strip() or f"ssh exited with code {rc}"
+        if not result.ok:
+            msg = result.error_text()
             failed[router.name] = msg
             print(f"  FAIL: {msg}")
         else:
@@ -191,7 +194,12 @@ def main() -> None:
     )
     ap.add_argument(
         "git_version",
-        help="git version to match in image names, for example e47e68e",
+        nargs="?",
+        default=None,
+        help=(
+            "git version to match in image names, for example e47e68e. "
+            "Default: current git short hash"
+        ),
     )
     ap.add_argument(
         "routers",
@@ -237,7 +245,11 @@ def main() -> None:
 
     cfg = load_json_config(Path(args.config))
     routers = build_router_order(cfg)
-    router_names = parse_csv_names(args.routers)
+    git_version, router_names = resolve_git_version_and_router_names(
+        routers,
+        args.git_version,
+        args.routers,
+    )
     routers = filter_routers_by_names(routers, router_names)
 
     if not routers:
@@ -250,11 +262,13 @@ def main() -> None:
     clear_screen(not args.no_clear)
 
     print("=== COPYING IMAGES ===")
+    print(f"git version: {git_version}")
+    print(f"image dir: {result_dir}")
     print()
 
     copied, copy_failed = copy_images(
         routers=routers,
-        git_version=args.git_version,
+        git_version=git_version,
         result_dir=result_dir,
         remote_dir=args.remote_dir,
         scp_timeout=args.scp_timeout,

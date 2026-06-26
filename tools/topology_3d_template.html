@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            __TITLE__
+        </title>
+        <script type="importmap">
+        {
+        "imports": {
+        "three": __THREE_URL_JSON__
+        }
+        }
+        </script>
+        <style>
+        html,
+        body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        }
+        body {
+        background: #0b1020;
+        color: #e5e7eb;
+        font-family: system-ui, sans-serif;
+        }
+        #app {
+        width: 100vw;
+        height: 100vh;
+        }
+        #panel {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 10;
+        width: 360px;
+        max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 40px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-sizing: border-box;
+        background: rgba(15, 23, 42, 0.78);
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        border-radius: 16px;
+        padding: 18px 18px 16px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.36);
+        backdrop-filter: blur(8px);
+        }
+        #panel h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        line-height: 1.15;
+        }
+        #panel .meta {
+        color: #94a3b8;
+        font-size: 13px;
+        line-height: 1.4;
+        margin-bottom: 16px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        }
+        #panel .meta .source {
+        margin-top: 4px;
+        }
+        #panel select {
+        background: rgba(15, 23, 42, 0.95);
+        color: #f3f4f6;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 6px;
+        padding: 4px 28px 4px 8px;
+        font: inherit;
+        }
+        #groupControls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px 22px;
+        }
+        #groupControls label {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        margin: 0;
+        cursor: pointer;
+        user-select: none;
+        min-width: 0;
+        }
+        #groupControls input[type="checkbox"] {
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        accent-color: #3b82f6;
+        flex: 0 0 auto;
+        }
+        .legend-line {
+        width: 24px;
+        height: 3px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+        box-shadow: 0 0 8px currentColor;
+        }
+        .legend-text {
+        font-size: 14px;
+        color: #e5e7eb;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        }
+        #groupControls .count {
+        color: #94a3b8;
+        font-size: 11px;
+        margin-left: 2px;
+        }
+        .panel-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 18px;
+        font-size: 16px;
+        color: #e5e7eb;
+        }
+        .panel-help {
+        color: #94a3b8;
+        font-size: 12px;
+        margin-top: 14px;
+        }
+        #speedLegend {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.20);
+        }
+        #speedLegend[hidden] {
+        display: none;
+        }
+        #speedLegend .legend-title {
+        font-size: 13px;
+        color: #cbd5e1;
+        margin-bottom: 8px;
+        }
+        #speedLegend .legend-note {
+        margin-top: 8px;
+        color: #94a3b8;
+        font-size: 12px;
+        line-height: 1.35;
+        }
+        .speed-scale {
+        height: 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        background: linear-gradient(
+        90deg,
+        #111827 0%,
+        #2b2f77 10%,
+        #2745cc 22%,
+        #1287e3 38%,
+        #10cbe6 52%,
+        #19d87f 67%,
+        #8be34a 82%,
+        #facc15 100%
+        );
+        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.32);
+        }
+        .speed-scale-labels {
+        position: relative;
+        height: 16px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #94a3b8;
+        }
+        .speed-scale-labels span {
+        position: absolute;
+        top: 0;
+        white-space: nowrap;
+        }
+        #tooltip {
+        position: fixed;
+        display: none;
+        z-index: 20;
+        pointer-events: none;
+        max-width: 460px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: rgba(2, 6, 23, 0.92);
+        border: 1px solid #475569;
+        color: #e5e7eb;
+        font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="app"></div>
+        <div id="panel">
+            <h1>
+                __TITLE__
+            </h1>
+            <div class="meta"></div>
+            <div id="groupControls"></div>
+            <div class="panel-row">
+                <label for="colorMode">color</label> <select id="colorMode">
+                    <option value="from">
+                        from
+                    </option>
+                    <option value="to">
+                        to
+                    </option>
+                    <option value="topology">
+                        topology
+                    </option>
+                </select>
+            </div>
+            <div id="speedLegend" hidden="">
+                <div class="legend-title"></div>
+                <div class="speed-scale"></div>
+                <div class="speed-scale-labels">
+                    <span style="left:0;transform:none">5</span> <span style=
+                    "left:30%;transform:translateX(-50%)">20</span> <span style=
+                    "left:65%;transform:translateX(-50%)">100</span> <span style="right:0">500
+                    Mbit/s</span>
+                </div>
+                <div class="legend-note"></div>
+            </div>
+            <div class="panel-help">
+                drag = rotate, wheel = zoom, right drag = pan, hover = details; arrows show visible
+                direction in from/to
+            </div>
+        </div>
+        <div id="tooltip"></div>
+        <script type="module">
+        import * as THREE from 'three';
+
+        const ORBIT_URL = __ORBIT_URL_JSON__;
+        const { OrbitControls } = await import(ORBIT_URL);
+        const DATA = __DATA_JSON__;
+        const app = document.getElementById('app');
+        const panel = document.getElementById('panel');
+        const tooltip = document.getElementById('tooltip');
+        const meta = panel.querySelector('.meta');
+        const metaSummary = document.createElement('div');
+        metaSummary.textContent = `${DATA.nodes.length} nodes, ${DATA.edges.length} links`;
+        meta.appendChild(metaSummary);
+        if (DATA.source) {
+        const metaSource = document.createElement('div');
+        metaSource.className = 'source';
+        metaSource.textContent = DATA.source;
+        meta.appendChild(metaSource);
+        }
+
+        const groupControls = document.getElementById('groupControls');
+        const speedLegend = document.getElementById('speedLegend');
+        const speedLegendTitle = speedLegend.querySelector('.legend-title');
+        const speedLegendNote = speedLegend.querySelector('.legend-note');
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b1020);
+
+        const camera = new THREE.PerspectiveCamera(
+        55,
+        innerWidth / innerHeight,
+        1,
+        5000,
+        );
+        camera.position.set(760, 540, 900);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        app.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, -60, 0);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 1.7));
+        const light = new THREE.DirectionalLight(0xffffff, 1.0);
+        light.position.set(600, 900, 400);
+        scene.add(light);
+
+        const nodeById = new Map(DATA.nodes.map(n => [n.id, n]));
+        const objects = [];
+        const edgeObjects = [];
+        const nodeObjects = [];
+
+        const layerColor = {
+        'public-exit': 0xf97316,
+        'spine': 0x60a5fa,
+        'leaf': 0x22c55e,
+        'reverse-exit': 0xa78bfa,
+        };
+
+        const linkColor = {
+        'spine-spine': 0x2563eb,
+        'leaf-spine': 0x22c55e,
+        'exit-spine': 0xd946ef,
+        'exit-exit': 0xfacc15,
+        'leaf-exit': 0xef4444,
+        'spine-exit': 0x22d3ee,
+        };
+
+        const linkColorHex = Object.fromEntries(
+        Object.entries(linkColor).map(([key, value]) => [
+        key,
+        `#${value.toString(16).padStart(6, '0')}`,
+        ]),
+        );
+
+        const speedColorMap = [
+        "#000004", "#010005", "#010106", "#010108", "#020109", "#02020b",
+        "#02020d", "#03030f", "#030312", "#040414", "#050416", "#060518",
+        "#06051a", "#07061c", "#08071e", "#090720", "#0a0822", "#0b0924",
+        "#0c0926", "#0d0a29", "#0e0b2b", "#100b2d", "#110c2f", "#120d31",
+        "#130d34", "#140e36", "#150e38", "#160f3b", "#180f3d", "#19103f",
+        "#1a1042", "#1c1044", "#1d1147", "#1e1149", "#20114b", "#21114e",
+        "#221150", "#241253", "#251255", "#271258", "#29115a", "#2a115c",
+        "#2c115f", "#2d1161", "#2f1163", "#311165", "#331067", "#341069",
+        "#36106b", "#38106c", "#390f6e", "#3b0f70", "#3d0f71", "#3f0f72",
+        "#400f74", "#420f75", "#440f76", "#451077", "#471078", "#491078",
+        "#4a1079", "#4c117a", "#4e117b", "#4f127b", "#51127c", "#52137c",
+        "#54137d", "#56147d", "#57157e", "#59157e", "#5a167e", "#5c167f",
+        "#5d177f", "#5f187f", "#601880", "#621980", "#641a80", "#651a80",
+        "#671b80", "#681c81", "#6a1c81", "#6b1d81", "#6d1d81", "#6e1e81",
+        "#701f81", "#721f81", "#732081", "#752181", "#762181", "#782281",
+        "#792282", "#7b2382", "#7c2382", "#7e2482", "#802582", "#812581",
+        "#832681", "#842681", "#862781", "#882781", "#892881", "#8b2981",
+        "#8c2981", "#8e2a81", "#902a81", "#912b81", "#932b80", "#942c80",
+        "#962c80", "#982d80", "#992d80", "#9b2e7f", "#9c2e7f", "#9e2f7f",
+        "#a02f7f", "#a1307e", "#a3307e", "#a5317e", "#a6317d", "#a8327d",
+        "#aa337d", "#ab337c", "#ad347c", "#ae347b", "#b0357b", "#b2357b",
+        "#b3367a", "#b5367a", "#b73779", "#b83779", "#ba3878", "#bc3978",
+        "#bd3977", "#bf3a77", "#c03a76", "#c23b75", "#c43c75", "#c53c74",
+        "#c73d73", "#c83e73", "#ca3e72", "#cc3f71", "#cd4071", "#cf4070",
+        "#d0416f", "#d2426f", "#d3436e", "#d5446d", "#d6456c", "#d8456c",
+        "#d9466b", "#db476a", "#dc4869", "#de4968", "#df4a68", "#e04c67",
+        "#e24d66", "#e34e65", "#e44f64", "#e55064", "#e75263", "#e85362",
+        "#e95462", "#ea5661", "#eb5760", "#ec5860", "#ed5a5f", "#ee5b5e",
+        "#ef5d5e", "#f05f5e", "#f1605d", "#f2625d", "#f2645c", "#f3655c",
+        "#f4675c", "#f4695c", "#f56b5c", "#f66c5c", "#f66e5c", "#f7705c",
+        "#f7725c", "#f8745c", "#f8765c", "#f9785d", "#f9795d", "#f97b5d",
+        "#fa7d5e", "#fa7f5e", "#fa815f", "#fb835f", "#fb8560", "#fb8761",
+        "#fc8961", "#fc8a62", "#fc8c63", "#fc8e64", "#fc9065", "#fd9266",
+        "#fd9467", "#fd9668", "#fd9869", "#fd9a6a", "#fd9b6b", "#fe9d6c",
+        "#fe9f6d", "#fea16e", "#fea36f", "#fea571", "#fea772", "#fea973",
+        "#feaa74", "#feac76", "#feae77", "#feb078", "#feb27a", "#feb47b",
+        "#feb67c", "#feb77e", "#feb97f", "#febb81", "#febd82", "#febf84",
+        "#fec185", "#fec287", "#fec488", "#fec68a", "#fec88c", "#feca8d",
+        "#fecc8f", "#fecd90", "#fecf92", "#fed194", "#fed395", "#fed597",
+        "#fed799", "#fed89a", "#fdda9c", "#fddc9e", "#fddea0", "#fde0a1",
+        "#fde2a3", "#fde3a5", "#fde5a7", "#fde7a9", "#fde9aa", "#fdebac",
+        "#fcecae", "#fceeb0", "#fcf0b2", "#fcf2b4", "#fcf4b6", "#fcf6b8",
+        "#fcf7b9", "#fcf9bb", "#fcfbbd", "#fcfdbf",
+        ];
+
+        for (const group of DATA.groups) {
+        const label = document.createElement('label');
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.dataset.group = group.id;
+        input.checked = group.count > 0;
+        label.appendChild(input);
+
+        const line = document.createElement('span');
+        line.className = 'legend-line';
+        line.style.background = linkColorHex[group.id] || '#94a3b8';
+        line.style.color = linkColorHex[group.id] || '#94a3b8';
+        label.appendChild(line);
+
+        const text = document.createElement('span');
+        text.className = 'legend-text';
+        text.append(group.label);
+
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = `(${group.count})`;
+        text.append(' ', count);
+
+        label.appendChild(text);
+        groupControls.appendChild(label);
+        }
+
+        function pos(node) {
+        return new THREE.Vector3(node.x, node.y, node.z);
+        }
+
+        function edgeLaneOffset(edge) {
+        if (edge.group === 'spine-exit') return -7;
+        if (edge.group === 'exit-spine') return 7;
+        return 0;
+        }
+
+        function edgePoints(a, b, edge) {
+        const start = pos(a);
+        const end = pos(b);
+        const offset = edgeLaneOffset(edge);
+        if (!offset) return [start, end];
+
+        const dir = new THREE.Vector3().subVectors(end, start);
+        const lane = new THREE.Vector3().crossVectors(
+        dir,
+        new THREE.Vector3(0, 1, 0),
+        );
+        if (lane.lengthSq() < 0.0001) lane.set(1, 0, 0);
+        lane.normalize().multiplyScalar(offset);
+
+        return [start.add(lane), end.add(lane)];
+        }
+
+        function makeLabel(text) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.font = '24px system-ui, sans-serif';
+        const width = Math.ceil(ctx.measureText(text).width + 24);
+        canvas.width = Math.max(96, width);
+        canvas.height = 42;
+        ctx.font = '24px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#e5e7eb';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(canvas.width * 0.45, canvas.height * 0.45, 1);
+        return sprite;
+        }
+
+        function layerGuide(layer) {
+        const layerNodes = DATA.nodes.filter(n => n.layer === layer.id);
+        if (!layerNodes.length) return;
+        const radius = Math.max(...layerNodes.map(n => Math.hypot(n.x, n.z)));
+        const points = [];
+        for (let i = 0; i <= 96; i++) {
+        const a = i * Math.PI * 2 / 96;
+        points.push(new THREE.Vector3(
+          Math.cos(a) * radius,
+          layer.y,
+          Math.sin(a) * radius,
+        ));
+        }
+        const geom = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+        color: 0x334155,
+        transparent: true,
+        opacity: 0.6,
+        });
+        scene.add(new THREE.Line(geom, mat));
+        }
+
+        for (const layer of DATA.layers) layerGuide(layer);
+
+        for (const node of DATA.nodes) {
+        const mat = new THREE.MeshStandardMaterial({
+        color: layerColor[node.layer] || 0xe5e7eb,
+        });
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(18, 32, 16), mat);
+        sphere.position.copy(pos(node));
+        sphere.userData = { type: 'node', node };
+        scene.add(sphere);
+        objects.push(sphere);
+        nodeObjects.push(sphere);
+
+        const label = makeLabel(node.name);
+        label.position.set(node.x, node.y + 34, node.z);
+        scene.add(label);
+        }
+
+        function edgeOrderedEnds(edge) {
+        const a = nodeById.get(edge.a);
+        const b = nodeById.get(edge.b);
+        if (!a || !b) return null;
+
+        function withOrder(source, target) {
+        return {
+          source,
+          target,
+          metric: source.id === edge.a ? edge.a_to_b : edge.b_to_a,
+        };
+        }
+
+        if (edge.group === 'leaf-spine') {
+        return a.layer === 'leaf' ? withOrder(a, b) : withOrder(b, a);
+        }
+        if (edge.group === 'exit-spine') {
+        return a.layer === 'reverse-exit' ? withOrder(a, b) : withOrder(b, a);
+        }
+        if (edge.group === 'spine-exit') {
+        return a.layer === 'spine' ? withOrder(a, b) : withOrder(b, a);
+        }
+        if (edge.group === 'leaf-exit') {
+        return a.layer === 'leaf' ? withOrder(a, b) : withOrder(b, a);
+        }
+        return withOrder(a, b);
+        }
+
+        function directedEdge(edge, mode) {
+        const ordered = edgeOrderedEnds(edge);
+        if (!ordered) return null;
+        if (mode === 'to') {
+        return {
+          source: ordered.target,
+          target: ordered.source,
+          metric: ordered.target.id === edge.a ? edge.a_to_b : edge.b_to_a,
+        };
+        }
+        return ordered;
+        }
+
+        function metricValue(edge, mode) {
+        if (mode === 'topology' || DATA.topology_only) return null;
+        const directed = directedEdge(edge, mode);
+        if (!directed || !directed.metric) return 0;
+        return directed.metric.status === 'up' ? directed.metric.mbps : 0;
+        }
+
+        function speedColor(mbps) {
+        const lo = Math.log10(5);
+        const hi = Math.log10(500);
+        const value = Math.log10(Math.max(5, mbps));
+        const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
+        const idx = Math.round(t * (speedColorMap.length - 1));
+        return new THREE.Color(speedColorMap[idx]);
+        }
+
+        function colorFor(edge, mode) {
+        const mbps = metricValue(edge, mode);
+        if (mbps === null) return linkColor[edge.group] || 0x94a3b8;
+        if (mbps <= 0) return 0x111827;
+        return speedColor(mbps);
+        }
+
+        function metricText(m) {
+        if (!m) return 'missing';
+        return `${m.mbps.toFixed(1)} Mbit/s ${m.status} ` +
+        `via ${m.iface} ${m.peer_ip}`;
+        }
+
+        function edgeTooltip(edge, mode) {
+        const a = nodeById.get(edge.a);
+        const b = nodeById.get(edge.b);
+        if (mode === 'from' || mode === 'to') {
+        const directed = directedEdge(edge, mode);
+        if (!directed) return `${edge.group} (${edge.link_type})`;
+        return `${edge.group} (${edge.link_type})
+        ` +
+          `${directed.source.name} -> ${directed.target.name}: ` +
+          `${metricText(directed.metric)}
+        ` +
+          `${a.name} -> ${b.name}: ${metricText(edge.a_to_b)}
+        ` +
+          `${b.name} -> ${a.name}: ${metricText(edge.b_to_a)}`;
+        }
+        return `${edge.group} (${edge.link_type})
+        ` +
+        `${a.name} -> ${b.name}: ${metricText(edge.a_to_b)}
+        ` +
+        `${b.name} -> ${a.name}: ${metricText(edge.b_to_a)}`;
+        }
+
+        function updateArrow(line, mode) {
+        const arrow = line.userData.arrow;
+        if (!arrow) return;
+        if (mode !== 'from' && mode !== 'to') {
+        arrow.visible = false;
+        return;
+        }
+        const directed = directedEdge(line.userData.edge, mode);
+        const a = nodeById.get(line.userData.edge.a);
+        const b = nodeById.get(line.userData.edge.b);
+        if (!directed || !a || !b) {
+        arrow.visible = false;
+        return;
+        }
+        const points = edgePoints(a, b, line.userData.edge);
+        let start = points[0].clone();
+        let end = points[1].clone();
+        if (directed.source.id !== line.userData.edge.a) {
+        const swap = start;
+        start = end;
+        end = swap;
+        }
+        const dir = new THREE.Vector3().subVectors(end, start);
+        if (dir.lengthSq() < 0.000001) {
+        arrow.visible = false;
+        return;
+        }
+        dir.normalize();
+        arrow.position.copy(end).addScaledVector(dir, -22);
+        arrow.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        dir,
+        );
+        arrow.material.color.set(line.material.color);
+        arrow.visible = line.visible;
+        }
+
+        for (const edge of DATA.edges) {
+        const a = nodeById.get(edge.a);
+        const b = nodeById.get(edge.b);
+        if (!a || !b) continue;
+        const geom = new THREE.BufferGeometry().setFromPoints(
+        edgePoints(a, b, edge),
+        );
+        const mat = new THREE.LineBasicMaterial({
+        color: colorFor(edge, 'best'),
+        linewidth: 2,
+        });
+        const line = new THREE.Line(geom, mat);
+        const arrow = new THREE.Mesh(
+        new THREE.ConeGeometry(6, 18, 12),
+        new THREE.MeshStandardMaterial({
+          color: colorFor(edge, 'best'),
+        }),
+        );
+        arrow.visible = false;
+        line.userData = { type: 'edge', edge, arrow };
+        scene.add(line);
+        scene.add(arrow);
+        edgeObjects.push(line);
+        objects.push(line);
+        }
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.params.Line.threshold = 10;
+        const mouse = new THREE.Vector2();
+
+        function activeGroups() {
+        const out = new Set();
+        document.querySelectorAll('input[data-group]').forEach(input => {
+        if (input.checked) out.add(input.dataset.group);
+        });
+        return out;
+        }
+
+        function refreshSpeedLegend(mode) {
+        const scale = speedLegend.querySelector('.speed-scale');
+        const labels = speedLegend.querySelector('.speed-scale-labels');
+        speedLegend.hidden = false;
+        if (DATA.topology_only || mode === 'topology') {
+        speedLegendTitle.textContent = 'topology colors';
+        speedLegendNote.textContent = [
+          'Link colors show topology groups only.',
+          'No speed scale is active.',
+        ].join(' ');
+        scale.style.background = [
+          'linear-gradient(90deg',
+          '#2563eb 0%',
+          '#22c55e 20%',
+          '#d946ef 40%',
+          '#22d3ee 60%',
+          '#ef4444 80%',
+          '#facc15 100%)',
+        ].join(', ');
+        labels.innerHTML = [
+          '<span style="left:0;transform:none">spine-spine</span>',
+          '<span style="left:20%;transform:translateX(-50%)">leaf-spine</span>',
+          '<span style="left:40%;transform:translateX(-50%)">exit-spine</span>',
+          '<span style="left:60%;transform:translateX(-50%)">spine-exit</span>',
+          '<span style="left:80%;transform:translateX(-50%)">leaf-exit</span>',
+          '<span style="right:0">exit-exit</span>',
+        ].join('');
+        return;
+        }
+        speedLegendTitle.textContent = `speed colors: ${mode}`;
+        speedLegendNote.textContent = [
+        `Arrows and colors show ${mode} direction.`,
+        'Magma log scale from 5 to 500 Mbit/s.',
+        'Dark links mean down or missing metrics.',
+        ].join(' ');
+        scale.style.background = [
+        'linear-gradient(90deg',
+        '#000004 0%',
+        '#2c115f 18%',
+        '#721f81 35%',
+        '#b73779 52%',
+        '#f1605d 68%',
+        '#feb078 84%',
+        '#fcfdbf 100%)',
+        ].join(', ');
+        labels.innerHTML = [
+        '<span style="left:0;transform:none">5</span>',
+        '<span style="left:30%;transform:translateX(-50%)">20</span>',
+        '<span style="left:65%;transform:translateX(-50%)">100</span>',
+        '<span style="right:0">500 Mbit/s</span>',
+        ].join('');
+        }
+
+        function refreshEdges() {
+        const active = activeGroups();
+        const mode = document.getElementById('colorMode').value;
+        for (const line of edgeObjects) {
+        const edge = line.userData.edge;
+        line.visible = active.has(edge.group);
+        line.material.color.set(colorFor(edge, mode));
+        updateArrow(line, mode);
+        }
+        refreshSpeedLegend(mode);
+        }
+
+        document.querySelectorAll('input[data-group]').forEach(input => {
+        input.addEventListener('change', refreshEdges);
+        });
+        document.getElementById('colorMode').addEventListener('change', refreshEdges);
+
+        addEventListener('mousemove', event => {
+        mouse.x = event.clientX / innerWidth * 2 - 1;
+        mouse.y = -(event.clientY / innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(objects.filter(o => o.visible));
+        if (!hits.length) {
+        tooltip.style.display = 'none';
+        return;
+        }
+        const obj = hits[0].object;
+        if (obj.userData.type === 'node') {
+        const n = obj.userData.node;
+        tooltip.textContent = `${n.kind}:${n.name}\nlayer: ${n.layer}`;
+        } else {
+        tooltip.textContent = edgeTooltip(
+          obj.userData.edge,
+          document.getElementById('colorMode').value,
+        );
+        }
+        tooltip.style.left = `${event.clientX + 14}px`;
+        tooltip.style.top = `${event.clientY + 14}px`;
+        tooltip.style.display = 'block';
+        });
+
+        addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+        });
+
+        function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+        }
+        refreshEdges();
+        animate();
+        </script>
+    </body>
+</html>

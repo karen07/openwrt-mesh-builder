@@ -1,6 +1,6 @@
 # OpenWrt Spine-Leaf Mesh Builder
 
-![Topology](./topology.svg)
+![Topology](./topology/topology_2d.svg)
 
 OpenWrt Spine-Leaf Mesh Builder собирает из обычных OpenWrt-роутеров и Linux-серверов маленький routed fabric. Spine здесь - роутеры с белым IP, leaf - роутеры за NAT или с серым IP, а exit - управляемые точки выхода в интернет. В результате получается не один VPN-туннель до одного сервера, а живая сеть: роутеры видят друг друга через overlay, leaf без белого IP становится достижимым из других LAN и access-сетей, reverse exit без белого IP участвует в egress, а пользовательский трафик получает несколько отказоустойчивых путей к интернету.
 
@@ -279,7 +279,7 @@ Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, по
 vim config.json
 
 # 2. Сгенерировать конфиги, ключи и проверки
-# Age identity из config.secret_key создаётся автоматически, если его ещё нет.
+# OWMB master-key files создаются автоматически по secrets_key_path/materials_key_path.
 ./generate_configs.py
 
 # 3. Задеплоить exit-серверы
@@ -288,8 +288,8 @@ vim config.json
 # 4. Собрать OpenWrt firmware-образы
 ./build_router_images.py
 
-# 5. Обновить роутеры найденной git-версией образов
-./upgrade_routers.py <git-short-hash>
+# 5. Обновить роутеры образами текущего git commit из images/
+./upgrade_routers.py
 ```
 
 Для локального просмотра структуры, без загрузки AWG-пакетов и без синхронизации `packages/`, можно запускать так:
@@ -594,32 +594,73 @@ CHECK_DOH_PROVIDER_DOMAINS='ru xn--p1ai'
 
 DoH-процесс работает под uid `4453`, а network rule отправляет uidrange `4453-4453` в table `200`. Это позволяет DoH bootstrap-трафику идти через выбранный exit так же, как помеченному пользовательскому трафику.
 
-## Секреты
+## Секреты и key material
 
-Секреты записываются marker-ом:
+Проект хранит чувствительные значения в исходном дереве как OWMB-маркеры.
+Обычные секреты и криптографический key material шифруются разными master-key файлами.
 
-```text
-ROUTER_SECRET_V1{...}
-```
-
-Шифрование и расшифровка делаются через `age`. Путь к identity-файлу задаётся в `config.json`:
+В `config.json` задаются пути до master-key файлов:
 
 ```json
-"secret_key": "~/.ssh/router-autoinstall-demo/router_secrets"
+{
+  "secrets_key_path": "~/.ssh/router-autoinstall-demo/openwrt-mesh-builder-secrets.key",
+  "materials_key_path": "~/.ssh/router-autoinstall-demo/openwrt-mesh-builder-materials.key"
+}
 ```
 
-Если identity-файла ещё нет, он создаётся автоматически через `age-keygen -o` по пути из `config.secret_key`.
+`secrets_key_path` используется для обычных секретов: паролей, токенов и приватных значений в `config.json` / templates.
 
-Зашифровать значение:
+`materials_key_path` используется для key material: WG/AWG private keys, OpenVPN private keys, OpenVPN CA private key и access private keys.
+
+Маркеры:
+
+```text
+OWMB_PLAIN_SECRET_V1{...}
+OWMB_ENC_SECRET_V1{...}
+
+OWMB_PLAIN_MATERIAL_V1{...}
+OWMB_ENC_MATERIAL_V1{...}
+```
+
+Шифрование выполняется Python-кодом через `cryptography`: `ChaCha20-Poly1305`, 32-byte master keys, 12-byte nonce, `AAD = marker name`.
+
+Зашифровать обычный secret из stdin/TTY:
 
 ```bash
 ./tools/secrets.py encrypt --wrap 60
 ```
 
-Расшифровать marker:
+Зашифровать plaintext secret-маркеры в файлах:
 
 ```bash
-./tools/secrets.py decrypt 'ROUTER_SECRET_V1{...}'
+./tools/secrets.py encrypt-secrets config.json routers servers
+```
+
+Зашифровать plaintext key-material-маркеры в файлах:
+
+```bash
+./tools/secrets.py encrypt-materials routers servers
+```
+
+Расшифровать marker для проверки:
+
+```bash
+./tools/secrets.py decrypt 'OWMB_ENC_SECRET_V1{...}'
+```
+
+Расшифровать все markers в дереве и убрать OWMB-обёртки:
+
+```bash
+./tools/secrets.py decrypt-all .
+```
+
+Это оставляет реальные plaintext-секреты и private keys без маркеров. Для
+обратного автоматического шифрования нужны `OWMB_PLAIN_*` markers, поэтому для
+редактирования удобнее использовать marker-preserving режим:
+
+```bash
+./tools/secrets.py decrypt-marked-all .
+./tools/secrets.py encrypt-all .
 ```
 
 Проверить, что marker-ов не осталось в staging tree:
@@ -628,14 +669,12 @@ ROUTER_SECRET_V1{...}
 ./tools/secrets.py assert-no-markers routers/spine01/files
 ```
 
-`ROUTER_SECRET_V1{...}` можно использовать в `config.json` и в любых generated/template файлах, которые попадают в конфиги роутеров или серверов. Главное, чтобы файл проходил через build/deploy staging.
-
 Когда расшифровывается:
 
 - при сборке роутерного образа `build_router_images.py` копирует `routers/<slug>/files` во временную ImageBuilder-директорию, расшифровывает там и проверяет `assert-no-markers`;
 - при деплое серверов `deploy_servers.py` копирует `servers/<exit-slug>` во временный staging-каталог, расшифровывает там и проверяет `assert-no-markers`.
 
-В исходном дереве секреты должны оставаться зашифрованными.
+В исходном дереве private keys и секреты остаются зашифрованными. Если украден только репозиторий без master-key файлов, из него нельзя получить приватные ключи, пароли и токены.
 
 ## SSH keys и aliases
 
@@ -711,7 +750,8 @@ access endpoints: Spine01, Spine02, AccessOnly01, AccessOnly02
 {
   "openwrt_version": "25.12.4",
   "ssh_key_dir": "~/.ssh/router-autoinstall-demo",
-  "secret_key": "~/.ssh/router-autoinstall-demo/router_secrets",
+  "secrets_key_path": "~/.ssh/router-autoinstall-demo/openwrt-mesh-builder-secrets.key",
+  "materials_key_path": "~/.ssh/router-autoinstall-demo/openwrt-mesh-builder-materials.key",
   "main_router": "Spine01",
   "exit_order": ["EGR01", "EGR02", "PUB01", "REV01", "REV02"],
 
@@ -796,7 +836,8 @@ Access-протоколы добавляют свои managed-пакеты на 
 
 ```text
 ssh_key_dir
-secret_key
+secrets_key_path
+materials_key_path
 openwrt_version
 packages
 device_profiles
@@ -848,7 +889,7 @@ access
 ```json
 "wifi_2g": {
   "ssid": "Example-2G",
-  "key": "ROUTER_SECRET_V1{...}",
+  "key": "OWMB_ENC_SECRET_V1{...}",
   "blocked_macs": ["aa:bb:cc:dd:ee:ff"]
 }
 ```
@@ -920,10 +961,10 @@ access
 этого первого шага; следующие `scp` и `ssh /root/deploy.sh` уже используют
 сгенерированный ключ из `ssh_key_dir`.
 
-По умолчанию staged `authorized_keys` добавляются к удалённому
-`/root/.ssh/authorized_keys`. С `--replace-authorized-keys` файл заменяется.
-В обоих режимах ключ ставится до `scp`, чтобы актуальный ключ уже лежал на
-сервере перед следующими SSH-вызовами.
+По умолчанию staged `authorized_keys` сливаются с удалённым
+`/root/.ssh/authorized_keys` без дублей. С `--replace-authorized-keys` файл
+заменяется. В обоих режимах ключ ставится до `scp`, чтобы актуальный ключ уже
+лежал на сервере перед следующими SSH-вызовами.
 
 `--server-ssh-mode auto` сначала пробует node alias, затем public alias. Это удобно после bootstrap. Для самого первого деплоя public exit может потребовать `--server-ssh-mode public`.
 
@@ -944,17 +985,22 @@ images/<router-slug>_<openwrt-version>_<git>_<timestamp>_sysupgrade.bin
 images/<router-slug>_<openwrt-version>_<git>_<timestamp>_factory.bin
 ```
 
-Перед сборкой encrypted secrets расшифровываются только во временной ImageBuilder-директории.
+Перед сборкой encrypted secrets и key material расшифровываются только во временной ImageBuilder-директории.
 
 ### `upgrade_routers.py`
 
 Копирует `sysupgrade`-образы из `images/` на роутеры и после подтверждения запускает async `sysupgrade -n`.
 
 ```bash
+./upgrade_routers.py
+./upgrade_routers.py Spine01 Leaf01
 ./upgrade_routers.py e47e68e
 ./upgrade_routers.py e47e68e Spine01 Leaf01
 ./upgrade_routers.py e47e68e --result-dir images --remote-dir /tmp
 ```
+
+Без positional `git_version` команда использует текущий `git rev-parse --short HEAD`
+и ищет `sysupgrade`-образы с этим git hash в `images/`.
 
 Порядок обновления:
 
@@ -1029,11 +1075,12 @@ leaf routers -> mesh hubs except main_router -> main_router
 ./render_topology_2d.py --speeds-json link-speeds.json
 ```
 
-По умолчанию создаются:
+По умолчанию файлы пишутся в `topology/`. Для speed view создаются:
 
 ```text
-topology_speed_from.svg
-topology_speed_to.svg
+topology/topology_2d-overview.svg
+topology/topology_2d_speed_from.svg
+topology/topology_2d_speed_to.svg
 ```
 
 `from` показывает качество направления от выбранного узла. `to` показывает качество направления к нему.
@@ -1042,10 +1089,16 @@ Topology-only без замеров:
 
 ```bash
 # По реально generated AWG/UCI файлам
-./render_topology_2d.py --topology-only --topology-source generated --out topology.svg
+./render_topology_2d.py --topology-only --topology-source generated
 
 # По плановой topology из config.json
-./render_topology_2d.py --topology-only --topology-source config --out topology.svg
+./render_topology_2d.py --topology-only --topology-source config
+```
+
+Topology-only пишет один SVG:
+
+```text
+topology/topology_2d.svg
 ```
 
 Выбор конкретной SVG-карты:
@@ -1074,9 +1127,15 @@ Topology-only без замеров:
 `render_topology_3d.py` строит интерактивную Three.js-карту.
 
 ```bash
-./render_topology_3d.py --speeds-json link-speeds.json --out topology_3d.html
+./render_topology_3d.py --speeds-json link-speeds.json
 ./render_topology_3d.py --topology-only --topology-source generated
 ./render_topology_3d.py --topology-only --topology-source config
+```
+
+По умолчанию HTML пишется сюда:
+
+```text
+topology/topology_3d.html
 ```
 
 ## Предусловия
@@ -1087,9 +1146,10 @@ Topology-only без замеров:
 python3
 git
 ssh, scp, ssh-keygen
-age, age-keygen
+curl
 wg
 openssl
+apk-tools (`apk`)
 tar с поддержкой zst
 make
 ```
@@ -1121,12 +1181,17 @@ vim config.json
 # 5. Смотрим, какие images появились
 ls -lh images/
 
-# 6. Обновляем routers
-./upgrade_routers.py <git-short-hash>
+# 6. Обновляем routers образами текущего git commit из images/
+./upgrade_routers.py
 
 # 7. Проверяем versions
-./run_routers.py
-./run_servers.py
+./run_routers.py --no-clear
+./run_servers.py --no-clear
+
+# 8. Собираем текущие скорости и рендерим measured topology
+./collect_link_speeds.py
+./render_topology_2d.py
+./render_topology_3d.py
 
 # 8. Проверяем links и рисуем карту
 ./collect_link_speeds.py --progress --json-out link-speeds.json
@@ -1167,5 +1232,5 @@ python3 -m py_compile *.py tools/*.py
 - `packages` в `config.json` - дополнительные пакеты; обязательные runtime-пакеты и access-пакеты добавляются автоматически.
 - `wireguard` access добавляет `luci-proto-wireguard`, `openvpn` access добавляет `openvpn-openssl`; если на роутере есть оба access-типа, добавляются оба пакета.
 - `--force` пересоздаёт mesh/exit tunnel keys; access secrets сохраняются.
-- Секреты должны оставаться в исходном дереве как `ROUTER_SECRET_V1{...}` и расшифровываться только в staging/build/deploy.
+- Секреты и key material остаются в исходном дереве как `OWMB_ENC_SECRET_V1{...}` / `OWMB_ENC_MATERIAL_V1{...}` и расшифровываются только в staging/build/deploy.
 - Любую router-specific логику можно добавлять в `customization()` внутри `99-firstboot-custom`.

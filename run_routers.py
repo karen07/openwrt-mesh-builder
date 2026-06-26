@@ -5,13 +5,10 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.cli_common import (
-    clear_screen,
-    command_from_argv,
-    die,
-    load_json_config,
-    run_ssh,
-)
+from tools.cli_common import clear_screen, command_from_argv
+from tools.config_io import load_json_config
+from tools.process import die
+from tools.remote_exec import run_and_print_captured_remote
 from tools.default import CONFIG_PATH, SSH_TIMEOUT, ROUTER_VERSION_COMMAND
 from tools.router_order import RouterDef, build_router_order
 
@@ -22,23 +19,13 @@ def run_on_router(
     ssh_timeout: int = SSH_TIMEOUT,
     config_path: str | Path = CONFIG_PATH,
 ) -> bool:
-    print(f"{router.ssh_host}:")
-    rc, out, err = run_ssh(
-        router.ssh_host, command, ssh_timeout, config_path=config_path
+    return run_and_print_captured_remote(
+        router.ssh_host,
+        (router.ssh_host,),
+        command,
+        ssh_timeout=ssh_timeout,
+        config_path=config_path,
     )
-
-    if out:
-        print(out.rstrip())
-
-    ok = rc == 0
-    if not ok:
-        if err.strip():
-            print(err.rstrip(), file=sys.stderr)
-        else:
-            print(f"ssh exited with code {rc}", file=sys.stderr)
-
-    print()
-    return ok
 
 
 def run_on_all_routers(

@@ -6,7 +6,7 @@ from pathlib import Path
 # ============================================================
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LOCAL_TEMP_ROOT = REPO_ROOT
+LOCAL_TEMP_ROOT = Path.cwd()
 
 CONFIG_PATH = Path("config.json")
 
@@ -57,7 +57,9 @@ CONFIG_KEY_PORT = "port"
 CONFIG_KEY_USERS = "users"
 CONFIG_KEY_AWG = "awg"
 CONFIG_KEY_SSH_KEY_DIR = "ssh_key_dir"
-CONFIG_KEY_SECRET_KEY = "secret_key"
+CONFIG_KEY_SECRET_KEY = "secret_key"  # legacy, rejected by validation
+CONFIG_KEY_SECRETS_KEY_PATH = "secrets_key_path"
+CONFIG_KEY_MATERIALS_KEY_PATH = "materials_key_path"
 
 # ============================================================
 # ROUTER / SERVER NAMING CONVENTIONS
@@ -73,7 +75,13 @@ ROUTER_KEY_PREFIX = "router"
 SERVER_KEY_PREFIX = "server_"
 EXIT_HUB_NAME_PREFIX = "Exit"
 
-ROUTER_SECRET_MARKER = "ROUTER_SECRET_V1"
+ROUTER_SECRET_MARKER = "ROUTER_SECRET_V1"  # legacy, rejected
+OWMB_PLAIN_SECRET_MARKER = "OWMB_PLAIN_SECRET_V1"
+OWMB_ENC_SECRET_MARKER = "OWMB_ENC_SECRET_V1"
+OWMB_PLAIN_MATERIAL_MARKER = "OWMB_PLAIN_MATERIAL_V1"
+OWMB_ENC_MATERIAL_MARKER = "OWMB_ENC_MATERIAL_V1"
+OWMB_SECRETS_KEY_MARKER = "OWMB_SECRETS_KEY_V1"
+OWMB_MATERIALS_KEY_MARKER = "OWMB_MATERIALS_KEY_V1"
 
 # ============================================================
 # TIMEOUTS / REMOTE OPS
@@ -440,15 +448,18 @@ AWG_INFRA_I5 = ""
 
 TOPOLOGY_CACHE_TTL_SEC = 300
 TOPOLOGY_NODE_R = 38
-TOPOLOGY_OUT = "topology.svg"
+TOPOLOGY_DIR = "topology"
+TOPOLOGY_2D_OUT = "topology/topology_2d.svg"
+TOPOLOGY_3D_OUT = "topology/topology_3d.html"
+TOPOLOGY_OUT = TOPOLOGY_2D_OUT
 TOPOLOGY_TITLE = "Mesh topology"
 TOPOLOGY_HTTP_PORT = 8080
 
 IPERF_TIME_SEC = 1
 IPERF_BITRATE = ""
 
-SPEED_MIN_MBPS = 0.0
-SPEED_MAX_MBPS = 100.0
+SPEED_MIN_MBPS = 5.0
+SPEED_MAX_MBPS = 500.0
 
 LINK_STATUS_UP = "up"
 LINK_STATUS_DOWN = "down"

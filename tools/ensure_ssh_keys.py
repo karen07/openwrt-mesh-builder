@@ -3,27 +3,26 @@ import sys
 
 sys.dont_write_bytecode = True
 import argparse
-import subprocess
 from pathlib import Path
 
 try:
-    from .cli_common import (
-        atomic_write_text,
+    from .config_io import load_json_config
+    from .file_ops import atomic_write_text
+    from .process import need
+    from .remote_exec import (
         deploy_ssh_config_path_from_config,
         deploy_ssh_dir_from_config,
-        load_json_config,
-        need,
-        run_checked,
     )
+    from .ssh_keys import generate_ed25519_key, public_key_from_private
 except ImportError:
-    from cli_common import (
-        atomic_write_text,
+    from config_io import load_json_config
+    from file_ops import atomic_write_text
+    from process import need
+    from remote_exec import (
         deploy_ssh_config_path_from_config,
         deploy_ssh_dir_from_config,
-        load_json_config,
-        need,
-        run_checked,
     )
+    from ssh_keys import generate_ed25519_key, public_key_from_private
 
 try:
     from .default import (
@@ -69,25 +68,9 @@ def ensure_key_and_write_pub(key_base: Path, auth_file: Path, comment: str) -> N
 
     if not priv_key.exists():
         print(f"Generating key: {priv_key}")
-        subprocess.run(
-            [
-                "ssh-keygen",
-                "-t",
-                "ed25519",
-                "-f",
-                str(priv_key),
-                "-N",
-                "",
-                "-C",
-                comment,
-            ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        priv_key.chmod(PRIVATE_KEY_FILE_MODE)
+        generate_ed25519_key(priv_key, comment=comment, mode=PRIVATE_KEY_FILE_MODE)
 
-    pub_text = run_checked(["ssh-keygen", "-y", "-f", str(priv_key)])
+    pub_text = public_key_from_private(priv_key)
 
     auth_file.parent.mkdir(parents=True, exist_ok=True)
     if auth_file.exists():

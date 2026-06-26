@@ -5,53 +5,17 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.cli_common import (
-    clear_screen,
-    command_from_argv,
-    die,
-    load_json_config,
-    run_ssh_with_fallback,
-    server_ssh_hosts,
-)
-from tools.common import build_config_data
+from tools.cli_common import clear_screen, command_from_argv
+from tools.config_io import load_json_config
+from tools.process import die
+from tools.remote_hosts import server_ssh_hosts
+from tools.remote_exec import run_and_print_captured_remote
+from tools.targets import selected_servers
 from tools.default import (
     CONFIG_PATH,
     SSH_TIMEOUT,
     SERVER_VERSION_COMMAND,
 )
-
-
-def config_exit_names(cfg: dict[str, object]) -> list[str]:
-    return [hub.name for hub in build_config_data(cfg).exit_hubs]
-
-
-def selected_servers(cfg: dict[str, object], values: list[str]) -> list[str]:
-    configured = config_exit_names(cfg)
-    by_lc = {name.lower(): name for name in configured}
-
-    if not values:
-        return configured
-
-    out: list[str] = []
-    seen: set[str] = set()
-
-    for value in values:
-        for item in value.replace(",", " ").split():
-            if not item:
-                continue
-
-            name = by_lc.get(item.lower())
-            if name is None:
-                die(f"unknown server in selected config: {item}")
-
-            key = name.lower()
-            if key in seen:
-                continue
-
-            seen.add(key)
-            out.append(name)
-
-    return out
 
 
 def run_on_server(
@@ -62,28 +26,13 @@ def run_on_server(
     server_ssh_mode: str = "auto",
 ) -> bool:
     hosts = server_ssh_hosts(name, server_ssh_mode)
-    print(f"{'/'.join(hosts)}:")
-    host, rc, out, err = run_ssh_with_fallback(
+    return run_and_print_captured_remote(
+        "/".join(hosts),
         hosts,
         command,
         ssh_timeout=ssh_timeout,
         config_path=config_path,
     )
-    if len(hosts) > 1 and host != hosts[0]:
-        print(f"using fallback SSH host: {host}")
-
-    if out:
-        print(out.rstrip())
-
-    ok = rc == 0
-    if not ok:
-        if err.strip():
-            print(err.rstrip(), file=sys.stderr)
-        else:
-            print(f"ssh exited with code {rc}", file=sys.stderr)
-
-    print()
-    return ok
 
 
 def run_on_all_servers(

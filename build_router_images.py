@@ -4,17 +4,12 @@ import sys
 sys.dont_write_bytecode = True
 import argparse
 import shutil
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from tools.cli_common import (
-    die,
-    load_json_config,
-    parse_csv_names,
-    run_checked,
-    run_no_capture,
-)
+from tools.cli_common import parse_csv_names
+from tools.config_io import load_json_config
+from tools.process import die, run_checked, run_no_capture
 from tools.common import (
     ConfigData,
     DeviceProfile,
@@ -22,7 +17,10 @@ from tools.common import (
     build_config_data,
     normalize_openwrt_version,
 )
+from tools.package_model import managed_router_packages
 from tools.secrets import assert_no_markers, decrypt_tree
+from tools.downloads import download_file
+from tools.git_utils import git_short
 from tools.default import (
     CONFIG_PATH,
     IMAGES_DIR,
@@ -30,8 +28,6 @@ from tools.default import (
     MIN_OPENWRT_VERSION_TEXT,
     OPENWRT_RELEASE_BASE_URL,
     ROUTER_FILES_DIRNAME,
-    ROUTER_REQUIRED_ACCESS_PACKAGES,
-    ROUTER_REQUIRED_PACKAGES,
     ROUTERS_ROOT,
     ROUTER_PACKAGES_DIRNAME,
 )
@@ -45,98 +41,18 @@ def out(args: list[str], cwd: Path | None = None) -> str:
     return run_checked(args, cwd=cwd).strip()
 
 
-def download_binary(url: str, dst: Path) -> None:
-    tmp = dst.with_suffix(dst.suffix + ".tmp")
-    tmp.unlink(missing_ok=True)
-
-    try:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            data = response.read()
-    except Exception as e:
-        tmp.unlink(missing_ok=True)
-        die(f"failed to download {url}: {e}")
-
-    if not data:
-        tmp.unlink(missing_ok=True)
-        die(f"failed to download {url}: empty response")
-
-    tmp.write_bytes(data)
-    tmp.replace(dst)
-
-
 def load_config(config_path: Path) -> ConfigData:
     return build_config_data(load_json_config(config_path))
 
 
-def dedupe_packages(packages: list[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-
-    for package in packages:
-        if package in seen:
-            continue
-        result.append(package)
-        seen.add(package)
-
-    return result
-
-
-def required_router_packages(cfg: ConfigData, router_name: str) -> list[str]:
-    packages = list(ROUTER_REQUIRED_PACKAGES)
-
-    for group in cfg.access.get(router_name, []):
-        packages.extend(ROUTER_REQUIRED_ACCESS_PACKAGES[group.protocol])
-
-    return dedupe_packages(packages)
-
-
 def router_packages(cfg: ConfigData, router: RouterDef) -> list[str]:
-    required = required_router_packages(cfg, router.name)
-    base = required + cfg.packages
-
-    result = dedupe_packages(base)
-    present = set(result)
-    required_set = set(required)
-
-    for entry in router.package_overrides:
-        op = entry[0]
-        package = entry[1:]
-
-        if op == "+":
-            if package not in present:
-                result.append(package)
-                present.add(package)
-            continue
-
-        if package in required_set:
-            die(
-                f"router {router.name}.packages tries to remove required managed "
-                f"package: {package}"
-            )
-
-        if package not in present:
-            die(
-                f"router {router.name}.packages tries to remove package "
-                f"that is not currently installed: {package}"
-            )
-
-        result = [p for p in result if p != package]
-        present.remove(package)
-
-    return result
+    return managed_router_packages(cfg, router)
 
 
 def config_version(cfg_data: ConfigData, override: str | None) -> str:
     if override is None:
         return cfg_data.openwrt_version
     return normalize_openwrt_version(override, "--version")
-
-
-def git_short() -> str:
-    try:
-        return out(["git", "rev-parse", "--short", "HEAD"])
-    except Exception:
-        return "unknown"
 
 
 def find_router(cfg: ConfigData, name: str) -> RouterDef:
@@ -247,7 +163,7 @@ def build_router(
     print(f"Downloading from: {dl_url}")
 
     if not dl_local.exists():
-        download_binary(dl_url, dl_local)
+        download_file(dl_url, dl_local)
 
     build_dir = router_dir / file_name_tmp
 

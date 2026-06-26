@@ -3,19 +3,11 @@ import sys
 
 sys.dont_write_bytecode = True
 import argparse
-import filecmp
-import shutil
-import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 
-from tools.cli_common import (
-    clear_screen,
-    die,
-    load_json_config,
-    run_checked,
-    run_no_capture,
-)
+from tools.cli_common import clear_screen
+from tools.config_io import load_json_config
+from tools.process import die, run_checked, run_no_capture
 from tools.common import ConfigData, DeviceProfile, RouterDef, build_config_data
 from tools.default import (
     CONFIG_PATH,
@@ -23,7 +15,6 @@ from tools.default import (
     AWG_RELEASE_BASE_URL,
     MIN_OPENWRT_VERSION_TEXT,
     PACKAGE_EXTENSION,
-    PACKAGE_REPO_INDEX_FILES,
     PACKAGE_SOURCE_ROOT,
     ROUTER_EXAMPLE_DIR as EXAMPLE_ROUTER_DIR,
     ROUTER_PACKAGES_DIRNAME,
@@ -33,13 +24,9 @@ from tools.ensure_ssh_keys import main as ensure_ssh_keys_main
 from tools.generate import main as generate_main
 from tools.show_unmanaged import main as show_unmanaged_main
 from tools.validate import main as validate_main
-
-
-@dataclass(frozen=True)
-class ApkMeta:
-    name: str
-    version: str
-    arch: str
+from tools.downloads import try_download_file
+from tools.file_ops import copy_file_if_changed, remove_path
+from tools.packages import apk_canonical_name, remove_package_indexes
 
 
 def run(
@@ -74,34 +61,6 @@ def package_source_dir_from_profile(version: str, profile: DeviceProfile) -> Pat
     return PACKAGE_SOURCE_ROOT / version / profile.board / profile.arch
 
 
-def remove_package_indexes(package_dir: Path) -> None:
-    for name in PACKAGE_REPO_INDEX_FILES:
-        path = package_dir / name
-        if path.exists():
-            path.unlink()
-
-
-def download_binary(url: str, dst: Path) -> bool:
-    tmp = dst.with_suffix(dst.suffix + ".tmp")
-    tmp.unlink(missing_ok=True)
-
-    try:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            data = response.read()
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        return False
-
-    if not data:
-        tmp.unlink(missing_ok=True)
-        return False
-
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    tmp.write_bytes(data)
-    tmp.replace(dst)
-    return True
-
-
 def ensure_named_awg_packages_for_profile(
     version: str,
     profile: DeviceProfile,
@@ -125,7 +84,7 @@ def ensure_named_awg_packages_for_profile(
         url = f"{base_url}/{release_file_name}"
         tmp_dst = dst_dir / release_file_name
 
-        if not download_binary(url, tmp_dst):
+        if not try_download_file(url, tmp_dst):
             die(
                 "failed to download AWG2 apk package "
                 f"{package_name} for {version} {board} {arch}. Tried: {url}"
@@ -152,272 +111,6 @@ def ensure_awg_packages(
 
         seen.add(key)
         ensure_named_awg_packages_for_profile(version, profile)
-
-
-ADB_SCHEMA_PACKAGE = 0x676B6370
-ADB_COMPRESSION_NONE = 0x2E
-ADB_COMPRESSION_DEFLATE = 0x64
-ADB_COMPRESSION_CUSTOM = 0x63
-ADB_CUSTOM_COMPRESSION_NONE = 0
-ADB_CUSTOM_COMPRESSION_DEFLATE = 1
-ADB_CUSTOM_COMPRESSION_ZSTD = 2
-ADB_BLOCK_ADB = 0
-ADB_VALUE_INT = 0x10000000
-ADB_VALUE_INT32 = 0x20000000
-ADB_VALUE_INT64 = 0x30000000
-ADB_VALUE_BLOB8 = 0x80000000
-ADB_VALUE_BLOB16 = 0x90000000
-ADB_VALUE_BLOB32 = 0xA0000000
-ADB_VALUE_ARRAY = 0xD0000000
-ADB_VALUE_OBJECT = 0xE0000000
-ADB_VALUE_TYPE_MASK = 0xF0000000
-ADB_VALUE_PAYLOAD_MASK = 0x0FFFFFFF
-
-
-@dataclass(frozen=True)
-class AdbValue:
-    value_type: int
-    value: int
-
-
-def uint_from(data: bytes | bytearray) -> int:
-    return int.from_bytes(data, "little", signed=False)
-
-
-def adb_value_from_u32(value: int) -> AdbValue | None:
-    if value == 0:
-        return None
-    return AdbValue(value & ADB_VALUE_TYPE_MASK, value & ADB_VALUE_PAYLOAD_MASK)
-
-
-def adb_payload_bounds(
-    data: bytes | bytearray, offset: int, size: int, what: str
-) -> None:
-    if offset < 0 or size < 0 or offset + size > len(data):
-        raise ValueError(
-            f"invalid APK v3 ADB {what} bounds: "
-            f"offset={offset}, size={size}, adb_size={len(data)}"
-        )
-
-
-def adb_read_u32(data: bytes | bytearray, offset: int, what: str) -> int:
-    adb_payload_bounds(data, offset, 4, what)
-    return uint_from(data[offset : offset + 4])
-
-
-def adb_read_values(data: bytes | bytearray, header: AdbValue) -> list[AdbValue | None]:
-    if header.value_type not in {ADB_VALUE_ARRAY, ADB_VALUE_OBJECT}:
-        raise ValueError(
-            f"expected APK v3 ADB array/object, got {header.value_type:#x}"
-        )
-
-    count = adb_read_u32(data, header.value, "array/object slot count")
-    if count < 1:
-        raise ValueError(f"invalid APK v3 ADB array/object slot count: {count}")
-
-    values: list[AdbValue | None] = []
-    for index in range(1, count):
-        raw = adb_read_u32(data, header.value + index * 4, "array/object slot")
-        values.append(adb_value_from_u32(raw))
-    return values
-
-
-def adb_value_at(values: list[AdbValue | None], field_index: int) -> AdbValue | None:
-    if field_index <= 0 or field_index > len(values):
-        return None
-    return values[field_index - 1]
-
-
-def adb_read_uint(data: bytes | bytearray, header: AdbValue) -> int:
-    if header.value_type == ADB_VALUE_INT:
-        return header.value
-    if header.value_type == ADB_VALUE_INT32:
-        return adb_read_u32(data, header.value, "int32")
-    if header.value_type == ADB_VALUE_INT64:
-        adb_payload_bounds(data, header.value, 8, "int64")
-        return uint_from(data[header.value : header.value + 8])
-    raise ValueError(f"expected APK v3 ADB integer, got {header.value_type:#x}")
-
-
-def adb_read_blob(data: bytes | bytearray, header: AdbValue) -> bytes:
-    if header.value_type == ADB_VALUE_BLOB8:
-        size_len = 1
-    elif header.value_type == ADB_VALUE_BLOB16:
-        size_len = 2
-    elif header.value_type == ADB_VALUE_BLOB32:
-        size_len = 4
-    else:
-        raise ValueError(f"expected APK v3 ADB blob, got {header.value_type:#x}")
-
-    adb_payload_bounds(data, header.value, size_len, "blob size")
-    size = uint_from(data[header.value : header.value + size_len])
-    offset = header.value + size_len
-    adb_payload_bounds(data, offset, size, "blob data")
-    return bytes(data[offset : offset + size])
-
-
-def adb_read_text(data: bytes | bytearray, header: AdbValue) -> str:
-    return adb_read_blob(data, header).decode("utf-8")
-
-
-def parse_apk_v3_pkginfo_adb(data: bytes | bytearray, apk_file: Path) -> ApkMeta:
-    if len(data) < 8:
-        raise ValueError("APK v3 ADB block is too small")
-
-    root_raw = adb_read_u32(data, 4, "root object")
-    root = adb_value_from_u32(root_raw)
-    if root is None or root.value_type != ADB_VALUE_OBJECT:
-        raise ValueError("APK v3 ADB root is not an object")
-
-    root_values = adb_read_values(data, root)
-    pkginfo = adb_value_at(root_values, 1)
-    if pkginfo is None or pkginfo.value_type != ADB_VALUE_OBJECT:
-        raise ValueError("APK v3 ADB pkginfo field is missing or not an object")
-
-    info_values = adb_read_values(data, pkginfo)
-
-    name_value = adb_value_at(info_values, 1)
-    version_value = adb_value_at(info_values, 2)
-    arch_value = adb_value_at(info_values, 5)
-
-    if name_value is None or version_value is None or arch_value is None:
-        raise ValueError("APK v3 ADB pkginfo has no name/version/arch fields")
-
-    meta = ApkMeta(
-        name=adb_read_text(data, name_value),
-        version=adb_read_text(data, version_value),
-        arch=adb_read_text(data, arch_value),
-    )
-
-    if not meta.name or not meta.version or not meta.arch:
-        raise ValueError(
-            f"incomplete APK v3 metadata in {apk_file}: "
-            f"name={meta.name!r}, version={meta.version!r}, arch={meta.arch!r}"
-        )
-
-    return meta
-
-
-def deflate_raw(data: bytes) -> bytes:
-    import zlib
-
-    return zlib.decompress(data, wbits=-zlib.MAX_WBITS)
-
-
-def apk_v3_payload(data: bytes) -> bytes:
-    if len(data) < 4:
-        raise ValueError("file is too small for APK v3 header")
-    if data[:3] != b"ADB":
-        raise ValueError("file does not start with APK v3 ADB header")
-
-    compression = data[3]
-    payload = data[4:]
-
-    if compression == ADB_COMPRESSION_NONE:
-        return payload
-
-    if compression == ADB_COMPRESSION_DEFLATE:
-        decompressed = deflate_raw(payload)
-        if not decompressed.startswith(b"ADB."):
-            raise ValueError(
-                "deflated APK v3 stream does not start with inner ADB. header"
-            )
-        return decompressed[4:]
-
-    if compression == ADB_COMPRESSION_CUSTOM:
-        if len(payload) < 2:
-            raise ValueError("truncated APK v3 custom compression header")
-        alg = payload[0]
-        compressed_payload = payload[2:]
-
-        if alg == ADB_CUSTOM_COMPRESSION_NONE:
-            return compressed_payload
-        if alg == ADB_CUSTOM_COMPRESSION_DEFLATE:
-            decompressed = deflate_raw(compressed_payload)
-            if not decompressed.startswith(b"ADB."):
-                raise ValueError(
-                    "custom-deflated APK v3 stream does not start with inner ADB. header"
-                )
-            return decompressed[4:]
-        if alg == ADB_CUSTOM_COMPRESSION_ZSTD:
-            raise ValueError(
-                "APK v3 zstd compression is not supported by this pure-Python parser"
-            )
-
-        raise ValueError(f"unknown APK v3 custom compression algorithm: {alg}")
-
-    raise ValueError(f"unknown APK v3 compression marker: 0x{compression:02x}")
-
-
-def parse_apk_v3_metadata(apk_file: Path) -> ApkMeta:
-    payload = apk_v3_payload(apk_file.read_bytes())
-
-    if len(payload) < 8:
-        raise ValueError("APK v3 payload is too small")
-
-    schema = uint_from(payload[:4])
-    if schema != ADB_SCHEMA_PACKAGE:
-        raise ValueError(f"APK v3 file has unsupported schema: {schema:#x}")
-
-    offset = 4
-    if len(payload) - offset < 4:
-        raise ValueError("APK v3 package has no ADB block")
-
-    block_header = uint_from(payload[offset : offset + 4])
-    offset += 4
-
-    block_type = block_header >> 30
-    block_size = block_header & 0x3FFFFFFF
-    if block_type != ADB_BLOCK_ADB:
-        raise ValueError(f"first APK v3 block is not ADB: type={block_type}")
-    if block_size < 4:
-        raise ValueError(f"invalid APK v3 ADB block size: {block_size}")
-
-    block_payload_size = block_size - 4
-    adb_payload_bounds(payload, offset, block_payload_size, "ADB block payload")
-    adb_data = payload[offset : offset + block_payload_size]
-
-    return parse_apk_v3_pkginfo_adb(adb_data, apk_file)
-
-
-def apk_metadata(apk_file: Path) -> ApkMeta:
-    try:
-        return parse_apk_v3_metadata(apk_file)
-    except Exception as e:
-        die(f"failed to read APK v3 metadata from {apk_file}: {e}")
-
-
-def apk_canonical_name(apk_file: Path, expected_arch: str) -> str:
-    meta = apk_metadata(apk_file)
-
-    if meta.arch not in {expected_arch, "noarch"}:
-        die(
-            f"package arch mismatch: {apk_file} has arch {meta.arch!r}, "
-            f"but directory/profile arch is {expected_arch!r}"
-        )
-
-    return f"{meta.name}-{meta.version}{apk_file.suffix}"
-
-
-def copy_file_if_changed(src: Path, dst: Path) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-
-    if dst.exists() and dst.is_file() and filecmp.cmp(src, dst, shallow=False):
-        return
-
-    print(f"Updating {dst}")
-    shutil.copy2(src, dst)
-
-
-def remove_path(path: Path) -> None:
-    if not path.exists():
-        return
-
-    print(f"Removing {path}")
-    if path.is_dir():
-        shutil.rmtree(path)
-    else:
-        path.unlink()
 
 
 def copy_apk_repo_with_canonical_names(
