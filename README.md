@@ -2,11 +2,31 @@
 
 ![Topology](./topology/topology_2d_topology.svg)
 
-OpenWrt Spine-Leaf Mesh Builder собирает из обычных OpenWrt-роутеров и Linux-серверов маленький routed fabric. Spine здесь - роутеры с белым IP, leaf - роутеры за NAT или с серым IP, а exit - управляемые точки выхода в интернет. В результате получается не один VPN-туннель до одного сервера, а живая сеть: роутеры видят друг друга через overlay, leaf без белого IP становится достижимым из других LAN и access-сетей, reverse exit без белого IP участвует в egress, а пользовательский трафик получает несколько отказоустойчивых путей к интернету.
+OpenWrt Spine-Leaf Mesh Builder собирает из обычных OpenWrt-роутеров и Linux-серверов небольшой routed fabric.
+
+Spine здесь - роутеры с публичным IP, leaf - роутеры за NAT или с серым IP, а exit - управляемые точки выхода в интернет. В результате получается не один VPN-туннель до одного сервера, а живая routed-сеть: роутеры видят друг друга через overlay, leaf без входящего публичного endpoint-а становится достижимым из других LAN и access-сетей, reverse exit без белого IP участвует в egress, а пользовательский трафик получает несколько отказоустойчивых путей к интернету.
 
 Топология описывается в `config.json`. Из неё генерируются OpenWrt overlay files, server configs, access-клиенты, SSH aliases, firewall rules, Babel routing и IPIP exit data-plane. OpenWrt firmware-образы собираются отдельной командой `./build_router_images.py`.
 
-Проект рассчитан на OpenWrt 25.12+ и AWG2/apk-only builds.
+Проект рассчитан на OpenWrt 25.12+ с `apk`-based ImageBuilder и AWG2-пакетами.
+
+> Текущий `config.json` - демонстрационный пример. Адреса из `203.0.113.0/24` и `198.51.100.0/24` нужно заменить на реальные адреса своей сети перед деплоем.
+
+## Содержание
+
+- [Что это даёт](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D1%91%D1%82)
+- [Идея сети](#%D0%B8%D0%B4%D0%B5%D1%8F-%D1%81%D0%B5%D1%82%D0%B8)
+- [Быстрый старт](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82)
+- [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
+- [Служебная адресация](#%D1%81%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F-%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F)
+- [Выбор exit-а и IPIP data-plane](#%D0%B2%D1%8B%D0%B1%D0%BE%D1%80-exit-%D0%B0-%D0%B8-ipip-data-plane)
+- [Firewall model на OpenWrt](#firewall-model-%D0%BD%D0%B0-openwrt)
+- [Что генерируется](#%D1%87%D1%82%D0%BE-%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B8%D1%80%D1%83%D0%B5%D1%82%D1%81%D1%8F)
+- [Секреты и key material](#%D1%81%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D1%8B-%D0%B8-key-material)
+- [Основные команды](#%D0%BE%D1%81%D0%BD%D0%BE%D0%B2%D0%BD%D1%8B%D0%B5-%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D1%8B)
+- [Рендер topology](#%D1%80%D0%B5%D0%BD%D0%B4%D0%B5%D1%80-topology)
+- [Предусловия](#%D0%BF%D1%80%D0%B5%D0%B4%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F)
+- [Типовой рабочий цикл](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB)
 
 ## Что это даёт
 
@@ -298,7 +318,15 @@ vim config.json
 ./generate_configs.py --skip-awg-download --skip-package-sync
 ```
 
-Такой режим удобен, если AWG `.apk` и per-router package repos уже не нужны для текущей проверки. Hooks при этом всё равно запускаются, поэтому `tools/generate.py` всё ещё может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets. Для просмотра только синхронизированной template-структуры без generator hooks добавляй `--skip-hooks`. Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
+Такой режим удобен, если AWG `.apk` и per-router package repos уже не нужны для текущей проверки. Hooks при этом всё равно запускаются, поэтому `tools/generate.py` всё ещё может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
+
+Для просмотра только синхронизированной template-структуры без generator hooks добавляй `--skip-hooks`:
+
+```bash
+./generate_configs.py --skip-awg-download --skip-package-sync --skip-hooks
+```
+
+Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
 
 ## Как строятся линки
 
@@ -630,6 +658,12 @@ OWMB_ENC_MATERIAL_V1{...}
 ./tools/secrets.py encrypt --wrap 60
 ```
 
+Зашифровать key material из stdin/TTY:
+
+```bash
+./tools/secrets.py encrypt-material --wrap 60
+```
+
 Зашифровать plaintext secret-маркеры в файлах:
 
 ```bash
@@ -654,9 +688,9 @@ OWMB_ENC_MATERIAL_V1{...}
 ./tools/secrets.py decrypt-all .
 ```
 
-Это оставляет реальные plaintext-секреты и private keys без маркеров. Для
-обратного автоматического шифрования нужны `OWMB_PLAIN_*` markers, поэтому для
-редактирования удобнее использовать marker-preserving режим:
+Это оставляет реальные plaintext-секреты и private keys без маркеров. Такой режим удобен только для staging/debug и не должен попадать в git.
+
+Для обратного автоматического шифрования нужны `OWMB_PLAIN_*` markers, поэтому для редактирования удобнее использовать marker-preserving режим:
 
 ```bash
 ./tools/secrets.py decrypt-marked-all .
@@ -955,18 +989,11 @@ access
 ./deploy_servers.py --ssh-connect-timeout 10
 ```
 
-Перед копированием файлов `deploy_servers.py` достаёт staged
-`root/.ssh/authorized_keys` и устанавливает его на сервер отдельным
-`ssh`-вызовом. Поэтому на чистом сервере пароль может понадобиться только для
-этого первого шага; следующие `scp` и `ssh /root/deploy.sh` уже используют
-сгенерированный ключ из `ssh_key_dir`.
+Перед копированием файлов `deploy_servers.py` достаёт staged `root/.ssh/authorized_keys` и устанавливает его на сервер отдельным `ssh`-вызовом. Поэтому на чистом сервере пароль может понадобиться только для первого шага; следующие `scp` и `ssh /root/deploy.sh` уже используют сгенерированный ключ из `ssh_key_dir`.
 
-По умолчанию staged `authorized_keys` сливаются с удалённым
-`/root/.ssh/authorized_keys` без дублей. С `--replace-authorized-keys` файл
-заменяется. В обоих режимах ключ ставится до `scp`, чтобы актуальный ключ уже
-лежал на сервере перед следующими SSH-вызовами.
+По умолчанию staged `authorized_keys` сливается с удалённым `/root/.ssh/authorized_keys` без дублей. С `--replace-authorized-keys` файл заменяется. В обоих режимах ключ ставится до `scp`, чтобы актуальный ключ уже лежал на сервере перед следующими SSH-вызовами.
 
-`--server-ssh-mode auto` сначала пробует node alias, затем public alias. Это удобно после bootstrap. Для самого первого деплоя public exit может потребовать `--server-ssh-mode public`.
+`--server-ssh-mode auto` сначала пробует node alias, затем public/bootstrap alias. Это удобно после bootstrap. Для самого первого деплоя public exit обычно требует `--server-ssh-mode public`.
 
 ### `build_router_images.py`
 
@@ -1139,6 +1166,7 @@ topology/topology_3d.html
 
 ```text
 python3
+Python module `cryptography`
 git
 ssh, scp, ssh-keygen
 curl
@@ -1148,6 +1176,8 @@ apk-tools (`apk`)
 tar с поддержкой zst
 make
 ```
+
+Python-модуль `cryptography` нужен для OWMB secret/material markers. В Debian/Ubuntu это обычно пакет `python3-cryptography`, в Arch Linux - `python-cryptography`.
 
 Для замеров скорости дополнительно:
 
@@ -1188,7 +1218,7 @@ ls -lh images/
 ./render_topology_2d.py
 ./render_topology_3d.py
 
-# 8. Проверяем links и рисуем карту из нестандартного JSON
+# 9. Проверяем links и рисуем карту из нестандартного JSON
 ./collect_link_speeds.py --progress --json-out /tmp/link-speeds.json
 ./render_topology_2d.py --speeds-json /tmp/link-speeds.json
 ./render_topology_3d.py --speeds-json /tmp/link-speeds.json
@@ -1199,6 +1229,9 @@ ls -lh images/
 ```bash
 # Python syntax
 python3 -m py_compile *.py tools/*.py
+
+# Быстрая проверка template/config flow без загрузки AWG packages
+./generate_configs.py --skip-awg-download --skip-package-sync
 
 # Валидация generated config
 ./tools/validate.py
@@ -1228,4 +1261,5 @@ python3 -m py_compile *.py tools/*.py
 - `wireguard` access добавляет `luci-proto-wireguard`, `openvpn` access добавляет `openvpn-openssl`; если на роутере есть оба access-типа, добавляются оба пакета.
 - `--force` пересоздаёт mesh/exit tunnel keys; access secrets сохраняются.
 - Секреты и key material остаются в исходном дереве как `OWMB_ENC_SECRET_V1{...}` / `OWMB_ENC_MATERIAL_V1{...}` и расшифровываются только в staging/build/deploy.
+- Master-key files из `secrets_key_path` и `materials_key_path` не должны попадать в репозиторий.
 - Любую router-specific логику можно добавлять в `customization()` внутри `99-firstboot-custom`.
