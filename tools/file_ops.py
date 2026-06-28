@@ -10,22 +10,9 @@ from pathlib import Path
 try:
     from .default import FILE_MODE_MASK
     from .process import die
-    from .secrets import decrypt_text as decrypt_owmb_text
 except ImportError:
-    import importlib.util
-
     from default import FILE_MODE_MASK
     from process import die
-
-    _secrets_path = Path(__file__).with_name("secrets.py")
-    _secrets_spec = importlib.util.spec_from_file_location(
-        "owmb_local_secrets", _secrets_path
-    )
-    if _secrets_spec is None or _secrets_spec.loader is None:
-        raise ImportError(f"cannot load {_secrets_path}")
-    _secrets_module = importlib.util.module_from_spec(_secrets_spec)
-    _secrets_spec.loader.exec_module(_secrets_module)
-    decrypt_owmb_text = _secrets_module.decrypt_text
 
 
 def read(path: Path) -> str:
@@ -74,36 +61,17 @@ def has_plain_owmb_marker(text: str) -> bool:
 
 
 def encrypted_owmb_state_is_current(old_text: str, new_text: str) -> bool:
-    # OWMB encryption uses a fresh random nonce for every encrypted marker.
-    # A regenerated file can therefore be byte-different while decrypting to
-    # exactly the same plaintext. Keep the existing file only when the old file
-    # is already in the encrypted on-disk form. If the old file is plaintext or
-    # uses OWMB_PLAIN_* markers and the new file uses OWMB_ENC_* markers, write
-    # the new text so generation also performs one-pass migration.
-    if not has_encrypted_owmb_marker(old_text):
-        return False
-    if has_plain_owmb_marker(old_text):
-        return False
-    if not has_encrypted_owmb_marker(new_text):
-        return False
-    if has_plain_owmb_marker(new_text):
-        return False
-    return True
+    # Deprecated compatibility helper kept for imports from tools.common.
+    # Generated files must follow the exact target text produced from config.json
+    # and preserved key-material state. The generic file writer therefore no
+    # longer treats "decrypts to the same plaintext" as "no change".
+    return old_text == new_text
 
 
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        old_text = path.read_text(encoding="utf-8")
-        if old_text == text:
-            return
-        if has_any_owmb_marker(old_text) or has_any_owmb_marker(text):
-            old_plain = decrypt_owmb_text(old_text, where=str(path))
-            new_plain = decrypt_owmb_text(text, where=str(path))
-            if old_plain == new_plain and encrypted_owmb_state_is_current(
-                old_text, text
-            ):
-                return
+    if path.exists() and path.read_text(encoding="utf-8") == text:
+        return
 
     print(f"Updating {path}")
     old_mode = path.stat().st_mode if path.exists() else None

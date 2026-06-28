@@ -12,7 +12,7 @@ except ImportError:
     from default import OWMB_ENC_SECRET_MARKER, OWMB_PLAIN_SECRET_MARKER  # type: ignore
 
 SECRET_MARKER_RE = re.compile(
-    rf"^(?:{re.escape(OWMB_ENC_SECRET_MARKER)}|"
+    rf"^({re.escape(OWMB_ENC_SECRET_MARKER)}|"
     rf"{re.escape(OWMB_PLAIN_SECRET_MARKER)})\s*\{{\s*(.*?)\s*\}}$",
     re.S,
 )
@@ -97,13 +97,18 @@ def update_doh_source_addr_block(body: str, router: RouterDef) -> str:
 
 
 def wrap_secret_marker_for_shell(value: str, width: int = SHELL_SECRET_WRAP_COL) -> str:
+    # config.json is the source of truth for Wi-Fi ssid/key values.  Preserve
+    # the exact OWMB marker kind and base64/plain payload from config.json; only
+    # normalize whitespace inside the marker and wrap long payloads so the shell
+    # bootstrap remains readable.
     m = SECRET_MARKER_RE.fullmatch(value)
     if not m:
         return value
 
-    payload = re.sub(r"\s+", "", m.group(1))
+    marker = m.group(1)
+    payload = re.sub(r"\s+", "", m.group(2))
     lines = [payload[i : i + width] for i in range(0, len(payload), width)]
-    return f"{OWMB_ENC_SECRET_MARKER}\n{{\n" + "\n".join(lines) + "\n}"
+    return f"{marker}\n{{\n" + "\n".join(lines) + "\n}"
 
 
 def shell_single_quote(value: str) -> str:
