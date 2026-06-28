@@ -201,8 +201,16 @@ def main() -> None:
         "--skip-hooks",
         action="store_true",
         help=(
-            "do not run tools/generate.py, tools/ensure_ssh_keys.py, "
-            "tools/validate.py and tools/show_unmanaged.py"
+            "do not run tools.generate, tools.ensure_ssh_keys, "
+            "tools.validate and tools.show_unmanaged hooks"
+        ),
+    )
+    ap.add_argument(
+        "--skip-direct-downloads",
+        action="store_true",
+        help=(
+            "pass --skip-direct-downloads to tools/generate.py and avoid "
+            "downloading dynamic country/ASN direct-list IP sets"
         ),
     )
     ap.add_argument(
@@ -245,6 +253,8 @@ def main() -> None:
         generate_args = ["--config", config_arg]
         if args.force:
             generate_args.append("--force")
+        if args.skip_direct_downloads:
+            generate_args.append("--skip-direct-downloads")
 
         generate_main(generate_args)
         ensure_ssh_keys_main(["--config", config_arg])

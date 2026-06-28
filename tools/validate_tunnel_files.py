@@ -41,6 +41,7 @@ except ImportError:
     from wg_keys import derive_public_key  # type: ignore
     from validate_awg_helpers import (  # type: ignore
         find_block_by_type_and_name,
+        public_key_or_die,
         require_interface_block,
         require_option,
         require_peer_block,
@@ -70,6 +71,7 @@ except ImportError:
         validate_optional_ipip_mtu,
         vprint,
     )
+    from validate_keys import parse_tunnel_conf, require_tunnel_sections  # type: ignore
 
 
 def validate_mesh_pair_confs(

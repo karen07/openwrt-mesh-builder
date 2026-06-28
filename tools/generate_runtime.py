@@ -81,6 +81,17 @@ def direct_dynamic_lines(cfg: ConfigData) -> list[str]:
     return normalize_ipset_lines(lines)
 
 
+def build_direct_ipset_lines(
+    cfg: ConfigData,
+    *,
+    skip_dynamic_downloads: bool = False,
+) -> tuple[list[str], list[str]]:
+    static_lines = direct_static_lines(cfg)
+    dynamic_lines = [] if skip_dynamic_downloads else direct_dynamic_lines(cfg)
+    direct_lines = normalize_ipset_lines(static_lines + dynamic_lines)
+    return static_lines, direct_lines
+
+
 def build_runtime_env(cfg: ConfigData, router_name: str | None = None) -> str:
     hubs = (
         router_exit_order_hubs(cfg, router_name)
@@ -136,25 +147,46 @@ def build_runtime_env(cfg: ConfigData, router_name: str | None = None) -> str:
 
 
 def write_ipsets_at(
-    root: Path, cfg: ConfigData, router_name: str | None = None
+    root: Path,
+    cfg: ConfigData,
+    router_name: str | None = None,
+    *,
+    static_lines: list[str] | None = None,
+    direct_lines: list[str] | None = None,
 ) -> None:
-    static_lines = direct_static_lines(cfg)
-    dynamic_lines = direct_dynamic_lines(cfg)
-    direct_lines = normalize_ipset_lines(static_lines + dynamic_lines)
+    if static_lines is None or direct_lines is None:
+        static_lines, direct_lines = build_direct_ipset_lines(cfg)
 
     write(root / REL_DIRECT_STATIC_IPSET, "\n".join(static_lines) + "\n")
     write(root / REL_RUNTIME_ENV, build_runtime_env(cfg, router_name))
     write(root / REL_DIRECT_IPSET, "\n".join(direct_lines) + "\n")
 
 
-def write_router_ipsets(cfg: ConfigData, router_name: str) -> None:
-    write_ipsets_at(router_dir(cfg, router_name), cfg, router_name)
+def write_router_ipsets(
+    cfg: ConfigData,
+    router_name: str,
+    *,
+    static_lines: list[str] | None = None,
+    direct_lines: list[str] | None = None,
+) -> None:
+    write_ipsets_at(
+        router_dir(cfg, router_name),
+        cfg,
+        router_name,
+        static_lines=static_lines,
+        direct_lines=direct_lines,
+    )
 
 
-def write_server_ipsets(cfg: ConfigData, exit_name: str) -> None:
-    static_lines = direct_static_lines(cfg)
-    dynamic_lines = direct_dynamic_lines(cfg)
-    direct_lines = normalize_ipset_lines(static_lines + dynamic_lines)
+def write_server_ipsets(
+    cfg: ConfigData,
+    exit_name: str,
+    *,
+    static_lines: list[str] | None = None,
+    direct_lines: list[str] | None = None,
+) -> None:
+    if static_lines is None or direct_lines is None:
+        static_lines, direct_lines = build_direct_ipset_lines(cfg)
 
     write(
         server_path(exit_name, "etc", "ipsets", "direct-static.txt"),

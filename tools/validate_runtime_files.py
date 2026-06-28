@@ -76,6 +76,7 @@ except ImportError:
         validate_optional_ipip_mtu,
         vprint,
     )
+    from validate_keys import parse_tunnel_conf, require_tunnel_sections  # type: ignore
 
 
 def validate_router_endpoints(

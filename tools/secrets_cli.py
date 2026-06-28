@@ -20,18 +20,30 @@ try:
         transform_tree,
     )
 except ImportError:
+    import importlib.util
+
     from default import (  # type: ignore
         CONFIG_PATH,
         OWMB_ENC_MATERIAL_MARKER,
         OWMB_ENC_SECRET_MARKER,
     )
-    import __main__ as _secrets_main
 
-    assert_no_markers = _secrets_main.assert_no_markers
-    decrypt_text = _secrets_main.decrypt_text
-    decrypt_tree = _secrets_main.decrypt_tree
-    encrypt_payload = _secrets_main.encrypt_payload
-    transform_tree = _secrets_main.transform_tree
+    _secrets_path = Path(__file__).with_name("secrets.py")
+    _secrets_spec = importlib.util.spec_from_file_location(
+        "_owmb_secrets_impl",
+        _secrets_path,
+    )
+    if _secrets_spec is None or _secrets_spec.loader is None:
+        raise ImportError(f"cannot load OWMB secrets helper: {_secrets_path}")
+    _secrets_impl = importlib.util.module_from_spec(_secrets_spec)
+    sys.modules[_secrets_spec.name] = _secrets_impl
+    _secrets_spec.loader.exec_module(_secrets_impl)
+
+    assert_no_markers = _secrets_impl.assert_no_markers
+    decrypt_text = _secrets_impl.decrypt_text
+    decrypt_tree = _secrets_impl.decrypt_tree
+    encrypt_payload = _secrets_impl.encrypt_payload
+    transform_tree = _secrets_impl.transform_tree
 
 
 def cmd_encrypt_value(args: argparse.Namespace, marker: str) -> None:
@@ -188,3 +200,7 @@ def main(argv: list[str] | None = None) -> None:
 
     args = ap.parse_args(argv)
     args.func(args)
+
+
+if __name__ == "__main__":
+    main()

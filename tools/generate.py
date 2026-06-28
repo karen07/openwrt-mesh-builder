@@ -29,7 +29,11 @@ try:
     )
     from .generate_mesh import build_mesh_state
     from .generate_network import update_babeld, update_network_part
-    from .generate_runtime import write_router_ipsets, write_server_ipsets
+    from .generate_runtime import (
+        build_direct_ipset_lines,
+        write_router_ipsets,
+        write_server_ipsets,
+    )
     from .generate_server_runtime import (
         build_server_babeld_conf,
         build_server_env,
@@ -65,7 +69,11 @@ except ImportError:
     )
     from generate_mesh import build_mesh_state
     from generate_network import update_babeld, update_network_part
-    from generate_runtime import write_router_ipsets, write_server_ipsets
+    from generate_runtime import (
+        build_direct_ipset_lines,
+        write_router_ipsets,
+        write_server_ipsets,
+    )
     from generate_server_runtime import (
         build_server_babeld_conf,
         build_server_env,
@@ -111,10 +119,22 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="print detailed generation information",
     )
+    ap.add_argument(
+        "--skip-direct-downloads",
+        action="store_true",
+        help=(
+            "do not download dynamic direct-list country/ASN IP sets; "
+            "generated direct.txt will contain only static direct entries"
+        ),
+    )
     args = ap.parse_args(argv)
 
     raw_cfg = load_json_config(Path(args.config))
     cfg = build_config_data(raw_cfg)
+    static_direct_lines, direct_lines = build_direct_ipset_lines(
+        cfg,
+        skip_dynamic_downloads=args.skip_direct_downloads,
+    )
 
     need("wg", "openssl")
     existing = load_existing_network_cfgs(cfg)
@@ -323,7 +343,12 @@ def main(argv: list[str] | None = None) -> None:
                 cfg, hub, hub_states[hub.name], exit_exit_aliases_by_hub[hub.name]
             ),
         )
-        write_server_ipsets(cfg, hub.name)
+        write_server_ipsets(
+            cfg,
+            hub.name,
+            static_lines=static_direct_lines,
+            direct_lines=direct_lines,
+        )
 
     for router_name in cfg.router_names:
         mesh_text = mesh_blocks[router_name].strip()
@@ -372,7 +397,12 @@ def main(argv: list[str] | None = None) -> None:
             router_name=router_name,
             groups=cfg.access.get(router_name, []),
         )
-        write_router_ipsets(cfg, router_name)
+        write_router_ipsets(
+            cfg,
+            router_name,
+            static_lines=static_direct_lines,
+            direct_lines=direct_lines,
+        )
 
 
 if __name__ == "__main__":
