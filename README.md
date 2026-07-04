@@ -1171,7 +1171,7 @@ access endpoints: Spine01, Spine02, AccessOnly01, AccessOnly02
 
 ```json
 {
-  "openwrt_version": "25.12.4",
+  "openwrt_version": "25.12.5",
   "ssh_key_dir": "~/.ssh/router-autoinstall-demo",
   "secrets_key_path": "~/.ssh/router-autoinstall-demo/secrets.key",
   "materials_key_path": "~/.ssh/router-autoinstall-demo/materials.key",
@@ -1436,7 +1436,7 @@ Profile name является безопасным ASCII identifier.
 ```sh
 ./build_router_images.py
 ./build_router_images.py Spine01
-./build_router_images.py Spine01,Leaf01 --version 25.12.4
+./build_router_images.py Spine01,Leaf01 --version 25.12.5
 ```
 
 Результат складывается в:
