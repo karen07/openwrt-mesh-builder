@@ -218,11 +218,10 @@ def update_openvpn_babeld_hotplug_block(
     cfg: ConfigData,
     router_name: str,
 ) -> str:
-    body = remove_openvpn_babeld_hotplug_block(body)
-
     if not router_has_openvpn_access(cfg, router_name):
         return body
 
+    body = remove_openvpn_babeld_hotplug_block(body)
     body = body.rstrip()
     if body:
         body += "\n\n"

@@ -5,7 +5,13 @@ import re
 try:
     from .process import die
     from .default import *
-    from .config_model import ConfigData, ExitDirectConfig, ExitHub, RouterDef
+    from .config_model import (
+        ConfigData,
+        ExitDirectConfig,
+        ExitHub,
+        RoutingRule,
+        RouterDef,
+    )
     from .net_model import (
         exit_announce_network,
         generated_exit_announce_network,
@@ -15,7 +21,13 @@ try:
 except ImportError:
     from process import die  # type: ignore
     from default import *  # type: ignore
-    from config_model import ConfigData, ExitDirectConfig, ExitHub, RouterDef  # type: ignore
+    from config_model import (  # type: ignore
+        ConfigData,
+        ExitDirectConfig,
+        ExitHub,
+        RouterDef,
+        RoutingRule,
+    )
     from net_model import (  # type: ignore
         exit_announce_network,
         generated_exit_announce_network,
@@ -139,6 +151,97 @@ def router_exit_order_hubs(
     if not order:
         order = [hub.name for hub in cfg.exit_hubs]
     return [cfg.exit_hubs_by_name[name] for name in order]
+
+
+def load_router_routing_rules(
+    value: object,
+    where: str,
+    *,
+    router: RouterDef,
+    exit_hubs_by_name: dict[str, ExitHub],
+) -> list[RoutingRule]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        die(f"{where} must be a list")
+
+    router_net = ipaddress.IPv4Network(router.subnet, strict=True)
+    rules: list[RoutingRule] = []
+    seen_sources: set[str] = set()
+
+    for idx, raw in enumerate(value, start=1):
+        rule_where = f"{where}[{idx}]"
+        if not isinstance(raw, dict):
+            die(f"{rule_where} must be an object")
+
+        src_value = raw.get(CONFIG_KEY_SRC_IP)
+        if not isinstance(src_value, str) or not src_value.strip():
+            die(f"{rule_where}.src_ip must be a non-empty IPv4 address or /32")
+        try:
+            src_net = ipaddress.IPv4Network(src_value.strip(), strict=True)
+        except ValueError as e:
+            die(f"{rule_where}.src_ip must be an IPv4 address or strict /32: {e}")
+        if src_net.prefixlen != 32:
+            die(
+                f"{rule_where}.src_ip must identify exactly one device (/32): "
+                f"{src_net}"
+            )
+        if not src_net.subnet_of(router_net):
+            die(
+                f"{rule_where}.src_ip {src_net} is outside router subnet "
+                f"{router_net}"
+            )
+        src_ip = str(src_net)
+        if src_ip in seen_sources:
+            die(f"{where}: duplicate src_ip: {src_ip}")
+        seen_sources.add(src_ip)
+
+        mode = raw.get(CONFIG_KEY_MODE)
+        if not isinstance(mode, str) or mode not in ROUTING_MODES:
+            allowed = ", ".join(sorted(ROUTING_MODES))
+            die(f"{rule_where}.mode must be one of: {allowed}")
+
+        exit_name: str | None = None
+        if mode == ROUTING_MODE_WAN:
+            if CONFIG_KEY_EXIT in raw:
+                die(f"{rule_where}.exit is not allowed for mode {ROUTING_MODE_WAN}")
+        else:
+            exit_value = raw.get(CONFIG_KEY_EXIT)
+            if not isinstance(exit_value, str) or not exit_value:
+                die(f"{rule_where}.exit must be a non-empty exit hub name")
+            if exit_value not in exit_hubs_by_name:
+                die(f"{rule_where}.exit references unknown exit hub: {exit_value}")
+            exit_name = exit_value
+
+        rules.append(RoutingRule(src_ip=src_ip, mode=mode, exit_name=exit_name))
+
+    return rules
+
+
+def routing_exit_policy_ids(cfg: ConfigData) -> dict[str, int]:
+    used_names = {
+        rule.exit_name
+        for rules in cfg.routing_rules_by_router.values()
+        for rule in rules
+        if rule.exit_name is not None
+    }
+    return {
+        hub.name: EXIT_POLICY_BASE + idx + 1
+        for idx, hub in enumerate(
+            hub for hub in cfg.exit_hubs if hub.name in used_names
+        )
+    }
+
+
+def router_required_exit_hubs(cfg: ConfigData, router_name: str) -> list[ExitHub]:
+    names = [hub.name for hub in router_exit_order_hubs(cfg, router_name)]
+    seen = set(names)
+    for rule in cfg.routing_rules_by_router.get(router_name, []):
+        if rule.exit_name is None or rule.exit_name in seen:
+            continue
+        names.append(rule.exit_name)
+        seen.add(rule.exit_name)
+    return [cfg.exit_hubs_by_name[name] for name in names]
 
 
 def validate_exit_announce_set(hubs: list[ExitHub]) -> None:

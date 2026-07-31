@@ -3,7 +3,11 @@ from pathlib import Path
 
 try:
     from .process import die
-    from .default import FIREWALL_MARKER, PROTOCOL_AMNEZIAWG, PROTOCOL_WIREGUARD
+    from .default import (
+        FIREWALL_MARKER,
+        PROTOCOL_AMNEZIAWG,
+        PROTOCOL_WIREGUARD,
+    )
     from .config_model import ConfigData
     from .layout import router_path
     from .link_model import (
@@ -21,7 +25,11 @@ try:
     from .config_builder import router_exit_ipip_iface_name
 except ImportError:
     from process import die  # type: ignore
-    from default import FIREWALL_MARKER, PROTOCOL_AMNEZIAWG, PROTOCOL_WIREGUARD  # type: ignore
+    from default import (  # type: ignore
+        FIREWALL_MARKER,
+        PROTOCOL_AMNEZIAWG,
+        PROTOCOL_WIREGUARD,
+    )  # type: ignore
     from config_model import ConfigData  # type: ignore
     from layout import router_path  # type: ignore
     from link_model import (  # type: ignore
@@ -64,49 +72,6 @@ def current_mesh_exit_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
         names.add(router_exit_ipip_iface_name(hub.name))
 
     return names
-
-
-def managed_mesh_exit_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    return current_mesh_exit_ifaces(cfg, router_name)
-
-
-def is_managed_network(
-    parsed: dict[str, object],
-    mesh_exit_ifaces: set[str] | None = None,
-) -> bool:
-    typ = str(parsed.get("type", ""))
-    name = str(parsed.get("name", ""))
-    mesh_exit_ifaces = mesh_exit_ifaces or set()
-
-    # Current mesh/exit generated sections.
-    if typ == "interface" and name in mesh_exit_ifaces:
-        return True
-    if name in {f"amneziawg_{iface}" for iface in mesh_exit_ifaces} | {
-        f"wireguard_{iface}" for iface in mesh_exit_ifaces
-    }:
-        return True
-
-    return False
-
-
-def is_managed_access(parsed: dict[str, object], access_names: set[str]) -> bool:
-    typ = str(parsed.get("type", ""))
-    name = str(parsed.get("name", ""))
-
-    if typ == "interface" and name in access_names:
-        return True
-
-    if typ.startswith("wireguard_") and typ == name:
-        iface = typ.removeprefix("wireguard_")
-        if iface in access_names:
-            return True
-
-    if typ.startswith("amneziawg_") and typ == name:
-        iface = typ.removeprefix("amneziawg_")
-        if iface in access_names:
-            return True
-
-    return False
 
 
 def find_access_peer_block(

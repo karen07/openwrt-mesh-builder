@@ -21,6 +21,7 @@ try:
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
         build_exit_out_network_interface_block,
+        build_exit_rule_network_blocks,
         build_material_for_exit,
         build_material_for_exit_exit,
         build_material_for_exit_reverse,
@@ -61,6 +62,7 @@ except ImportError:
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
         build_exit_out_network_interface_block,
+        build_exit_rule_network_blocks,
         build_material_for_exit,
         build_material_for_exit_exit,
         build_material_for_exit_reverse,
@@ -359,9 +361,10 @@ def main(argv: list[str] | None = None) -> None:
         ).strip()
         ipip_text = "\n".join(
             router_exit_ipip_blocks[router_name][hub.name].strip()
-            for hub in router_exit_order_hubs(cfg, router_name)
+            for hub in router_required_exit_hubs(cfg, router_name)
             if hub.name in router_exit_ipip_blocks[router_name]
         ).strip()
+        exit_rule_text = build_exit_rule_network_blocks(cfg, router_name).strip()
         access_text = access_blocks.get(router_name, "").strip()
 
         update_network_part(
@@ -370,6 +373,7 @@ def main(argv: list[str] | None = None) -> None:
             mesh_text=mesh_text,
             exit_text=exit_text,
             ipip_text=ipip_text,
+            exit_rule_text=exit_rule_text,
             access_text=access_text,
             access_names=access_names,
         )
@@ -381,7 +385,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         active_exit_ipip_ifaces = [
             router_exit_ipip_iface_name(hub.name)
-            for hub in router_exit_order_hubs(cfg, router_name)
+            for hub in router_required_exit_hubs(cfg, router_name)
         ]
         update_firewall_part(
             cfg=cfg,

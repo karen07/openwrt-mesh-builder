@@ -234,7 +234,6 @@ def write_ssh_config(
     text = build_ssh_config(cfg_data, key_dir)
     atomic_write_text(ssh_config_path, text)
     ssh_config_path.chmod(PRIVATE_KEY_FILE_MODE)
-    print(f"Writing SSH config: {ssh_config_path}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -260,11 +259,12 @@ def main(argv: list[str] | None = None) -> None:
     key_dir = deploy_ssh_dir_from_config(cfg)
     ssh_config_path = deploy_ssh_config_path_from_config(cfg)
     ensure_dir(key_dir, PRIVATE_SSH_DIR_MODE)
-    print(f"Using local SSH key dir: {key_dir}")
 
     process_routers(cfg_data, key_dir)
     process_servers(cfg_data, key_dir)
     write_ssh_config(cfg_data, ssh_config_path, key_dir)
+
+    print("OK: SSH keys and config prepared successfully")
 
 
 if __name__ == "__main__":

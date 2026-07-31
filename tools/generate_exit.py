@@ -237,6 +237,45 @@ def build_exit_ipip_interface_block(
     )
 
 
+def build_exit_rule_network_blocks(cfg: ConfigData, router_name: str) -> str:
+    rules = cfg.routing_rules_by_router.get(router_name, [])
+    if not rules:
+        return ""
+
+    policy_ids = routing_exit_policy_ids(cfg)
+    blocks: list[str] = []
+
+    for exit_name in dict.fromkeys(
+        rule.exit_name for rule in rules if rule.exit_name is not None
+    ):
+        policy_id = policy_ids[exit_name]
+        section_suffix = exit_name.lower()
+        blocks.append(
+            uci_block(
+                "rule",
+                f"{EXIT_RULE_SECTION_PREFIX}{section_suffix}",
+                options={
+                    "priority": str(EXIT_RULE_PRIORITY),
+                    "mark": str(policy_id),
+                    "lookup": str(policy_id),
+                },
+            )
+        )
+        blocks.append(
+            uci_block(
+                "route",
+                f"{EXIT_RULE_ROUTE_SECTION_PREFIX}{section_suffix}",
+                options={
+                    "interface": router_exit_ipip_iface_name(exit_name),
+                    "target": "0.0.0.0/0",
+                    "table": str(policy_id),
+                },
+            )
+        )
+
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
 def build_server_direct_conf(
     client_alias: str,
     hub: ExitHub,

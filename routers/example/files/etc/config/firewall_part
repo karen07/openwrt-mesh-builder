@@ -36,8 +36,9 @@ config rule
     option src 'lan'
     option dest '*'
     option ipset '!direct'
+    option mark '0'
     option target 'MARK'
-    option set_mark '0x25'
+    option set_mark '10000'
     option family 'ipv4'
     list proto 'all'
 
@@ -46,8 +47,9 @@ config rule
     option src 'TrustedAccess'
     option dest '*'
     option ipset '!direct'
+    option mark '0'
     option target 'MARK'
-    option set_mark '0x25'
+    option set_mark '10000'
     option family 'ipv4'
     list proto 'all'
 
@@ -56,27 +58,18 @@ config rule
     option src 'TransitAccess'
     option dest '*'
     option ipset '!direct'
+    option mark '0'
     option target 'MARK'
-    option set_mark '0x25'
+    option set_mark '10000'
     option family 'ipv4'
     list proto 'all'
-
-config rule
-    option name 'ExitOutput'
-    option dest '*'
-    option ipset '!direct'
-    option target 'MARK'
-    option set_mark '0x25'
-    option family 'ipv4'
-    list proto 'all'
-    option enabled '0'
 
 config rule
     option name 'ExitIPIPClearMark'
     option src '*'
     option dest 'ExitIPIP'
     option target 'MARK'
-    option set_mark '0x0/0xffffffff'
+    option set_mark '0'
     option family 'ipv4'
     list proto 'all'
 

@@ -3,10 +3,10 @@
 
 config rule
     option priority '90'
-    option lookup '200'
-    option uidrange '4453-4453'
+    option lookup '10000'
+    option uidrange '4453'
 
 config rule
     option priority '100'
-    option lookup '200'
-    option mark '0x25'
+    option lookup '10000'
+    option mark '10000'

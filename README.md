@@ -147,9 +147,9 @@ Firewall model остается явной:
 
 За выбор активного egress отвечает `exit-route.sh`.
 
-Он раз в 5 секунд проверяет, какой exit marker prefix виден через Babel, выбирает первый reachable exit из `exit_order` и синхронизирует с ним default route в table `200`.
+Он раз в 5 секунд проверяет, какой exit marker prefix виден через Babel, выбирает первый reachable exit из `exit_order` и синхронизирует с ним default route в table `10000`.
 
-Если ни один exit не анонсируется через Babel, скрипт оставляет UCI секцию `network.exit200`, но ставит:
+Если ни один exit не анонсируется через Babel, скрипт оставляет UCI секцию `network.exit10000`, но ставит:
 
 ```text
 disabled=1
@@ -190,14 +190,14 @@ WAN underlay         реальная сеть провайдера, NAT, public
 encrypted overlay    p2p AWG/WG линки между router, spine и exit
 routing plane        Babel поверх tunnel интерфейсов
 exit data-plane      IPIP от роутеров до выбранного exit
-policy plane         fwmark, uid rule и routing table 200
+policy plane         fwmark, uid rule и routing table 10000
 ```
 
 AWG/WG линки дают защищенную связность и транспорт для Babel.
 
 Babel отвечает за достижимость overlay узлов и service prefixes.
 
-IPIP используется отдельно как data-plane до exit сервера. Пользовательский трафик, который должен выйти через exit, направляется в table `200` и уходит через активный IPIP интерфейс.
+IPIP используется отдельно как data-plane до exit сервера. Пользовательский трафик, который должен выйти через exit, направляется в table `10000` и уходит через активный IPIP интерфейс.
 
 ## Адресация без ручного IPAM
 
@@ -343,6 +343,7 @@ access             пользовательские WG/AWG/OpenVPN входы н
 - `allow_to_router` - к каким target роутерам разрешен INPUT на сам роутер
 - `allow_to_lan` - к каким target роутерам разрешен FORWARD в их LAN
 - `exit_order` - индивидуальный порядок выбора exit серверов
+- `routing_rules` - выбор маршрутизации для отдельного IPv4-устройства
 
 `allow_to_router` и `allow_to_lan` описывают исходящее разрешение от source сети текущего роутера или access группы к target роутерам.
 
@@ -641,21 +642,87 @@ Node IP выбирается стабильно по имени exit, а не п
 
 Per-router `exit_order` может содержать только часть exit серверов. В этом случае роутер выбирает только из этого списка и не дополняет его глобальным порядком.
 
+Для отдельного устройства можно выбрать один из трех режимов маршрутизации:
+
+```json
+"routing_rules": [
+  {
+    "src_ip": "10.101.1.50/32",
+    "mode": "wan"
+  },
+  {
+    "src_ip": "10.101.1.51/32",
+    "mode": "split",
+    "exit": "EGR02"
+  },
+  {
+    "src_ip": "10.101.1.52/32",
+    "mode": "exit",
+    "exit": "EGR02"
+  }
+]
+```
+
+Режимы:
+
+- `wan` - ставится служебная ненулевая mark `9999`; отдельные policy rule и
+  routing table для нее не создаются, поэтому стандартный RPDB доходит до
+  таблицы `main`, которая выбирает WAN или внутренний маршрут
+- `split` - для destination вне ipset `direct` ставится mark выбранного exit
+- `exit` - mark выбранного exit ставится для всего маршрутизируемого трафика
+  устройства
+
+Для `split` и `exit` поле `exit` обязательно. Для `wan` поле `exit` запрещено.
+
+`src_ip` должен указывать ровно одно устройство: принимается IPv4-адрес без
+маски или строгий `/32`. Сети вроде `/24` для `routing_rules` запрещены. Один
+адрес нельзя указать более одного раза на одном роутере.
+
+Для общей exit-политики используется единый policy ID `10000`: он одновременно
+является firewall mark и номером routing table. Для каждого exit, реально
+используемого режимом `split` или `exit`, назначается следующий policy ID:
+`10001`, `10002` и далее. Порядок соответствует порядку exit в `exit_hubs`.
+
+Индивидуальные правила `Routing-*` генерируются в managed-части до marker.
+Общие `Exitlan`, `ExitTrustedAccess`, `ExitTransitAccess` остаются
+после marker в `routers/example` и содержат условие `option mark '0'`. Поэтому
+они ставят общую mark `10000` только пакету, который не был помечен ранее:
+первая ненулевая mark сохраняется. `Routing-WAN-*` ставит `9999`,
+`Routing-Split-*` ставит mark выбранного exit только для `!direct`, а
+`Routing-Exit-*` ставит ее независимо от destination.
+`ExitIPIPClearMark` использует `option set_mark '0'` и полностью очищает
+служебную mark перед выходом в зону `ExitIPIP`.
+
+Генератор изменяет только часть до marker. Строка marker и весь хвост после нее
+дописываются побайтно без нормализации. Хвостом владеет только `sync_rules.py`,
+который берет его из `routers/example`. Валидация проверяет итоговый конфиг
+каждого роутера и до, и после marker, но общий хвост не переписывает. Если
+router-specific правило `Routing-*` обнаружено после marker, генератор
+завершится с ошибкой, но не станет менять общий хвост.
+
+На каждый выбранный exit, используемый роутером, генерируются один UCI
+`config rule` (`mark -> lookup` той же таблицы) и один default `config route`
+через соответствующий IPIP-интерфейс. Явного `blackhole` и fallback нет. Exit,
+указанный только в `routing_rules`, все равно добавляется в IPIP-конфигурацию и
+firewall-зону этого роутера. Для режима `wan` не создаются ни отдельная routing
+table, ни policy rule: mark `9999` только защищает пакет от общих `Exit*`, а
+затем стандартные правила RPDB приводят его к таблице `main`.
+
 На роутере `exit-route.sh` периодически проверяет достижимость exit marker prefix через Babel и переключает активный выход.
 
 Traffic steering делается через policy routing:
 
 ```text
-fwmark 0x25 -> table 200
-uid 4453    -> table 200
+fwmark 10000 -> table 10000
+uid 4453    -> table 10000
 ```
 
-Через table `200` идут:
+Через table `10000` идут:
 
 - помеченный пользовательский трафик
 - DoH bootstrap трафик пользователя `https-dns-proxy`
 
-Если ни один exit не достижим через Babel, `exit-route.sh` оставляет UCI секцию `network.exit200`, но ставит:
+Если ни один exit не достижим через Babel, `exit-route.sh` оставляет UCI секцию `network.exit10000`, но ставит:
 
 ```text
 disabled=1
@@ -692,7 +759,7 @@ DIRECT_ASNS='32590'
 
 `update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, добавляет country/ASN lists, атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился.
 
-Трафик к direct destination не получает mark `0x25`, поэтому не уходит через exit table.
+Трафик к direct destination не получает mark `10000`, поэтому не уходит через exit table.
 
 На exit серверах direct lists используются как обратная защита.
 
@@ -741,7 +808,9 @@ server guard rule   -> если direct destination все же пришел на
 routers/example/files/etc/config/firewall_part
 ```
 
-состоит из generated managed части и общей tail части после marker:
+задает общую tail-часть после marker. В router-specific `firewall_part` часть
+до marker генерируется отдельно, а часть начиная с marker целиком копируется
+из `example` через `sync_rules.py`:
 
 ```text
 # Unique part up to this line
@@ -870,13 +939,19 @@ customization() {
 
 - generated managed блоки редактируются через `config.json` и генератор
 - ручная логика живет рядом в `customization()` или в неменеджеренных UCI блоках до marker
+- старые UCI-блоки с другой идентичностью автоматически не удаляются и остаются видимыми как unmanaged
 
 `tools/show_unmanaged.py` скрывает generated блоки только при byte-exact совпадении с тем, что выводит генератор.
 
-Для проверки неожиданных unmanaged частей:
+Для генерации конфигов и одновременного просмотра полного отчета по unmanaged частям используйте:
 
 ```sh
-./tools/show_unmanaged.py
+./generate_configs.py --details
+```
+
+Без `--details` после генерации выводится только общий SHA-256 отчета. Если конфиги уже сгенерированы и нужно повторно посмотреть отчет без запуска генератора, можно вызвать диагностический инструмент напрямую:
+
+```sh
 ./tools/show_unmanaged.py --details
 ```
 
@@ -977,7 +1052,7 @@ xn--p1ai
 
 Он не задает маршрут для `google.com`, а только определяет, какой домен проверяется на каждом DNS endpoint.
 
-DoH процесс работает под uid `4453`, а network rule отправляет uidrange `4453-4453` в table `200`.
+DoH процесс работает под uid `4453`, а network rule отправляет uidrange `4453-4453` в table `10000`.
 
 Это позволяет DoH bootstrap трафику идти через выбранный exit так же, как помеченному пользовательскому трафику.
 
@@ -1376,6 +1451,7 @@ Profile name является безопасным ASCII identifier.
 ./generate_configs.py --skip-awg-download --skip-package-sync
 ./generate_configs.py --skip-hooks
 ./generate_configs.py --force
+./generate_configs.py --details
 ```
 
 Что делает:
@@ -1391,6 +1467,8 @@ Profile name является безопасным ASCII identifier.
 1. запускает `tools/show_unmanaged.py`
 
 `--force` передается в `tools/generate.py` и пересоздает mesh/exit WG/AWG keys. Access secrets сохраняются.
+
+`--details` после генерации печатает не только SHA-256, но и полный отчет по unmanaged sections/files. Это основной удобный способ проверить результат генерации; отдельно запускать `tools/show_unmanaged.py` обычно не требуется.
 
 `--skip-hooks` пропускает запуск:
 
@@ -1749,10 +1827,10 @@ python3 -m py_compile *.py tools/*.py
 python3 -m tools.validate
 ```
 
-Отчет по unmanaged sections/files:
+Генерация с полным отчетом по unmanaged sections/files:
 
 ```sh
-./tools/show_unmanaged.py --details
+./generate_configs.py --details
 ```
 
 Remote versions:
@@ -1776,7 +1854,7 @@ Failed systemd units на exit:
 - `allow_to_router` разрешает INPUT на target роутер.
 - `allow_to_lan` разрешает FORWARD в LAN target роутера.
 - `exit_order` задает приоритет выхода, но не адресацию.
-- Если все exit недоступны, `exit-route.sh` ставит `network.exit200.disabled=1`, и трафик возвращается на main default path.
+- Если все exit недоступны, `exit-route.sh` ставит `network.exit10000.disabled=1`, и трафик возвращается на main default path.
 - Reverse exit без `listen_ip` первично деплоится руками, а после bootstrap доступен через generated node IP.
 - `server_<name>_node` - overlay alias.
 - `server_<name>` - public/bootstrap alias.

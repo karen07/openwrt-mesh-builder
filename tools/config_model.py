@@ -103,6 +103,13 @@ class ExitHub:
 
 
 @dataclass(frozen=True)
+class RoutingRule:
+    src_ip: str
+    mode: str
+    exit_name: str | None
+
+
+@dataclass(frozen=True)
 class ExitDirectConfig:
     subnets: list[str]
     countries: list[str]
@@ -223,6 +230,7 @@ class ConfigData:
     exit_hubs_by_name: dict[str, ExitHub]
     exit_order: list[str]
     exit_order_by_router: dict[str, list[str]]
+    routing_rules_by_router: dict[str, list[RoutingRule]]
     exit_direct: ExitDirectConfig
     access: dict[str, list[AccessGroup]]
     firewall_allows: list[FirewallAllow]

@@ -45,6 +45,7 @@ ROUTER_KEYS = {
     CONFIG_KEY_SUBNET,
     CONFIG_KEY_PACKAGES,
     CONFIG_KEY_EXIT_ORDER,
+    CONFIG_KEY_ROUTING_RULES,
     CONFIG_KEY_ALLOW_TO_LAN,
     CONFIG_KEY_ALLOW_TO_ROUTER,
     CONFIG_KEY_WIFI_2G,
@@ -71,6 +72,8 @@ ACCESS_POLICIES = {ACCESS_POLICY_TRUSTED, ACCESS_POLICY_TRANSIT}
 
 FIREWALL_ALLOW_KIND_ROUTER = "router"
 FIREWALL_ALLOW_KIND_LAN = "lan"
+
+ROUTING_RULE_KEYS = {CONFIG_KEY_SRC_IP, CONFIG_KEY_MODE, CONFIG_KEY_EXIT}
 
 ACCESS_KEYS = {
     CONFIG_KEY_NAME,
@@ -211,6 +214,16 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
                 raw.get(CONFIG_KEY_EXIT_ORDER),
                 f"{where}.exit_order",
             )
+
+            routing_rules = raw.get(CONFIG_KEY_ROUTING_RULES)
+            if routing_rules is not None:
+                if not isinstance(routing_rules, list):
+                    die(f"{where}.routing_rules must be a list")
+                for rule_idx, rule in enumerate(routing_rules, start=1):
+                    rule_where = f"{where}.routing_rules[{rule_idx}]"
+                    if not isinstance(rule, dict):
+                        die(f"{rule_where} must be an object")
+                    require_known_keys(rule, rule_where, ROUTING_RULE_KEYS)
 
             packages = raw.get(CONFIG_KEY_PACKAGES)
             if packages is not None:

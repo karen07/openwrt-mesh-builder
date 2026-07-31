@@ -22,6 +22,7 @@ try:
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
         build_exit_out_network_interface_block,
+        build_exit_rule_network_blocks,
         build_material_for_exit,
         build_material_for_exit_reverse,
     )
@@ -54,6 +55,7 @@ except ImportError:
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
         build_exit_out_network_interface_block,
+        build_exit_rule_network_blocks,
         build_material_for_exit,
         build_material_for_exit_reverse,
     )
@@ -169,10 +171,11 @@ def expected_router_generation_state(
         ).strip()
         ipip_text = "\n".join(
             router_exit_ipip_blocks[router_name][hub.name].strip()
-            for hub in router_exit_order_hubs(cfg, router_name)
+            for hub in router_required_exit_hubs(cfg, router_name)
             if hub.name in router_exit_ipip_blocks[router_name]
         ).strip()
 
+        exit_rule_text = build_exit_rule_network_blocks(cfg, router_name).strip()
         network_text = "\n\n".join(
             part
             for part in (
@@ -180,6 +183,7 @@ def expected_router_generation_state(
                 mesh_blocks[router_name].strip(),
                 exit_text,
                 ipip_text,
+                exit_rule_text,
             )
             if part
         )
@@ -188,7 +192,7 @@ def expected_router_generation_state(
         active_exit_ipip_ifaces = sorted(
             {
                 router_exit_ipip_iface_name(hub.name)
-                for hub in router_exit_order_hubs(cfg, router_name)
+                for hub in router_required_exit_hubs(cfg, router_name)
             }
         )
         firewall_text = "\n\n".join(

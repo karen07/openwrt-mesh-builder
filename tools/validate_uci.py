@@ -52,10 +52,3 @@ def require_firewall_rule_port(
         die(f"{path}: firewall rule {name}: bad proto")
     if options.get("target") != FIREWALL_TARGET_ACCEPT:
         die(f"{path}: firewall rule {name}: bad target")
-
-
-def require_firewall_rule_absent(
-    parsed_blocks: list[dict[str, object]], path: Path, name: str
-) -> None:
-    if find_firewall_rule_by_name(parsed_blocks, name) is not None:
-        die(f"{path}: stale firewall rule {name}")
