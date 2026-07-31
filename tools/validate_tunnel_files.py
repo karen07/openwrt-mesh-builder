@@ -165,7 +165,7 @@ def validate_exit_ipip_iface(
     hub: ExitHub,
     router_parsed: dict[str, dict[str, object]],
 ) -> None:
-    active_exit_names = {h.name for h in router_exit_order_hubs(cfg, router_name)}
+    active_exit_names = {h.name for h in router_required_exit_hubs(cfg, router_name)}
     if hub.name not in active_exit_names:
         return
 

@@ -26,6 +26,7 @@ try:
     )
     from .validate_network import (
         validate_current_network_objects,
+        validate_exit_rule_network_objects,
         validate_link_is_31_pair,
         validate_link_local_matches_ipv4,
         validate_subnet_isolation,
@@ -71,6 +72,7 @@ except ImportError:
     )
     from validate_network import (  # type: ignore
         validate_current_network_objects,
+        validate_exit_rule_network_objects,
         validate_link_is_31_pair,
         validate_link_local_matches_ipv4,
         validate_subnet_isolation,
@@ -199,6 +201,7 @@ def main(argv: list[str] | None = None) -> None:
     validate_exit_pair_confs(cfg, existing)
     validate_access_links(cfg, existing)
     validate_current_network_objects(cfg, existing)
+    validate_exit_rule_network_objects(cfg, existing)
 
     vprint("=== FIREWALL VALIDATION ===")
     validate_firewall(cfg)

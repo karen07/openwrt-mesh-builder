@@ -130,6 +130,48 @@ def collect_unmanaged_uci_blocks(
     return out
 
 
+def uci_management_key(
+    parsed: dict[str, object],
+) -> tuple[str, str, str] | None:
+    """Return the stable identity of a generated UCI block.
+
+    Only blocks with an identity present in the current generated output are
+    replaced.  Blocks left from an older configuration keep a different key,
+    remain above the marker and are reported by show_unmanaged.
+    """
+    typ = str(parsed.get("type", ""))
+    name = str(parsed.get("name", ""))
+    options = parsed.get("options", {})
+
+    if name == typ:
+        option_name = str(options.get("name", ""))
+        if option_name:
+            return typ, "option:name", option_name
+
+        if typ.startswith(("wireguard_", "amneziawg_")):
+            description = str(options.get("description", ""))
+            if description:
+                return typ, "option:description", description
+
+    if name != typ:
+        return typ, "section", name
+
+    return None
+
+
+def generated_uci_management_keys(parts: Iterable[str]) -> set[tuple[str, str, str]]:
+    keys: set[tuple[str, str, str]] = set()
+    for part in parts:
+        for block in split_uci_blocks(part):
+            parsed = parse_uci_block(block)
+            if not parsed:
+                continue
+            key = uci_management_key(parsed)
+            if key is not None:
+                keys.add(key)
+    return keys
+
+
 def normalize_uci_part(text: str) -> str:
     return normalize_uci(text).strip("\n")
 

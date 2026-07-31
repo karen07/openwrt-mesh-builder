@@ -9,7 +9,7 @@ fi
 # shellcheck disable=SC1091
 . /etc/router-autoinstall.env
 
-TABLE="${EXIT_ROUTE_TABLE:-200}"
+TABLE="${EXIT_ROUTE_TABLE:-10000}"
 INTERVAL="${EXIT_ROUTE_INTERVAL:-5}"
 ROUTE_SECTION="exit${TABLE}"
 

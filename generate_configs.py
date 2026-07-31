@@ -221,6 +221,11 @@ def main() -> None:
             "WireGuard/AmneziaWG keys; access secrets are preserved"
         ),
     )
+    ap.add_argument(
+        "--details",
+        action="store_true",
+        help="print full unmanaged report after its sha256 hash when unmanaged content exists",
+    )
 
     args = ap.parse_args()
 
@@ -247,6 +252,8 @@ def main() -> None:
     for router in routers:
         sync_router(EXAMPLE_ROUTER_DIR, router)
 
+    print("OK: router synchronization finished successfully")
+
     if not args.skip_hooks:
         config_arg = str(Path(args.config))
 
@@ -257,9 +264,15 @@ def main() -> None:
             generate_args.append("--skip-direct-downloads")
 
         generate_main(generate_args)
+        print("OK: generation finished successfully")
+
         ensure_ssh_keys_main(["--config", config_arg])
         validate_main(["--config", config_arg])
-        show_unmanaged_main(["--config", config_arg])
+
+        show_unmanaged_args = ["--config", config_arg]
+        if args.details:
+            show_unmanaged_args.append("--details")
+        show_unmanaged_main(show_unmanaged_args)
 
 
 if __name__ == "__main__":

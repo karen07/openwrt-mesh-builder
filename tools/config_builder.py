@@ -67,6 +67,7 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
     exit_hubs_by_name = {h.name: h for h in exit_hubs}
     exit_order = [name for group in exit_order_groups for name in group]
     exit_order_by_router: dict[str, list[str]] = {}
+    routing_rules_by_router: dict[str, list[RoutingRule]] = {}
     exit_direct = load_exit_direct_config()
 
     access: dict[str, list[AccessGroup]] = {name: [] for name in router_names}
@@ -97,6 +98,14 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         )
         if router_exit_order:
             exit_order_by_router[router_name] = router_exit_order
+        router_routing_rules = load_router_routing_rules(
+            raw.get(CONFIG_KEY_ROUTING_RULES),
+            f"routers[{router_name}].routing_rules",
+            router=router,
+            exit_hubs_by_name=exit_hubs_by_name,
+        )
+        if router_routing_rules:
+            routing_rules_by_router[router_name] = router_routing_rules
         wifi[router_name] = load_wifi_config(raw, f"routers[{router_name}]")
         for key, kind in (
             (CONFIG_KEY_ALLOW_TO_ROUTER, FIREWALL_ALLOW_KIND_ROUTER),
@@ -250,6 +259,7 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         exit_hubs_by_name=exit_hubs_by_name,
         exit_order=exit_order,
         exit_order_by_router=exit_order_by_router,
+        routing_rules_by_router=routing_rules_by_router,
         exit_direct=exit_direct,
         access=access,
         firewall_allows=firewall_allows,

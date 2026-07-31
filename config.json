@@ -42,6 +42,22 @@
                 "REV01",
                 "REV02"
             ],
+            "routing_rules": [
+                {
+                    "src_ip": "10.101.1.50/32",
+                    "mode": "wan"
+                },
+                {
+                    "src_ip": "10.101.1.51/32",
+                    "mode": "split",
+                    "exit": "EGR02"
+                },
+                {
+                    "src_ip": "10.101.1.52/32",
+                    "mode": "exit",
+                    "exit": "EGR02"
+                }
+            ],
             "wifi_2g": {
                 "ssid": "Example-Spine01-2G",
                 "key": "Example-Spine01-2G"

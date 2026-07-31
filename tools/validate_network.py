@@ -97,44 +97,60 @@ def expected_managed_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
 def validate_current_network_objects(
     cfg: ConfigData, existing: dict[str, dict[str, dict[str, object]]]
 ) -> None:
+    # Extra objects from an older configuration are intentionally allowed.
+    # Current generated objects are validated by the dedicated validators;
+    # leftovers are reported by show_unmanaged instead of being rejected here.
+    _ = cfg, existing
+
+
+def validate_exit_rule_network_objects(
+    cfg: ConfigData,
+    existing: dict[str, dict[str, dict[str, object]]],
+) -> None:
+    policy_ids = routing_exit_policy_ids(cfg)
+
     for router_name in cfg.router_names:
-        expected_ifaces = expected_managed_ifaces(cfg, router_name)
         parsed = existing[router_name]
+        rules = cfg.routing_rules_by_router.get(router_name, [])
+        expected_exit_names = {
+            rule.exit_name for rule in rules if rule.exit_name is not None
+        }
+        for exit_name in expected_exit_names:
+            policy_id = policy_ids[exit_name]
+            suffix = exit_name.lower()
 
-        for block in parsed.values():
-            typ = str(block.get("type", ""))
-            name = str(block.get("name", ""))
-            opts = block.get("options", {})
-
-            if typ == "interface":
-                proto = str(opts.get("proto", ""))
-                if (
-                    proto in {PROTOCOL_AMNEZIAWG, PROTOCOL_WIREGUARD}
-                    and name not in expected_ifaces
-                ):
+            rule_name = f"{EXIT_RULE_SECTION_PREFIX}{suffix}"
+            rule_block = parsed.get(rule_name)
+            if rule_block is None or rule_block.get("type") != "rule":
+                die(f"router {router_name}: missing routing exit rule {rule_name}")
+            rule_opts = rule_block.get("options", {})
+            rule_expected = {
+                "priority": str(EXIT_RULE_PRIORITY),
+                "mark": str(policy_id),
+                "lookup": str(policy_id),
+            }
+            for key, value in rule_expected.items():
+                if rule_opts.get(key) != value:
                     die(
-                        f"router {router_name}: "
-                        f"unexpected managed tunnel interface {name}"
-                    )
-                continue
-
-            if typ.startswith("amneziawg_"):
-                iface = typ.removeprefix("amneziawg_")
-                expected = expected_mesh_exit_ifaces(
-                    cfg, router_name
-                ) | expected_amneziawg_access_ifaces(cfg, router_name)
-                if iface not in expected:
-                    die(
-                        f"router {router_name}: "
-                        f"unexpected AmneziaWG peer section {typ}"
+                        f"router {router_name}: routing exit rule {rule_name}: "
+                        f"bad {key}; expected {value!r}, got {rule_opts.get(key)!r}"
                     )
 
-            if typ.startswith("wireguard_"):
-                iface = typ.removeprefix("wireguard_")
-                if iface not in expected_wireguard_access_ifaces(cfg, router_name):
+            route_name = f"{EXIT_RULE_ROUTE_SECTION_PREFIX}{suffix}"
+            route_block = parsed.get(route_name)
+            if route_block is None or route_block.get("type") != "route":
+                die(f"router {router_name}: missing routing exit route {route_name}")
+            route_opts = route_block.get("options", {})
+            route_expected = {
+                "interface": router_exit_ipip_iface_name(exit_name),
+                "target": "0.0.0.0/0",
+                "table": str(policy_id),
+            }
+            for key, value in route_expected.items():
+                if route_opts.get(key) != value:
                     die(
-                        f"router {router_name}: "
-                        f"unexpected WireGuard peer section {typ}"
+                        f"router {router_name}: routing exit route {route_name}: "
+                        f"bad {key}; expected {value!r}, got {route_opts.get(key)!r}"
                     )
 
 

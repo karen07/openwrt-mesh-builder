@@ -5,10 +5,18 @@ sys.dont_write_bytecode = True
 
 try:
     from .common import *
-    from .managed_blocks import render_marked_uci_text
+    from .managed_blocks import (
+        generated_uci_management_keys,
+        render_marked_uci_text,
+        uci_management_key,
+    )
 except ImportError:
     from common import *  # type: ignore
-    from managed_blocks import render_marked_uci_text  # type: ignore
+    from managed_blocks import (  # type: ignore
+        generated_uci_management_keys,
+        render_marked_uci_text,
+        uci_management_key,
+    )
 
 
 def update_network_part(
@@ -17,6 +25,7 @@ def update_network_part(
     mesh_text: str,
     exit_text: str,
     ipip_text: str,
+    exit_rule_text: str,
     access_text: str,
     access_names: set[str],
 ) -> None:
@@ -25,19 +34,16 @@ def update_network_part(
 
     before_marker, marker_and_tail = split_text_by_marker(original, path)
 
-    mesh_exit_names = managed_mesh_exit_ifaces(cfg, router_name)
+    generated_parts = [access_text, mesh_text, exit_text, ipip_text, exit_rule_text]
+    managed_keys = generated_uci_management_keys(generated_parts)
 
     def keep_block(parsed: dict[str, object]) -> bool:
-        if is_managed_network(parsed, mesh_exit_names):
-            return False
-        if is_managed_access(parsed, access_names):
-            return False
-        return True
+        return uci_management_key(parsed) not in managed_keys
 
     preserved_before = filter_preserved_before_marker(before_marker, keep_block)
 
     updated = render_marked_uci_text(
-        [access_text, mesh_text, exit_text, ipip_text],
+        generated_parts,
         preserved_before,
         marker_and_tail,
     )
