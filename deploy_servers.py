@@ -67,7 +67,7 @@ def copy_server_tree(src: Path, dst: Path) -> None:
     ]
 
     if not entries:
-        die(f"no files to copy in server directory: {src}")
+        raise DeployError(f"no files to copy in server directory: {src}")
 
     for path in entries:
         target = dst / path.name
@@ -76,7 +76,7 @@ def copy_server_tree(src: Path, dst: Path) -> None:
         elif path.is_file():
             shutil.copy2(path, target)
         else:
-            die(f"unsupported server tree entry: {path}")
+            raise DeployError(f"unsupported server tree entry: {path}")
 
 
 def extract_server_authorized_keys(stage: Path) -> bytes | None:
@@ -91,7 +91,7 @@ def extract_server_authorized_keys(stage: Path) -> bytes | None:
     if not auth_file.exists():
         return None
     if not auth_file.is_file():
-        die(f"unsupported server authorized_keys entry: {auth_file}")
+        raise DeployError(f"unsupported server authorized_keys entry: {auth_file}")
 
     data = auth_file.read_bytes()
     auth_file.unlink()
@@ -128,7 +128,7 @@ def copy_server_files(
     entries = sorted(src.iterdir(), key=lambda p: p.name)
 
     if not entries:
-        die(f"no staged files to copy in server directory: {src}")
+        raise DeployError(f"no staged files to copy in server directory: {src}")
 
     # Intentionally do not capture stdio:
     # scp must be able to ask for password / host-key confirmation.
@@ -278,11 +278,11 @@ def deploy_one(
     config_path: Path,
     server_ssh_mode: str,
     connect_timeout: int,
-) -> None:
+) -> str:
     src = server_exit_dir(name)
 
     if not src.is_dir():
-        die(f"missing server directory: {src}")
+        raise DeployError(f"missing server directory: {src}")
 
     errors: list[str] = []
     hosts = server_ssh_hosts(name, server_ssh_mode)
@@ -299,12 +299,12 @@ def deploy_one(
                 connect_timeout=connect_timeout,
             )
             print(f"==> OK: {name} deployed via {host}")
-            return
+            return host
         except DeployError as e:
             errors.append(str(e))
             print(f"WARNING: {e}", file=sys.stderr)
 
-    die(f"all SSH hosts failed for {name}: " + "; ".join(errors))
+    raise DeployError(f"all SSH hosts failed for {name}: " + "; ".join(errors))
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -373,14 +373,50 @@ def main(argv: list[str]) -> None:
     else:
         print("authorized_keys mode: append")
 
+    deployed: dict[str, str] = {}
+    failed: dict[str, str] = {}
+
     for name in servers:
-        deploy_one(
-            name,
-            replace_authorized_keys=args.replace_authorized_keys,
-            config_path=config_path,
-            server_ssh_mode=args.server_ssh_mode,
-            connect_timeout=args.ssh_connect_timeout,
-        )
+        try:
+            host = deploy_one(
+                name,
+                replace_authorized_keys=args.replace_authorized_keys,
+                config_path=config_path,
+                server_ssh_mode=args.server_ssh_mode,
+                connect_timeout=args.ssh_connect_timeout,
+            )
+            deployed[name] = host
+        except DeployError as e:
+            reason = str(e)
+            failed[name] = reason
+            print(f"==> FAIL: {name}: {reason}", file=sys.stderr)
+        except SystemExit as e:
+            # Helpers used while preparing one server may call die().  Once the
+            # deployment loop has started, treat that as a failure of this
+            # server and continue with the remaining servers.
+            code = e.code if isinstance(e.code, int) else 1
+            reason = f"deployment aborted with exit code {code}"
+            failed[name] = reason
+            print(f"==> FAIL: {name}: {reason}", file=sys.stderr)
+        except Exception as e:
+            reason = f"unexpected error: {e}"
+            failed[name] = reason
+            print(f"==> FAIL: {name}: {reason}", file=sys.stderr)
+
+    print()
+    print("=== DEPLOY SUMMARY ===")
+    print(f"deployed: {len(deployed)}")
+    print(f"failed: {len(failed)}")
+    print()
+
+    if failed:
+        print("failed on:")
+        for name, reason in failed.items():
+            print(f"  {name}: {reason}")
+        sys.exit(1)
+
+    print("all servers deployed successfully")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
