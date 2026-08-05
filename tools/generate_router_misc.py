@@ -24,6 +24,14 @@ WIFI_MANAGED_UCI_RE = re.compile(
     r"wireless\.(?:radio[01]|default_radio[01])(?:\.|\b)"
 )
 
+PPPOE_MANAGED_COMMENT_RE = re.compile(
+    r"^\s*#\s*Replace\s+existing\s+WAN\s+DHCP\s+with\s+PPPoE\s*$"
+)
+
+PPPOE_MANAGED_UCI_RE = re.compile(
+    r"^\s*uci\s+(?:-q\s+)?set\s+network\.wan\." r"(?:proto|mtu|username|password)="
+)
+
 DANGLING_SECRET_CLOSE_RE = re.compile(r"^\s*\}'\s*$")
 
 
@@ -97,10 +105,10 @@ def update_doh_source_addr_block(body: str, router: RouterDef) -> str:
 
 
 def wrap_secret_marker_for_shell(value: str, width: int = SHELL_SECRET_WRAP_COL) -> str:
-    # config.json is the source of truth for Wi-Fi ssid/key values.  Preserve
-    # the exact OWMB marker kind and base64/plain payload from config.json; only
-    # normalize whitespace inside the marker and wrap long payloads so the shell
-    # bootstrap remains readable.
+    # config.json is the source of truth for generated secret-bearing values.
+    # Preserve the exact OWMB marker kind and base64/plain payload; only
+    # normalize whitespace inside the marker and wrap long payloads so the
+    # shell bootstrap remains readable.
     m = SECRET_MARKER_RE.fullmatch(value)
     if not m:
         return value
@@ -115,8 +123,28 @@ def shell_single_quote(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
-def shell_wifi_value(value: str) -> str:
+def shell_config_value(value: str) -> str:
     return shell_single_quote(wrap_secret_marker_for_shell(value))
+
+
+def shell_wifi_value(value: str) -> str:
+    return shell_config_value(value)
+
+
+def build_pppoe_block(cfg: ConfigData, router_name: str) -> str:
+    pppoe = cfg.pppoe.get(router_name)
+    if pppoe is None:
+        return ""
+
+    return (
+        "    # Replace existing WAN DHCP with PPPoE\n"
+        "    uci -q set network.wan.proto='pppoe'\n"
+        f"    uci -q set network.wan.mtu='{pppoe.mtu}'\n"
+        "    uci -q set network.wan.username="
+        f"{shell_config_value(pppoe.username)}\n"
+        "    uci -q set network.wan.password="
+        f"{shell_config_value(pppoe.password)}\n\n"
+    )
 
 
 def build_wifi_macfilter_lines(iface: str, blocked_macs: tuple[str, ...]) -> list[str]:
@@ -237,6 +265,71 @@ def line_has_open_single_quote(line: str) -> bool:
     return line_text(line).count("'") % 2 == 1
 
 
+def skip_managed_pppoe_block(lines: list[str], start: int) -> int:
+    i = start + 1
+    in_single_quote = False
+
+    while i < len(lines):
+        text = line_text(lines[i])
+
+        if in_single_quote:
+            if line_has_open_single_quote(lines[i]):
+                in_single_quote = False
+            i += 1
+            continue
+
+        if not text.strip():
+            i += 1
+            continue
+
+        if PPPOE_MANAGED_COMMENT_RE.match(text):
+            i += 1
+            continue
+
+        if PPPOE_MANAGED_UCI_RE.match(text):
+            in_single_quote = line_has_open_single_quote(lines[i])
+            i += 1
+            continue
+
+        if DANGLING_SECRET_CLOSE_RE.match(text):
+            i += 1
+            continue
+
+        break
+
+    return i
+
+
+def remove_managed_pppoe_blocks(body: str) -> str:
+    lines = body.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        if PPPOE_MANAGED_COMMENT_RE.match(line_text(lines[i])):
+            i = skip_managed_pppoe_block(lines, i)
+            continue
+        out.append(lines[i])
+        i += 1
+
+    return "".join(out)
+
+
+def update_pppoe_block(body: str, cfg: ConfigData, router_name: str) -> str:
+    body = remove_managed_pppoe_blocks(body)
+    managed = build_pppoe_block(cfg, router_name)
+    if not managed:
+        return body
+
+    router = router_or_die(cfg, router_name)
+    anchor = build_subnet_hostname_block(router)
+    if anchor in body:
+        before, after = body.split(anchor, 1)
+        return before + anchor + "\n" + managed + after.lstrip("\n")
+
+    return managed + body
+
+
 def skip_managed_wifi_block(lines: list[str], start: int) -> int:
     i = start + 1
     in_single_quote = False
@@ -321,6 +414,7 @@ def update_bootstrap(cfg: ConfigData, router_name: str) -> None:
     body = update_subnet_hostname_block(body, router)
     body = update_doh_source_addr_block(body, router)
     body = update_wifi_block(body, cfg, router_name)
+    body = update_pppoe_block(body, cfg, router_name)
     body = update_openvpn_babeld_hotplug_block(body, cfg, router_name)
 
     updated = text[: m.start("body")] + body + text[m.end("body") :]

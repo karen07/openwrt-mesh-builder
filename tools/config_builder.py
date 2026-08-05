@@ -2,7 +2,13 @@
 try:
     from .process import die
     from .default import *
-    from .config_model import AccessGroup, ConfigData, FirewallAllow, WifiConfig
+    from .config_model import (
+        AccessGroup,
+        ConfigData,
+        FirewallAllow,
+        PppoeConfig,
+        WifiConfig,
+    )
     from .config_schema import *
     from .config_exit_model import *
     from .config_firewall_model import *
@@ -17,7 +23,13 @@ try:
 except ImportError:
     from process import die  # type: ignore
     from default import *  # type: ignore
-    from config_model import AccessGroup, ConfigData, FirewallAllow, WifiConfig  # type: ignore
+    from config_model import (  # type: ignore
+        AccessGroup,
+        ConfigData,
+        FirewallAllow,
+        PppoeConfig,
+        WifiConfig,
+    )
     from config_schema import *  # type: ignore
     from config_exit_model import *  # type: ignore
     from config_firewall_model import *  # type: ignore
@@ -73,6 +85,7 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
     access: dict[str, list[AccessGroup]] = {name: [] for name in router_names}
     firewall_allows: list[FirewallAllow] = []
     wifi: dict[str, dict[str, WifiConfig]] = {name: {} for name in router_names}
+    pppoe: dict[str, PppoeConfig] = {}
 
     raw_access = raw_cfg.get(CONFIG_KEY_ACCESS, {})
     if not isinstance(raw_access, dict):
@@ -106,7 +119,11 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         )
         if router_routing_rules:
             routing_rules_by_router[router_name] = router_routing_rules
-        wifi[router_name] = load_wifi_config(raw, f"routers[{router_name}]")
+        router_where = f"routers[{router_name}]"
+        wifi[router_name] = load_wifi_config(raw, router_where)
+        router_pppoe = load_pppoe_config(raw, router_where)
+        if router_pppoe is not None:
+            pppoe[router_name] = router_pppoe
         for key, kind in (
             (CONFIG_KEY_ALLOW_TO_ROUTER, FIREWALL_ALLOW_KIND_ROUTER),
             (CONFIG_KEY_ALLOW_TO_LAN, FIREWALL_ALLOW_KIND_LAN),
@@ -264,4 +281,5 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         access=access,
         firewall_allows=firewall_allows,
         wifi=wifi,
+        pppoe=pppoe,
     )

@@ -6,9 +6,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from .default import ROUTER_HOSTNAME_PREFIX, ROUTER_SSH_PREFIX, ROUTERS_ROOT
+    from .default import (
+        PPPOE_DEFAULT_MTU,
+        ROUTER_HOSTNAME_PREFIX,
+        ROUTER_SSH_PREFIX,
+        ROUTERS_ROOT,
+    )
 except ImportError:
-    from default import ROUTER_HOSTNAME_PREFIX, ROUTER_SSH_PREFIX, ROUTERS_ROOT
+    from default import (  # type: ignore
+        PPPOE_DEFAULT_MTU,
+        ROUTER_HOSTNAME_PREFIX,
+        ROUTER_SSH_PREFIX,
+        ROUTERS_ROOT,
+    )
 
 
 @dataclass(frozen=True)
@@ -215,6 +225,13 @@ class WifiConfig:
 
 
 @dataclass(frozen=True)
+class PppoeConfig:
+    username: str
+    password: str
+    mtu: int = PPPOE_DEFAULT_MTU
+
+
+@dataclass(frozen=True)
 class ConfigData:
     routers: list[RouterDef]
     router_by_name: dict[str, RouterDef]
@@ -235,3 +252,4 @@ class ConfigData:
     access: dict[str, list[AccessGroup]]
     firewall_allows: list[FirewallAllow]
     wifi: dict[str, dict[str, WifiConfig]]
+    pppoe: dict[str, PppoeConfig]

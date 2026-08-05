@@ -340,6 +340,7 @@ access             пользовательские WG/AWG/OpenVPN входы н
 - `subnet` - LAN сеть роутера, обычно canonical `/24`
 - `packages` - per-router добавление или удаление дополнительных пакетов
 - `wifi_2g`, `wifi_5g` - Wi-Fi параметры
+- `pppoe` - необязательные WAN PPPoE credentials и MTU
 - `allow_to_router` - к каким target роутерам разрешен INPUT на сам роутер
 - `allow_to_lan` - к каким target роутерам разрешен FORWARD в их LAN
 - `exit_order` - индивидуальный порядок выбора exit серверов
@@ -1421,6 +1422,35 @@ Profile name является безопасным ASCII identifier.
 ```
 
 Если Wi-Fi блок не задан, соответствующее radio/interface отключается в bootstrap customization.
+
+### PPPoE
+
+Для конкретного роутера WAN можно переключить с DHCP на PPPoE:
+
+```json
+{
+  "pppoe": {
+    "username": "OWMB_ENC_SECRET_V1{...}",
+    "password": "OWMB_ENC_SECRET_V1{...}"
+  }
+}
+```
+
+`mtu` указывать необязательно. По умолчанию генератор использует `1480`:
+
+```json
+{
+  "pppoe": {
+    "username": "OWMB_ENC_SECRET_V1{...}",
+    "password": "OWMB_ENC_SECRET_V1{...}",
+    "mtu": 1492
+  }
+}
+```
+
+Допустимый диапазон `mtu` - `1280..1492`. Секция генерируется внутри
+`customization()` файла `99-firstboot-custom`. OWMB secret markers переносятся
+на несколько строк так же, как Wi-Fi keys.
 
 ## tools/default.py
 

@@ -35,6 +35,10 @@
             "name": "Spine01",
             "device_profile": "asus_rt-ax59u",
             "subnet": "10.101.1.0/24",
+            "pppoe": {
+                "username": "Example-PPPoE-Username",
+                "password": "Example-PPPoE-Password"
+            },
             "exit_order": [
                 "EGR02",
                 "EGR01",
