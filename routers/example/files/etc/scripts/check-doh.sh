@@ -113,6 +113,29 @@ last_endpoint() {
     echo "$_last"
 }
 
+is_provider_endpoint() {
+    _candidate="$1"
+
+    for _provider_ep in $(get_nameservers_from_resolv); do
+        [ "$_candidate" = "$_provider_ep" ] && return 0
+    done
+
+    return 1
+}
+
+restart_doh_proxy() {
+    if [ ! -x /etc/init.d/https-dns-proxy ]; then
+        echo "cannot restart DoH: /etc/init.d/https-dns-proxy is not executable"
+        return 0
+    fi
+
+    echo "restart DoH after switching to provider DNS"
+    /etc/init.d/https-dns-proxy restart >/dev/null 2>&1 \
+        || echo "failed to restart https-dns-proxy"
+
+    return 0
+}
+
 dnsmasq_server_value() {
     _ep="$1"
     _ip="${_ep%:*}"
@@ -211,7 +234,11 @@ apply_once() {
     [ "$cur" = "$target" ] && return 0
 
     echo "switch DNS endpoint: current=${cur:-none} target=$target"
-    set_dnsmasq_server_endpoint "$target"
+    set_dnsmasq_server_endpoint "$target" || return 1
+
+    if is_provider_endpoint "$target"; then
+        restart_doh_proxy
+    fi
 }
 
 case "${1:-run}" in
