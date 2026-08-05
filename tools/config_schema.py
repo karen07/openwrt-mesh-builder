@@ -50,9 +50,11 @@ ROUTER_KEYS = {
     CONFIG_KEY_ALLOW_TO_ROUTER,
     CONFIG_KEY_WIFI_2G,
     CONFIG_KEY_WIFI_5G,
+    CONFIG_KEY_PPPOE,
 }
 
 WIFI_KEYS = {CONFIG_KEY_SSID, CONFIG_KEY_KEY, CONFIG_KEY_BLOCKED_MACS}
+PPPOE_KEYS = {CONFIG_KEY_USERNAME, CONFIG_KEY_PASSWORD, CONFIG_KEY_MTU}
 WIFI_CONFIG_KEYS = (CONFIG_KEY_WIFI_2G, CONFIG_KEY_WIFI_5G)
 
 MESH_HUB_KEYS = {
@@ -255,6 +257,16 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
                     if not isinstance(wifi, dict):
                         die(f"{where}.{wifi_key} must be an object")
                     require_known_keys(wifi, f"{where}.{wifi_key}", WIFI_KEYS)
+
+            pppoe = raw.get(CONFIG_KEY_PPPOE)
+            if pppoe is not None:
+                if not isinstance(pppoe, dict):
+                    die(f"{where}.{CONFIG_KEY_PPPOE} must be an object")
+                require_known_keys(
+                    pppoe,
+                    f"{where}.{CONFIG_KEY_PPPOE}",
+                    PPPOE_KEYS,
+                )
 
     raw_mesh_hubs = raw_cfg.get(CONFIG_KEY_MESH_HUBS, [])
     if raw_mesh_hubs is not None:

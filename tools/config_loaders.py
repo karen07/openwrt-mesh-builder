@@ -10,6 +10,7 @@ try:
         DeviceProfile,
         ExitHub,
         MeshHub,
+        PppoeConfig,
         RouterDef,
         WifiConfig,
     )
@@ -39,6 +40,7 @@ try:
         DEVICE_PROFILE_KEYS,
         EXIT_HUB_KEYS,
         MESH_HUB_KEYS,
+        PPPOE_KEYS,
         ROUTER_KEYS,
         WIFI_CONFIG_KEYS,
         require_known_keys,
@@ -54,6 +56,7 @@ except ImportError:
         DeviceProfile,
         ExitHub,
         MeshHub,
+        PppoeConfig,
         RouterDef,
         WifiConfig,
     )
@@ -83,6 +86,7 @@ except ImportError:
         DEVICE_PROFILE_KEYS,
         EXIT_HUB_KEYS,
         MESH_HUB_KEYS,
+        PPPOE_KEYS,
         ROUTER_KEYS,
         WIFI_CONFIG_KEYS,
         require_known_keys,
@@ -495,3 +499,38 @@ def load_wifi_config(raw: dict[str, object], where: str) -> dict[str, WifiConfig
         )
 
     return wifi_by_key
+
+
+def load_pppoe_config(
+    raw: dict[str, object],
+    where: str,
+) -> PppoeConfig | None:
+    raw_pppoe = raw.get(CONFIG_KEY_PPPOE)
+    if raw_pppoe is None:
+        return None
+    if not isinstance(raw_pppoe, dict):
+        die(f"{where}.{CONFIG_KEY_PPPOE} must be an object")
+
+    pppoe_where = f"{where}.{CONFIG_KEY_PPPOE}"
+    require_known_keys(raw_pppoe, pppoe_where, PPPOE_KEYS)
+
+    username = raw_pppoe.get(CONFIG_KEY_USERNAME)
+    if not isinstance(username, str) or not username.strip():
+        die(f"{pppoe_where}.{CONFIG_KEY_USERNAME} must be a non-empty string")
+
+    password = raw_pppoe.get(CONFIG_KEY_PASSWORD)
+    if not isinstance(password, str) or not password.strip():
+        die(f"{pppoe_where}.{CONFIG_KEY_PASSWORD} must be a non-empty string")
+
+    mtu = raw_pppoe.get(CONFIG_KEY_MTU, PPPOE_DEFAULT_MTU)
+    if type(mtu) is not int or not PPPOE_MTU_MIN <= mtu <= PPPOE_MTU_MAX:
+        die(
+            f"{pppoe_where}.{CONFIG_KEY_MTU} must be an integer "
+            f"in {PPPOE_MTU_MIN}..{PPPOE_MTU_MAX}"
+        )
+
+    return PppoeConfig(
+        username=username,
+        password=password,
+        mtu=mtu,
+    )

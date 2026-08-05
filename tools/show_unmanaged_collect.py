@@ -31,6 +31,7 @@ try:
     from .generate_router_misc import (
         build_doh_source_addr_block,
         build_openvpn_babeld_hotplug_block,
+        build_pppoe_block,
         build_subnet_hostname_block,
         build_wifi_block,
         router_has_openvpn_access,
@@ -64,6 +65,7 @@ except ImportError:
     from generate_router_misc import (  # type: ignore
         build_doh_source_addr_block,
         build_openvpn_babeld_hotplug_block,
+        build_pppoe_block,
         build_subnet_hostname_block,
         build_wifi_block,
         router_has_openvpn_access,
@@ -222,6 +224,9 @@ def exact_bootstrap_blocks(cfg: ConfigData, router_name: str) -> list[str]:
         build_wifi_block(cfg, router_name),
         build_doh_source_addr_block(router),
     ]
+    pppoe_block = build_pppoe_block(cfg, router_name)
+    if pppoe_block:
+        blocks.append(pppoe_block)
     if router_has_openvpn_access(cfg, router_name):
         blocks.append(build_openvpn_babeld_hotplug_block())
     return blocks
