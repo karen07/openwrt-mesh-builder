@@ -1,0 +1,5765 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            Mesh topology
+        </title>
+        <style>
+        :root {
+        color-scheme: dark;
+        }
+        html,
+        body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        }
+        body {
+        background: #0b1020;
+        color: #e5e7eb;
+        font-family: system-ui, sans-serif;
+        }
+        #app,
+        #topologyCanvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        }
+        #topologyCanvas {
+        cursor: grab;
+        touch-action: none;
+        }
+        #topologyCanvas.dragging {
+        cursor: grabbing;
+        }
+        #panel {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        z-index: 10;
+        width: 380px;
+        max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 40px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-sizing: border-box;
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        border-radius: 16px;
+        padding: 18px 18px 16px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.36);
+        backdrop-filter: blur(8px);
+        }
+        #panel h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        line-height: 1.15;
+        }
+        #panel .meta {
+        color: #94a3b8;
+        font-size: 13px;
+        line-height: 1.4;
+        margin-bottom: 16px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        }
+        #panel .meta .source {
+        margin-top: 4px;
+        }
+        #panel select,
+        #panel button {
+        background: rgba(15, 23, 42, 0.95);
+        color: #f3f4f6;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 6px;
+        padding: 4px 9px;
+        font: inherit;
+        }
+        #panel button {
+        cursor: pointer;
+        }
+        #groupControls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px 22px;
+        }
+        #groupControls label,
+        .check-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 0;
+        cursor: pointer;
+        user-select: none;
+        min-width: 0;
+        }
+        #groupControls input[type="checkbox"],
+        .check-row input[type="checkbox"] {
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        accent-color: #3b82f6;
+        flex: 0 0 auto;
+        }
+        .legend-line {
+        width: 24px;
+        height: 3px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+        box-shadow: 0 0 8px currentColor;
+        }
+        .legend-text {
+        font-size: 14px;
+        color: #e5e7eb;
+        min-width: 0;
+        }
+        .legend-name {
+        white-space: nowrap;
+        }
+        #groupControls .count {
+        color: #94a3b8;
+        font-size: 11px;
+        margin-left: 2px;
+        }
+        .panel-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+        font-size: 15px;
+        color: #e5e7eb;
+        }
+        .panel-row .spacer {
+        flex: 1 1 auto;
+        }
+        .panel-help {
+        color: #94a3b8;
+        font-size: 12px;
+        line-height: 1.4;
+        margin-top: 14px;
+        }
+        #speedControls,
+        #speedLegend {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.20);
+        }
+        #speedControls[hidden],
+        #speedLegend[hidden] {
+        display: none;
+        }
+        .speed-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+        font-size: 13px;
+        color: #cbd5e1;
+        }
+        .speed-heading .value {
+        margin-left: auto;
+        color: #f8fafc;
+        font-variant-numeric: tabular-nums;
+        }
+        .dual-range {
+        position: relative;
+        height: 28px;
+        margin: 0 1px;
+        }
+        .dual-range .track {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 10px;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        background: linear-gradient(
+        90deg,
+        #000004 0%,
+        #2c115f 18%,
+        #721f81 35%,
+        #b73779 52%,
+        #f1605d 68%,
+        #feb078 84%,
+        #fcfdbf 100%
+        );
+        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.32);
+        }
+        .dual-range .mask {
+        position: absolute;
+        top: 10px;
+        height: 12px;
+        background: rgba(2, 6, 23, 0.72);
+        pointer-events: none;
+        }
+        .dual-range .mask-left {
+        left: 0;
+        border-radius: 999px 0 0 999px;
+        }
+        .dual-range .mask-right {
+        right: 0;
+        border-radius: 0 999px 999px 0;
+        }
+        .dual-range input[type="range"] {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 28px;
+        margin: 0;
+        appearance: none;
+        background: transparent;
+        pointer-events: none;
+        }
+        .dual-range input[type="range"]::-webkit-slider-runnable-track {
+        height: 10px;
+        background: transparent;
+        border: 0;
+        }
+        .dual-range input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        margin-top: -3px;
+        border-radius: 50%;
+        border: 2px solid #e2e8f0;
+        background: #0f172a;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+        pointer-events: auto;
+        cursor: ew-resize;
+        }
+        .dual-range input[type="range"]::-moz-range-track {
+        height: 10px;
+        background: transparent;
+        border: 0;
+        }
+        .dual-range input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid #e2e8f0;
+        background: #0f172a;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+        pointer-events: auto;
+        cursor: ew-resize;
+        }
+        .range-options {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+        color: #cbd5e1;
+        font-size: 12px;
+        }
+        .range-options button {
+        margin-left: auto;
+        padding: 2px 8px;
+        font-size: 12px;
+        }
+        #speedLegend .legend-title {
+        font-size: 13px;
+        color: #cbd5e1;
+        margin-bottom: 8px;
+        }
+        #speedLegend .legend-note {
+        margin-top: 8px;
+        color: #94a3b8;
+        font-size: 12px;
+        line-height: 1.35;
+        }
+        .speed-scale {
+        height: 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.32);
+        }
+        .speed-scale-labels {
+        position: relative;
+        height: 16px;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #94a3b8;
+        }
+        .speed-scale-labels span {
+        position: absolute;
+        top: 0;
+        white-space: nowrap;
+        }
+        .status-key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 10px;
+        color: #cbd5e1;
+        font-size: 12px;
+        }
+        .status-key-item {
+        --status-color: #94a3b8;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        }
+        .status-key-item::before {
+        content: "";
+        display: block;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 5px;
+        border-radius: 999px;
+        background-color: var(--status-color);
+        box-shadow: 0 0 7px var(--status-color);
+        }
+        .status-key-down {
+        --status-color: #f59e0b;
+        }
+        .status-key-missing {
+        --status-color: #38bdf8;
+        }
+        #tooltip {
+        position: fixed;
+        display: none;
+        z-index: 20;
+        pointer-events: none;
+        max-width: min(540px, calc(100vw - 28px));
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: rgba(2, 6, 23, 0.94);
+        border: 1px solid #475569;
+        color: #e5e7eb;
+        font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        }
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <canvas id="topologyCanvas"></canvas>
+        </div>
+        <div id="panel">
+            <h1>
+                Mesh topology
+            </h1>
+            <div class="meta"></div>
+            <div id="groupControls"></div>
+            <div class="panel-row">
+                <label for="colorMode">color</label> <select id="colorMode">
+                    <option value="from">
+                        from
+                    </option>
+                    <option value="to">
+                        to
+                    </option>
+                    <option value="topology">
+                        topology
+                    </option>
+                </select> <button id="fitView" type="button">fit</button>
+            </div>
+            <div id="speedControls" hidden="">
+                <div class="speed-heading">
+                    <span>speed range</span> <span class="value" id="speedRangeValue"></span>
+                </div>
+                <div class="dual-range">
+                    <div class="track"></div>
+                    <div class="mask mask-left"></div>
+                    <div class="mask mask-right"></div><input id="speedMin" type="range" min="0"
+                    max="1000" value="0" step="1" aria-label="minimum speed"> <input id="speedMax"
+                    type="range" min="0" max="1000" value="1000" step="1" aria-label=
+                    "maximum speed">
+                </div>
+                <div class="range-options">
+                    <label class="check-row"><input id="hideOutside" type="checkbox"> <span>hide
+                    outside range</span></label> <button id="resetRange" type=
+                    "button">reset</button>
+                </div>
+            </div>
+            <div id="speedLegend" hidden="">
+                <div class="legend-title"></div>
+                <div class="speed-scale"></div>
+                <div class="speed-scale-labels"></div>
+                <div id="statusKey" class="status-key" hidden="">
+                    <span class="status-key-item status-key-down">down</span> <span class=
+                    "status-key-item status-key-missing">link absent / not measured</span>
+                </div>
+                <div class="legend-note"></div>
+            </div>
+            <div class="panel-help">
+                drag = pan, wheel = zoom, double click or fit = reset, hover = details; arrows
+                point from the measured source to its destination
+            </div>
+        </div>
+        <div id="tooltip"></div>
+        <script>
+        const DATA = {
+        "title": "Mesh topology",
+        "topology_only": true,
+        "source": "generated AWG/UCI topology",
+        "nodes": [
+        {
+        "id": "server:EGR01",
+        "kind": "server",
+        "name": "EGR01",
+        "layer": "public-exit",
+        "x": 2.0818995585505004e-14,
+        "y": 260.0,
+        "z": -340.0
+        },
+        {
+        "id": "server:EGR02",
+        "kind": "server",
+        "name": "EGR02",
+        "layer": "public-exit",
+        "x": 294.4486372867092,
+        "y": 260.0,
+        "z": 169.99999999999994
+        },
+        {
+        "id": "server:PUB01",
+        "kind": "server",
+        "name": "PUB01",
+        "layer": "public-exit",
+        "x": -294.4486372867091,
+        "y": 260.0,
+        "z": 170.0000000000001
+        },
+        {
+        "id": "server:REV01",
+        "kind": "server",
+        "name": "REV01",
+        "layer": "reverse-exit",
+        "x": 129.3127555043441,
+        "y": 260.0,
+        "z": -177.98373876248843
+        },
+        {
+        "id": "server:REV02",
+        "kind": "server",
+        "name": "REV02",
+        "layer": "reverse-exit",
+        "x": -129.31275550434407,
+        "y": 260.0,
+        "z": 177.98373876248843
+        },
+        {
+        "id": "router:Spine01",
+        "kind": "router",
+        "name": "Spine01",
+        "layer": "spine",
+        "x": 207.84609690826525,
+        "y": 60.0,
+        "z": -120.0
+        },
+        {
+        "id": "router:Spine02",
+        "kind": "router",
+        "name": "Spine02",
+        "layer": "spine",
+        "x": 6.798646677177576e-14,
+        "y": 60.0,
+        "z": 240.0
+        },
+        {
+        "id": "router:Spine03",
+        "kind": "router",
+        "name": "Spine03",
+        "layer": "spine",
+        "x": -207.84609690826537,
+        "y": 60.0,
+        "z": -119.99999999999986
+        },
+        {
+        "id": "router:AccessOnly01",
+        "kind": "router",
+        "name": "AccessOnly01",
+        "layer": "leaf",
+        "x": 81.6146435034573,
+        "y": -180.0,
+        "z": -462.85964391573776
+        },
+        {
+        "id": "router:AccessOnly02",
+        "kind": "router",
+        "name": "AccessOnly02",
+        "layer": "leaf",
+        "x": 441.6555317693769,
+        "y": -180.0,
+        "z": -160.74946736306433
+        },
+        {
+        "id": "router:Leaf01",
+        "kind": "router",
+        "name": "Leaf01",
+        "layer": "leaf",
+        "x": 360.0408882659197,
+        "y": -180.0,
+        "z": 302.11017655267347
+        },
+        {
+        "id": "router:Leaf02",
+        "kind": "router",
+        "name": "Leaf02",
+        "layer": "leaf",
+        "x": -81.61464350345724,
+        "y": -180.0,
+        "z": 462.85964391573776
+        },
+        {
+        "id": "router:Leaf03",
+        "kind": "router",
+        "name": "Leaf03",
+        "layer": "leaf",
+        "x": -441.65553176937686,
+        "y": -180.0,
+        "z": 160.74946736306458
+        },
+        {
+        "id": "router:Leaf04",
+        "kind": "router",
+        "name": "Leaf04",
+        "layer": "leaf",
+        "x": -360.04088826591965,
+        "y": -180.0,
+        "z": -302.11017655267347
+        }
+        ],
+        "edges": [
+        {
+        "id": "exit:router:AccessOnly01<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly01",
+        "b": "server:EGR01",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/1ff95098In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/1ff95098In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:AccessOnly01<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly01",
+        "b": "server:EGR02",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/04b04ce0In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/04b04ce0In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:AccessOnly01<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly01",
+        "b": "server:PUB01",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/a4d24a55In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/a4d24a55In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:AccessOnly02<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly02",
+        "b": "server:EGR01",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/a524d565In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/a524d565In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:AccessOnly02<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly02",
+        "b": "server:EGR02",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f018a36bIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f018a36bIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:AccessOnly02<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:AccessOnly02",
+        "b": "server:PUB01",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/0853b1b9In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/0853b1b9In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf01<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf01",
+        "b": "server:EGR01",
+        "source_id": "router:Leaf01",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/6bb8adbbIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/6bb8adbbIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf01<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf01",
+        "b": "server:EGR02",
+        "source_id": "router:Leaf01",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f6204f64In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f6204f64In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf01<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf01",
+        "b": "server:PUB01",
+        "source_id": "router:Leaf01",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/fa3e3c0bIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/fa3e3c0bIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf02<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf02",
+        "b": "server:EGR01",
+        "source_id": "router:Leaf02",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/3d6fcf44In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/3d6fcf44In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf02<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf02",
+        "b": "server:EGR02",
+        "source_id": "router:Leaf02",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/5ed3c30dIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/5ed3c30dIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf02<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf02",
+        "b": "server:PUB01",
+        "source_id": "router:Leaf02",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/47c4d773In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/47c4d773In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf03<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf03",
+        "b": "server:EGR01",
+        "source_id": "router:Leaf03",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/dbcddbb1In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/dbcddbb1In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf03<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf03",
+        "b": "server:EGR02",
+        "source_id": "router:Leaf03",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/3845272cIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/3845272cIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf03<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf03",
+        "b": "server:PUB01",
+        "source_id": "router:Leaf03",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/f181c9ceIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/f181c9ceIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf04<->server:EGR01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf04",
+        "b": "server:EGR01",
+        "source_id": "router:Leaf04",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/9c5fcb37In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/9c5fcb37In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf04<->server:EGR02",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf04",
+        "b": "server:EGR02",
+        "source_id": "router:Leaf04",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/7051abe1In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/7051abe1In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Leaf04<->server:PUB01",
+        "link_type": "exit",
+        "group": "leaf-exit",
+        "a": "router:Leaf04",
+        "b": "server:PUB01",
+        "source_id": "router:Leaf04",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/21923cd0In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/21923cd0In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine01<->server:EGR01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine01",
+        "b": "server:EGR01",
+        "source_id": "router:Spine01",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/366e1f23In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/366e1f23In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine01<->server:EGR02",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine01",
+        "b": "server:EGR02",
+        "source_id": "router:Spine01",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f6c2c95cIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/f6c2c95cIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine01<->server:PUB01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine01",
+        "b": "server:PUB01",
+        "source_id": "router:Spine01",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/41c79964In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/41c79964In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine02<->server:EGR01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine02",
+        "b": "server:EGR01",
+        "source_id": "router:Spine02",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/701dbd63In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/701dbd63In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine02<->server:EGR02",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine02",
+        "b": "server:EGR02",
+        "source_id": "router:Spine02",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/3260e897In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/3260e897In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine02<->server:PUB01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine02",
+        "b": "server:PUB01",
+        "source_id": "router:Spine02",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/af7e73ffIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/af7e73ffIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine03<->server:EGR01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine03",
+        "b": "server:EGR01",
+        "source_id": "router:Spine03",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/b36e015dIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR01Out/b36e015dIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine03<->server:EGR02",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine03",
+        "b": "server:EGR02",
+        "source_id": "router:Spine03",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/5eff0859In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:EGR02Out/5eff0859In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit:router:Spine03<->server:PUB01",
+        "link_type": "exit",
+        "group": "spine-exit",
+        "a": "router:Spine03",
+        "b": "server:PUB01",
+        "source_id": "router:Spine03",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/4f00c45fIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-out:PUB01Out/4f00c45fIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-exit:server:EGR01<->server:EGR02",
+        "link_type": "exit-exit",
+        "group": "exit-exit",
+        "a": "server:EGR01",
+        "b": "server:EGR02",
+        "source_id": "server:EGR01",
+        "target_id": "server:EGR02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:65b9e88aOut/65b9e88aIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:65b9e88aOut/65b9e88aIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-exit:server:EGR01<->server:PUB01",
+        "link_type": "exit-exit",
+        "group": "exit-exit",
+        "a": "server:EGR01",
+        "b": "server:PUB01",
+        "source_id": "server:PUB01",
+        "target_id": "server:EGR01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:0beded1aOut/0beded1aIn",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:0beded1aOut/0beded1aIn",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-exit:server:EGR02<->server:PUB01",
+        "link_type": "exit-exit",
+        "group": "exit-exit",
+        "a": "server:EGR02",
+        "b": "server:PUB01",
+        "source_id": "server:EGR02",
+        "target_id": "server:PUB01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:674d1953Out/674d1953In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-ring:674d1953Out/674d1953In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine01<->server:EGR01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine01",
+        "b": "server:EGR01",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:5744a643Out/EGR01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:5744a643Out/EGR01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine01<->server:EGR02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine01",
+        "b": "server:EGR02",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:7a65fa8fOut/EGR02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:7a65fa8fOut/EGR02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine01<->server:PUB01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine01",
+        "b": "server:PUB01",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:ff5a0b2aOut/PUB01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:ff5a0b2aOut/PUB01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine01<->server:REV01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine01",
+        "b": "server:REV01",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:c0646576Out/REV01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:c0646576Out/REV01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine01<->server:REV02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine01",
+        "b": "server:REV02",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:2fe5ad14Out/REV02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:2fe5ad14Out/REV02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine02<->server:EGR01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine02",
+        "b": "server:EGR01",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:c3b0ddb2Out/EGR01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:c3b0ddb2Out/EGR01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine02<->server:EGR02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine02",
+        "b": "server:EGR02",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:1009bfa5Out/EGR02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:1009bfa5Out/EGR02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine02<->server:PUB01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine02",
+        "b": "server:PUB01",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:41a2844dOut/PUB01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:41a2844dOut/PUB01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine02<->server:REV01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine02",
+        "b": "server:REV01",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:95357800Out/REV01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:95357800Out/REV01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine02<->server:REV02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine02",
+        "b": "server:REV02",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:b862b7f8Out/REV02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:b862b7f8Out/REV02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine03<->server:EGR01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine03",
+        "b": "server:EGR01",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:11d37522Out/EGR01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:11d37522Out/EGR01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine03<->server:EGR02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine03",
+        "b": "server:EGR02",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:80de3848Out/EGR02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:80de3848Out/EGR02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine03<->server:PUB01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine03",
+        "b": "server:PUB01",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:bddad8e4Out/PUB01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:bddad8e4Out/PUB01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine03<->server:REV01",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine03",
+        "b": "server:REV01",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:da1ad525Out/REV01In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:da1ad525Out/REV01In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "exit-in:router:Spine03<->server:REV02",
+        "link_type": "exit-in",
+        "group": "exit-spine",
+        "a": "router:Spine03",
+        "b": "server:REV02",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:fd45b069Out/REV02In",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "exit-in:fd45b069Out/REV02In",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly01<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly01",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:AccessOnly01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly01<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly01",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:AccessOnly01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly01<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly01",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:AccessOnly01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly01In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly02<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly02",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:AccessOnly02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly02<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly02",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:AccessOnly02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:AccessOnly02<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:AccessOnly02",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:AccessOnly02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:AccessOnly02In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf01<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf01",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:Leaf01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf01<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf01",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:Leaf01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf01<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf01",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:Leaf01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf01In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf02<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf02",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:Leaf02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf02<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf02",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:Leaf02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf02<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf02",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:Leaf02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf02In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf03<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf03",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:Leaf03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf03<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf03",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:Leaf03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf03<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf03",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:Leaf03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf03In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf04<->router:Spine01",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf04",
+        "b": "router:Spine01",
+        "source_id": "router:Spine01",
+        "target_id": "router:Leaf04",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf04<->router:Spine02",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf04",
+        "b": "router:Spine02",
+        "source_id": "router:Spine02",
+        "target_id": "router:Leaf04",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Leaf04<->router:Spine03",
+        "link_type": "mesh",
+        "group": "leaf-spine",
+        "a": "router:Leaf04",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:Leaf04",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Leaf04In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Spine01<->router:Spine02",
+        "link_type": "mesh",
+        "group": "spine-spine",
+        "a": "router:Spine01",
+        "b": "router:Spine02",
+        "source_id": "router:Spine01",
+        "target_id": "router:Spine02",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine01In/Spine02Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine01In/Spine02Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Spine01<->router:Spine03",
+        "link_type": "mesh",
+        "group": "spine-spine",
+        "a": "router:Spine01",
+        "b": "router:Spine03",
+        "source_id": "router:Spine03",
+        "target_id": "router:Spine01",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine03In/Spine01Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine03In/Spine01Out",
+        "peer_ip": "configured"
+        }
+        },
+        {
+        "id": "mesh:router:Spine02<->router:Spine03",
+        "link_type": "mesh",
+        "group": "spine-spine",
+        "a": "router:Spine02",
+        "b": "router:Spine03",
+        "source_id": "router:Spine02",
+        "target_id": "router:Spine03",
+        "a_to_b": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine02In/Spine03Out",
+        "peer_ip": "configured"
+        },
+        "b_to_a": {
+        "mbps": 0.0,
+        "status": "target",
+        "iface": "mesh:Spine02In/Spine03Out",
+        "peer_ip": "configured"
+        }
+        }
+        ],
+        "groups": [
+        {
+        "id": "spine-spine",
+        "label": "spine <-> spine",
+        "count": 3
+        },
+        {
+        "id": "leaf-spine",
+        "label": "leaf <-> spine",
+        "count": 18
+        },
+        {
+        "id": "exit-spine",
+        "label": "exit -> spine",
+        "count": 15
+        },
+        {
+        "id": "spine-exit",
+        "label": "spine -> exit",
+        "count": 9
+        },
+        {
+        "id": "exit-exit",
+        "label": "exit <-> exit",
+        "count": 3
+        },
+        {
+        "id": "leaf-exit",
+        "label": "leaf -> exit",
+        "count": 18
+        }
+        ],
+        "layers": [
+        {
+        "id": "public-exit",
+        "label": "public exit",
+        "y": 260.0
+        },
+        {
+        "id": "spine",
+        "label": "spine",
+        "y": 60.0
+        },
+        {
+        "id": "leaf",
+        "label": "leaf",
+        "y": -180.0
+        },
+        {
+        "id": "reverse-exit",
+        "label": "reverse exit",
+        "y": 260.0
+        }
+        ],
+        "initial_mode": "topology",
+        "layout_2d": {
+        "width": 1000,
+        "height": 930,
+        "row_labels": [
+        {
+        "text": "exit",
+        "x": 35,
+        "y": 190
+        },
+        {
+        "text": "spine",
+        "x": 35,
+        "y": 355
+        },
+        {
+        "text": "leaf",
+        "x": 35,
+        "y": 585
+        },
+        {
+        "text": "exit",
+        "x": 35,
+        "y": 780
+        }
+        ],
+        "nodes": [
+        {
+        "visual_id": "exit:server:EGR01",
+        "node_id": "server:EGR01",
+        "x": 257,
+        "y": 190,
+        "row": "exit",
+        "direct_view": false
+        },
+        {
+        "visual_id": "exit:server:EGR02",
+        "node_id": "server:EGR02",
+        "x": 378,
+        "y": 190,
+        "row": "exit",
+        "direct_view": false
+        },
+        {
+        "visual_id": "exit:server:PUB01",
+        "node_id": "server:PUB01",
+        "x": 500,
+        "y": 190,
+        "row": "exit",
+        "direct_view": false
+        },
+        {
+        "visual_id": "exit:server:REV01",
+        "node_id": "server:REV01",
+        "x": 622,
+        "y": 190,
+        "row": "exit",
+        "direct_view": false
+        },
+        {
+        "visual_id": "exit:server:REV02",
+        "node_id": "server:REV02",
+        "x": 743,
+        "y": 190,
+        "row": "exit",
+        "direct_view": false
+        },
+        {
+        "visual_id": "spine:router:Spine01",
+        "node_id": "router:Spine01",
+        "x": 318,
+        "y": 355,
+        "row": "spine",
+        "direct_view": false
+        },
+        {
+        "visual_id": "spine:router:Spine02",
+        "node_id": "router:Spine02",
+        "x": 500,
+        "y": 355,
+        "row": "spine",
+        "direct_view": false
+        },
+        {
+        "visual_id": "spine:router:Spine03",
+        "node_id": "router:Spine03",
+        "x": 682,
+        "y": 355,
+        "row": "spine",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:AccessOnly01",
+        "node_id": "router:AccessOnly01",
+        "x": 135,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:AccessOnly02",
+        "node_id": "router:AccessOnly02",
+        "x": 281,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:Leaf01",
+        "node_id": "router:Leaf01",
+        "x": 427,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:Leaf02",
+        "node_id": "router:Leaf02",
+        "x": 573,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:Leaf03",
+        "node_id": "router:Leaf03",
+        "x": 719,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "leaf:router:Leaf04",
+        "node_id": "router:Leaf04",
+        "x": 865,
+        "y": 585,
+        "row": "leaf",
+        "direct_view": false
+        },
+        {
+        "visual_id": "direct-exit:server:EGR01",
+        "node_id": "server:EGR01",
+        "x": 318,
+        "y": 780,
+        "row": "direct-exit",
+        "direct_view": true
+        },
+        {
+        "visual_id": "direct-exit:server:EGR02",
+        "node_id": "server:EGR02",
+        "x": 500,
+        "y": 780,
+        "row": "direct-exit",
+        "direct_view": true
+        },
+        {
+        "visual_id": "direct-exit:server:PUB01",
+        "node_id": "server:PUB01",
+        "x": 682,
+        "y": 780,
+        "row": "direct-exit",
+        "direct_view": true
+        }
+        ],
+        "edges": [
+        {
+        "visual_id": "mesh:router:AccessOnly01<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly01<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly01",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 158.65949458240686,
+              "y": 555.2640232024395
+            },
+            {
+              "x": 294.34050541759314,
+              "y": 384.73597679756057
+            }
+          ],
+          "from": [
+            {
+              "x": 158.65949458240686,
+              "y": 555.2640232024395
+            },
+            {
+              "x": 293.09526886062434,
+              "y": 386.3010282079585
+            }
+          ],
+          "to": [
+            {
+              "x": 294.34050541759314,
+              "y": 384.73597679756057
+            },
+            {
+              "x": 159.90473113937566,
+              "y": 553.6989717920416
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:AccessOnly01<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly01<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 167.14949131489612,
+              "y": 564.7414164317092
+            },
+            {
+              "x": 467.8505086851039,
+              "y": 375.2585835682907
+            }
+          ],
+          "from": [
+            {
+              "x": 167.14949131489612,
+              "y": 564.7414164317092
+            },
+            {
+              "x": 466.1584301948462,
+              "y": 376.32482480872704
+            }
+          ],
+          "to": [
+            {
+              "x": 467.8505086851039,
+              "y": 375.2585835682907
+            },
+            {
+              "x": 168.84156980515382,
+              "y": 563.675175191273
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:AccessOnly01<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly01<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly01",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 170.02937269085146,
+              "y": 570.2710133109765
+            },
+            {
+              "x": 646.9706273091485,
+              "y": 369.7289866890235
+            }
+          ],
+          "from": [
+            {
+              "x": 170.02937269085146,
+              "y": 570.2710133109765
+            },
+            {
+              "x": 645.1269761148932,
+              "y": 370.50419651476153
+            }
+          ],
+          "to": [
+            {
+              "x": 646.9706273091485,
+              "y": 369.7289866890235
+            },
+            {
+              "x": 171.8730238851068,
+              "y": 569.4958034852384
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly01<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly01<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 161.00393975842854,
+              "y": 612.7091161360304
+            },
+            {
+              "x": 291.99606024157146,
+              "y": 752.2908838639696
+            }
+          ],
+          "from": [
+            {
+              "x": 161.00393975842854,
+              "y": 612.7091161360304
+            },
+            {
+              "x": 290.6274318332331,
+              "y": 750.8325093304943
+            }
+          ],
+          "to": [
+            {
+              "x": 291.99606024157146,
+              "y": 752.2908838639696
+            },
+            {
+              "x": 162.37256816676688,
+              "y": 614.1674906695057
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly01<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly01<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 168.5166937379582,
+              "y": 602.9061788463065
+            },
+            {
+              "x": 466.48330626204176,
+              "y": 762.0938211536935
+            }
+          ],
+          "from": [
+            {
+              "x": 168.5166937379582,
+              "y": 602.9061788463065
+            },
+            {
+              "x": 464.71926974951765,
+              "y": 761.1513906880984
+            }
+          ],
+          "to": [
+            {
+              "x": 466.48330626204176,
+              "y": 762.0938211536935
+            },
+            {
+              "x": 170.28073025048235,
+              "y": 603.8486093119016
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly01<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly01<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly01",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 170.79358892100907,
+              "y": 597.7600545513652
+            },
+            {
+              "x": 646.2064110789909,
+              "y": 767.2399454486348
+            }
+          ],
+          "from": [
+            {
+              "x": 170.79358892100907,
+              "y": 597.7600545513652
+            },
+            {
+              "x": 644.3225379778852,
+              "y": 766.5683636301419
+            }
+          ],
+          "to": [
+            {
+              "x": 646.2064110789909,
+              "y": 767.2399454486348
+            },
+            {
+              "x": 172.6774620221148,
+              "y": 598.4316363698581
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:AccessOnly02<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly02<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly02",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 287.0354465918615,
+              "y": 547.4823590235635
+            },
+            {
+              "x": 311.9645534081385,
+              "y": 392.5176409764365
+            }
+          ],
+          "from": [
+            {
+              "x": 287.0354465918615,
+              "y": 547.4823590235635
+            },
+            {
+              "x": 311.6468983243563,
+              "y": 394.49225365940686
+            }
+          ],
+          "to": [
+            {
+              "x": 311.9645534081385,
+              "y": 392.5176409764365
+            },
+            {
+              "x": 287.3531016756437,
+              "y": 545.5077463405931
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:AccessOnly02<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly02<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly02",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 307.203908640328,
+              "y": 557.4799133001121
+            },
+            {
+              "x": 473.796091359672,
+              "y": 382.5200866998878
+            }
+          ],
+          "from": [
+            {
+              "x": 307.203908640328,
+              "y": 557.4799133001121
+            },
+            {
+              "x": 472.4169382733389,
+              "y": 383.96851231567143
+            }
+          ],
+          "to": [
+            {
+              "x": 473.796091359672,
+              "y": 382.5200866998878
+            },
+            {
+              "x": 308.5830617266611,
+              "y": 556.0314876843286
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:AccessOnly02<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:AccessOnly02<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:AccessOnly02",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 313.9628452832316,
+              "y": 566.0936298874233
+            },
+            {
+              "x": 649.0371547167683,
+              "y": 373.9063701125767
+            }
+          ],
+          "from": [
+            {
+              "x": 313.9628452832316,
+              "y": 566.0936298874233
+            },
+            {
+              "x": 647.302268122914,
+              "y": 374.901442223765
+            }
+          ],
+          "to": [
+            {
+              "x": 649.0371547167683,
+              "y": 373.9063701125767
+            },
+            {
+              "x": 315.6977318770859,
+              "y": 565.098557776235
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly02<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly02<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 288.0838650704754,
+              "y": 622.3338834795323
+            },
+            {
+              "x": 310.9161349295246,
+              "y": 742.6661165204677
+            }
+          ],
+          "from": [
+            {
+              "x": 288.0838650704754,
+              "y": 622.3338834795323
+            },
+            {
+              "x": 310.5432999258154,
+              "y": 740.7011752847028
+            }
+          ],
+          "to": [
+            {
+              "x": 310.9161349295246,
+              "y": 742.6661165204677
+            },
+            {
+              "x": 288.4567000741846,
+              "y": 624.2988247152972
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly02<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly02<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 309.3800945670833,
+              "y": 610.269947217266
+            },
+            {
+              "x": 471.6199054329167,
+              "y": 754.730052782734
+            }
+          ],
+          "from": [
+            {
+              "x": 309.3800945670833,
+              "y": 610.269947217266
+            },
+            {
+              "x": 470.12621624517544,
+              "y": 753.4000555607727
+            }
+          ],
+          "to": [
+            {
+              "x": 471.6199054329167,
+              "y": 754.730052782734
+            },
+            {
+              "x": 310.87378375482456,
+              "y": 611.5999444392273
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:AccessOnly02<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:AccessOnly02<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:AccessOnly02",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 315.17365113056337,
+              "y": 601.6181096520196
+            },
+            {
+              "x": 647.8263488694366,
+              "y": 763.3818903479804
+            }
+          ],
+          "from": [
+            {
+              "x": 315.17365113056337,
+              "y": 601.6181096520196
+            },
+            {
+              "x": 646.0277356520386,
+              "y": 762.5072529978742
+            }
+          ],
+          "to": [
+            {
+              "x": 647.8263488694366,
+              "y": 763.3818903479804
+            },
+            {
+              "x": 316.9722643479614,
+              "y": 602.4927470021258
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf01<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:Leaf01<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf01",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 410.7263013111935,
+              "y": 550.6610027667385
+            },
+            {
+              "x": 334.2736986888065,
+              "y": 389.33899723326147
+            }
+          ],
+          "from": [
+            {
+              "x": 410.7263013111935,
+              "y": 550.6610027667385
+            },
+            {
+              "x": 335.1302091461121,
+              "y": 391.14631287711734
+            }
+          ],
+          "to": [
+            {
+              "x": 334.2736986888065,
+              "y": 389.33899723326147
+            },
+            {
+              "x": 409.8697908538879,
+              "y": 548.8536871228827
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf01<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:Leaf01<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 438.4957362433472,
+              "y": 548.7805570415088
+            },
+            {
+              "x": 488.5042637566528,
+              "y": 391.21944295849113
+            }
+          ],
+          "from": [
+            {
+              "x": 438.4957362433472,
+              "y": 548.7805570415088
+            },
+            {
+              "x": 487.89922500700294,
+              "y": 393.12572942999066
+            }
+          ],
+          "to": [
+            {
+              "x": 488.5042637566528,
+              "y": 391.21944295849113
+            },
+            {
+              "x": 439.10077499299706,
+              "y": 546.8742705700093
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf01<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:Leaf01<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf01",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 455.2176494956087,
+              "y": 559.548786729451
+            },
+            {
+              "x": 653.7823505043913,
+              "y": 380.45121327054903
+            }
+          ],
+          "from": [
+            {
+              "x": 455.2176494956087,
+              "y": 559.548786729451
+            },
+            {
+              "x": 652.297211057254,
+              "y": 381.79075081110426
+            }
+          ],
+          "to": [
+            {
+              "x": 653.7823505043913,
+              "y": 380.45121327054903
+            },
+            {
+              "x": 456.70278894274605,
+              "y": 558.2092491888957
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf01<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf01<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf01",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 408.4589761128044,
+              "y": 618.1697216330563
+            },
+            {
+              "x": 336.5410238871956,
+              "y": 746.8302783669437
+            }
+          ],
+          "from": [
+            {
+              "x": 408.4589761128044,
+              "y": 618.1697216330563
+            },
+            {
+              "x": 337.51686724967954,
+              "y": 745.0845035441513
+            }
+          ],
+          "to": [
+            {
+              "x": 336.5410238871956,
+              "y": 746.8302783669437
+            },
+            {
+              "x": 407.48313275032046,
+              "y": 619.9154964558487
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf01<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf01<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf01",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 440.32268838958925,
+              "y": 620.5880032324645
+            },
+            {
+              "x": 486.67731161041075,
+              "y": 744.4119967675355
+            }
+          ],
+          "from": [
+            {
+              "x": 440.32268838958925,
+              "y": 620.5880032324645
+            },
+            {
+              "x": 485.9761174846429,
+              "y": 742.5389439658269
+            }
+          ],
+          "to": [
+            {
+              "x": 486.67731161041075,
+              "y": 744.4119967675355
+            },
+            {
+              "x": 441.0238825153571,
+              "y": 622.4610560341731
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf01<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf01<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf01",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 457.18559765313347,
+              "y": 608.0831040876903
+            },
+            {
+              "x": 651.8144023468666,
+              "y": 756.9168959123097
+            }
+          ],
+          "from": [
+            {
+              "x": 457.18559765313347,
+              "y": 608.0831040876903
+            },
+            {
+              "x": 650.2256866809122,
+              "y": 755.7019956971681
+            }
+          ],
+          "to": [
+            {
+              "x": 651.8144023468666,
+              "y": 756.9168959123097
+            },
+            {
+              "x": 458.77431331908787,
+              "y": 609.2980043028319
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf02<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:Leaf02<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf02",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 544.7823505043913,
+              "y": 559.548786729451
+            },
+            {
+              "x": 346.2176494956087,
+              "y": 380.45121327054903
+            }
+          ],
+          "from": [
+            {
+              "x": 544.7823505043913,
+              "y": 559.548786729451
+            },
+            {
+              "x": 347.70278894274605,
+              "y": 381.79075081110426
+            }
+          ],
+          "to": [
+            {
+              "x": 346.2176494956087,
+              "y": 380.45121327054903
+            },
+            {
+              "x": 543.297211057254,
+              "y": 558.2092491888957
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf02<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:Leaf02<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf02",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 561.5042637566528,
+              "y": 548.7805570415088
+            },
+            {
+              "x": 511.4957362433472,
+              "y": 391.21944295849113
+            }
+          ],
+          "from": [
+            {
+              "x": 561.5042637566528,
+              "y": 548.7805570415088
+            },
+            {
+              "x": 512.100774992997,
+              "y": 393.12572942999066
+            }
+          ],
+          "to": [
+            {
+              "x": 511.4957362433472,
+              "y": 391.21944295849113
+            },
+            {
+              "x": 560.899225007003,
+              "y": 546.8742705700093
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf02<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:Leaf02<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf02",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 589.2736986888065,
+              "y": 550.6610027667385
+            },
+            {
+              "x": 665.7263013111935,
+              "y": 389.33899723326147
+            }
+          ],
+          "from": [
+            {
+              "x": 589.2736986888065,
+              "y": 550.6610027667385
+            },
+            {
+              "x": 664.8697908538879,
+              "y": 391.14631287711734
+            }
+          ],
+          "to": [
+            {
+              "x": 665.7263013111935,
+              "y": 389.33899723326147
+            },
+            {
+              "x": 590.1302091461121,
+              "y": 548.8536871228827
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf02<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf02<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf02",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 542.8144023468666,
+              "y": 608.0831040876903
+            },
+            {
+              "x": 348.18559765313347,
+              "y": 756.9168959123097
+            }
+          ],
+          "from": [
+            {
+              "x": 542.8144023468666,
+              "y": 608.0831040876903
+            },
+            {
+              "x": 349.77431331908787,
+              "y": 755.7019956971681
+            }
+          ],
+          "to": [
+            {
+              "x": 348.18559765313347,
+              "y": 756.9168959123097
+            },
+            {
+              "x": 541.2256866809122,
+              "y": 609.2980043028319
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf02<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf02<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf02",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 559.6773116104107,
+              "y": 620.5880032324645
+            },
+            {
+              "x": 513.3226883895893,
+              "y": 744.4119967675355
+            }
+          ],
+          "from": [
+            {
+              "x": 559.6773116104107,
+              "y": 620.5880032324645
+            },
+            {
+              "x": 514.0238825153572,
+              "y": 742.5389439658269
+            }
+          ],
+          "to": [
+            {
+              "x": 513.3226883895893,
+              "y": 744.4119967675355
+            },
+            {
+              "x": 558.9761174846428,
+              "y": 622.4610560341731
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf02<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf02<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf02",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 591.5410238871956,
+              "y": 618.1697216330563
+            },
+            {
+              "x": 663.4589761128044,
+              "y": 746.8302783669437
+            }
+          ],
+          "from": [
+            {
+              "x": 591.5410238871956,
+              "y": 618.1697216330563
+            },
+            {
+              "x": 662.4831327503205,
+              "y": 745.0845035441513
+            }
+          ],
+          "to": [
+            {
+              "x": 663.4589761128044,
+              "y": 746.8302783669437
+            },
+            {
+              "x": 592.5168672496795,
+              "y": 619.9154964558487
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf03<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:Leaf03<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf03",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 686.0371547167683,
+              "y": 566.0936298874233
+            },
+            {
+              "x": 350.9628452832316,
+              "y": 373.9063701125767
+            }
+          ],
+          "from": [
+            {
+              "x": 686.0371547167683,
+              "y": 566.0936298874233
+            },
+            {
+              "x": 352.6977318770859,
+              "y": 374.901442223765
+            }
+          ],
+          "to": [
+            {
+              "x": 350.9628452832316,
+              "y": 373.9063701125767
+            },
+            {
+              "x": 684.302268122914,
+              "y": 565.098557776235
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf03<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:Leaf03<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf03",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 692.796091359672,
+              "y": 557.4799133001121
+            },
+            {
+              "x": 526.203908640328,
+              "y": 382.5200866998878
+            }
+          ],
+          "from": [
+            {
+              "x": 692.796091359672,
+              "y": 557.4799133001121
+            },
+            {
+              "x": 527.5830617266611,
+              "y": 383.96851231567143
+            }
+          ],
+          "to": [
+            {
+              "x": 526.203908640328,
+              "y": 382.5200866998878
+            },
+            {
+              "x": 691.4169382733389,
+              "y": 556.0314876843286
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf03<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:Leaf03<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf03",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 712.9645534081385,
+              "y": 547.4823590235635
+            },
+            {
+              "x": 688.0354465918615,
+              "y": 392.5176409764365
+            }
+          ],
+          "from": [
+            {
+              "x": 712.9645534081385,
+              "y": 547.4823590235635
+            },
+            {
+              "x": 688.3531016756438,
+              "y": 394.49225365940686
+            }
+          ],
+          "to": [
+            {
+              "x": 688.0354465918615,
+              "y": 392.5176409764365
+            },
+            {
+              "x": 712.6468983243562,
+              "y": 545.5077463405931
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf03<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf03<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf03",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 684.8263488694366,
+              "y": 601.6181096520196
+            },
+            {
+              "x": 352.17365113056337,
+              "y": 763.3818903479804
+            }
+          ],
+          "from": [
+            {
+              "x": 684.8263488694366,
+              "y": 601.6181096520196
+            },
+            {
+              "x": 353.9722643479614,
+              "y": 762.5072529978742
+            }
+          ],
+          "to": [
+            {
+              "x": 352.17365113056337,
+              "y": 763.3818903479804
+            },
+            {
+              "x": 683.0277356520386,
+              "y": 602.4927470021258
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf03<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf03<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf03",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 690.6199054329167,
+              "y": 610.269947217266
+            },
+            {
+              "x": 528.3800945670833,
+              "y": 754.730052782734
+            }
+          ],
+          "from": [
+            {
+              "x": 690.6199054329167,
+              "y": 610.269947217266
+            },
+            {
+              "x": 529.8737837548246,
+              "y": 753.4000555607727
+            }
+          ],
+          "to": [
+            {
+              "x": 528.3800945670833,
+              "y": 754.730052782734
+            },
+            {
+              "x": 689.1262162451754,
+              "y": 611.5999444392273
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf03<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf03<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf03",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 711.9161349295247,
+              "y": 622.3338834795323
+            },
+            {
+              "x": 689.0838650704753,
+              "y": 742.6661165204677
+            }
+          ],
+          "from": [
+            {
+              "x": 711.9161349295247,
+              "y": 622.3338834795323
+            },
+            {
+              "x": 689.4567000741846,
+              "y": 740.7011752847028
+            }
+          ],
+          "to": [
+            {
+              "x": 689.0838650704753,
+              "y": 742.6661165204677
+            },
+            {
+              "x": 711.5432999258154,
+              "y": 624.2988247152972
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf04<->router:Spine01:leaf:spine",
+        "edge_id": "mesh:router:Leaf04<->router:Spine01",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf04",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 829.9706273091485,
+              "y": 570.2710133109765
+            },
+            {
+              "x": 353.02937269085146,
+              "y": 369.7289866890235
+            }
+          ],
+          "from": [
+            {
+              "x": 829.9706273091485,
+              "y": 570.2710133109765
+            },
+            {
+              "x": 354.8730238851068,
+              "y": 370.50419651476153
+            }
+          ],
+          "to": [
+            {
+              "x": 353.02937269085146,
+              "y": 369.7289866890235
+            },
+            {
+              "x": 828.1269761148932,
+              "y": 569.4958034852384
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf04<->router:Spine02:leaf:spine",
+        "edge_id": "mesh:router:Leaf04<->router:Spine02",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf04",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 832.8505086851038,
+              "y": 564.7414164317092
+            },
+            {
+              "x": 532.1494913148962,
+              "y": 375.2585835682907
+            }
+          ],
+          "from": [
+            {
+              "x": 832.8505086851038,
+              "y": 564.7414164317092
+            },
+            {
+              "x": 533.8415698051538,
+              "y": 376.32482480872704
+            }
+          ],
+          "to": [
+            {
+              "x": 532.1494913148962,
+              "y": 375.2585835682907
+            },
+            {
+              "x": 831.1584301948462,
+              "y": 563.675175191273
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Leaf04<->router:Spine03:leaf:spine",
+        "edge_id": "mesh:router:Leaf04<->router:Spine03",
+        "group": "leaf-spine",
+        "source_id": "router:Leaf04",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 841.3405054175931,
+              "y": 555.2640232024395
+            },
+            {
+              "x": 705.6594945824069,
+              "y": 384.73597679756057
+            }
+          ],
+          "from": [
+            {
+              "x": 841.3405054175931,
+              "y": 555.2640232024395
+            },
+            {
+              "x": 706.9047311393756,
+              "y": 386.3010282079585
+            }
+          ],
+          "to": [
+            {
+              "x": 705.6594945824069,
+              "y": 384.73597679756057
+            },
+            {
+              "x": 840.0952688606244,
+              "y": 553.6989717920416
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf04<->server:EGR01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf04<->server:EGR01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf04",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 829.2064110789909,
+              "y": 597.7600545513652
+            },
+            {
+              "x": 353.7935889210091,
+              "y": 767.2399454486348
+            }
+          ],
+          "from": [
+            {
+              "x": 829.2064110789909,
+              "y": 597.7600545513652
+            },
+            {
+              "x": 355.6774620221148,
+              "y": 766.5683636301419
+            }
+          ],
+          "to": [
+            {
+              "x": 353.7935889210091,
+              "y": 767.2399454486348
+            },
+            {
+              "x": 827.3225379778852,
+              "y": 598.4316363698581
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf04<->server:EGR02:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf04<->server:EGR02",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf04",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 831.4833062620418,
+              "y": 602.9061788463065
+            },
+            {
+              "x": 533.5166937379582,
+              "y": 762.0938211536935
+            }
+          ],
+          "from": [
+            {
+              "x": 831.4833062620418,
+              "y": 602.9061788463065
+            },
+            {
+              "x": 535.2807302504823,
+              "y": 761.1513906880984
+            }
+          ],
+          "to": [
+            {
+              "x": 533.5166937379582,
+              "y": 762.0938211536935
+            },
+            {
+              "x": 829.7192697495177,
+              "y": 603.8486093119016
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Leaf04<->server:PUB01:leaf:direct-exit",
+        "edge_id": "exit:router:Leaf04<->server:PUB01",
+        "group": "leaf-exit",
+        "source_id": "router:Leaf04",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 838.9960602415715,
+              "y": 612.7091161360304
+            },
+            {
+              "x": 708.0039397584285,
+              "y": 752.2908838639696
+            }
+          ],
+          "from": [
+            {
+              "x": 838.9960602415715,
+              "y": 612.7091161360304
+            },
+            {
+              "x": 709.3725681667669,
+              "y": 750.8325093304943
+            }
+          ],
+          "to": [
+            {
+              "x": 708.0039397584285,
+              "y": 752.2908838639696
+            },
+            {
+              "x": 837.6274318332331,
+              "y": 614.1674906695057
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine01<->server:EGR01:spine:exit",
+        "edge_id": "exit:router:Spine01<->server:EGR01",
+        "group": "spine-exit",
+        "source_id": "router:Spine01",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 301.0713458379244,
+              "y": 320.74477166532324
+            },
+            {
+              "x": 266.4250196778782,
+              "y": 227.02929926519823
+            }
+          ],
+          "from": [
+            {
+              "x": 301.0713458379244,
+              "y": 320.74477166532324
+            },
+            {
+              "x": 267.11853741050857,
+              "y": 228.90520788624758
+            }
+          ],
+          "to": [
+            {
+              "x": 266.4250196778782,
+              "y": 227.02929926519823
+            },
+            {
+              "x": 300.37782810529404,
+              "y": 318.8688630442739
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine01<->server:EGR01:exit:spine",
+        "edge_id": "exit-in:router:Spine01<->server:EGR01",
+        "group": "exit-spine",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 273.9286541620756,
+              "y": 224.25522833467676
+            },
+            {
+              "x": 308.5749803221218,
+              "y": 317.97070073480177
+            }
+          ],
+          "from": [
+            {
+              "x": 273.9286541620756,
+              "y": 224.25522833467676
+            },
+            {
+              "x": 307.88146258949143,
+              "y": 316.0947921137524
+            }
+          ],
+          "to": [
+            {
+              "x": 308.5749803221218,
+              "y": 317.97070073480177
+            },
+            {
+              "x": 274.62217189470596,
+              "y": 226.1311369557261
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine01<->server:EGR02:spine:exit",
+        "edge_id": "exit:router:Spine01<->server:EGR02",
+        "group": "spine-exit",
+        "source_id": "router:Spine01",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 327.227062703341,
+              "y": 317.92087765509257
+            },
+            {
+              "x": 361.2545899087515,
+              "y": 224.34517784021378
+            }
+          ],
+          "from": [
+            {
+              "x": 327.227062703341,
+              "y": 317.92087765509257
+            },
+            {
+              "x": 360.57110378257806,
+              "y": 226.22476468719069
+            }
+          ],
+          "to": [
+            {
+              "x": 361.2545899087515,
+              "y": 224.34517784021378
+            },
+            {
+              "x": 327.9105488295144,
+              "y": 316.04129080811566
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine01<->server:EGR02:exit:spine",
+        "edge_id": "exit-in:router:Spine01<->server:EGR02",
+        "group": "exit-spine",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 368.772937296659,
+              "y": 227.0791223449074
+            },
+            {
+              "x": 334.7454100912485,
+              "y": 320.65482215978625
+            }
+          ],
+          "from": [
+            {
+              "x": 368.772937296659,
+              "y": 227.0791223449074
+            },
+            {
+              "x": 335.42889621742194,
+              "y": 318.77523531280934
+            }
+          ],
+          "to": [
+            {
+              "x": 334.7454100912485,
+              "y": 320.65482215978625
+            },
+            {
+              "x": 368.0894511704856,
+              "y": 228.9587091918843
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine01<->server:PUB01:spine:exit",
+        "edge_id": "exit:router:Spine01<->server:PUB01",
+        "group": "spine-exit",
+        "source_id": "router:Spine01",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 343.46605665895515,
+              "y": 326.51351270790155
+            },
+            {
+              "x": 469.160670516585,
+              "y": 212.55960454027002
+            }
+          ],
+          "from": [
+            {
+              "x": 343.46605665895515,
+              "y": 326.51351270790155
+            },
+            {
+              "x": 467.67894982862794,
+              "y": 213.902922746385
+            }
+          ],
+          "to": [
+            {
+              "x": 469.160670516585,
+              "y": 212.55960454027002
+            },
+            {
+              "x": 344.94777734691223,
+              "y": 325.17019450178657
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine01<->server:PUB01:exit:spine",
+        "edge_id": "exit-in:router:Spine01<->server:PUB01",
+        "group": "exit-spine",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 474.53394334104485,
+              "y": 218.48648729209845
+            },
+            {
+              "x": 348.839329483415,
+              "y": 332.44039545973
+            }
+          ],
+          "from": [
+            {
+              "x": 474.53394334104485,
+              "y": 218.48648729209845
+            },
+            {
+              "x": 350.32105017137206,
+              "y": 331.097077253615
+            }
+          ],
+          "to": [
+            {
+              "x": 348.839329483415,
+              "y": 332.44039545973
+            },
+            {
+              "x": 473.05222265308777,
+              "y": 219.82980549821343
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine01<->server:REV01:spine:exit",
+        "edge_id": "exit:router:Spine01<->server:REV01",
+        "edge": {
+          "id": "exit:router:Spine01<->server:REV01",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine01",
+          "b": "server:REV01",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine01",
+        "target_id": "server:REV01",
+        "paths": {
+          "topology": [
+            {
+              "x": 349.4896341866354,
+              "y": 333.3573814247932
+            },
+            {
+              "x": 586.6941413250835,
+              "y": 204.61151406346448
+            }
+          ],
+          "from": [
+            {
+              "x": 349.4896341866354,
+              "y": 333.3573814247932
+            },
+            {
+              "x": 584.9363651971479,
+              "y": 205.5655701855348
+            }
+          ],
+          "to": [
+            {
+              "x": 586.6941413250835,
+              "y": 204.61151406346448
+            },
+            {
+              "x": 351.24741031457097,
+              "y": 332.4033253027229
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine01<->server:REV01:exit:spine",
+        "edge_id": "exit-in:router:Spine01<->server:REV01",
+        "group": "exit-spine",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 590.5103658133647,
+              "y": 211.64261857520677
+            },
+            {
+              "x": 353.3058586749165,
+              "y": 340.3884859365355
+            }
+          ],
+          "from": [
+            {
+              "x": 590.5103658133647,
+              "y": 211.64261857520677
+            },
+            {
+              "x": 355.0636348028521,
+              "y": 339.43442981446526
+            }
+          ],
+          "to": [
+            {
+              "x": 353.3058586749165,
+              "y": 340.3884859365355
+            },
+            {
+              "x": 588.7525896854291,
+              "y": 212.59667469727708
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine01<->server:REV02:spine:exit",
+        "edge_id": "exit:router:Spine01<->server:REV02",
+        "edge": {
+          "id": "exit:router:Spine01<->server:REV02",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine01",
+          "b": "server:REV02",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine01",
+        "target_id": "server:REV02",
+        "paths": {
+          "topology": [
+            {
+              "x": 351.9763250859466,
+              "y": 337.5183143360236
+            },
+            {
+              "x": 706.1283392708352,
+              "y": 200.02400294659626
+            }
+          ],
+          "from": [
+            {
+              "x": 351.9763250859466,
+              "y": 337.5183143360236
+            },
+            {
+              "x": 704.2639185914902,
+              "y": 200.74783685740078
+            }
+          ],
+          "to": [
+            {
+              "x": 706.1283392708352,
+              "y": 200.02400294659626
+            },
+            {
+              "x": 353.8407457652916,
+              "y": 336.79448042521904
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine01<->server:REV02:exit:spine",
+        "edge_id": "exit-in:router:Spine01<->server:REV02",
+        "group": "exit-spine",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 709.0236749140535,
+              "y": 207.48168566397638
+            },
+            {
+              "x": 354.8716607291647,
+              "y": 344.9759970534038
+            }
+          ],
+          "from": [
+            {
+              "x": 709.0236749140535,
+              "y": 207.48168566397638
+            },
+            {
+              "x": 356.73608140850973,
+              "y": 344.2521631425992
+            }
+          ],
+          "to": [
+            {
+              "x": 354.8716607291647,
+              "y": 344.9759970534038
+            },
+            {
+              "x": 707.1592542347084,
+              "y": 208.2055195747809
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine02<->server:EGR01:spine:exit",
+        "edge_id": "exit:router:Spine02<->server:EGR01",
+        "group": "spine-exit",
+        "source_id": "router:Spine02",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 466.31535777163435,
+              "y": 336.96268096564773
+            },
+            {
+              "x": 286.19063295593355,
+              "y": 214.65576905375218
+            }
+          ],
+          "from": [
+            {
+              "x": 466.31535777163435,
+              "y": 336.96268096564773
+            },
+            {
+              "x": 287.84524546078353,
+              "y": 215.77927137186018
+            }
+          ],
+          "to": [
+            {
+              "x": 286.19063295593355,
+              "y": 214.65576905375218
+            },
+            {
+              "x": 464.6607452667844,
+              "y": 335.8391786475397
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine02<->server:EGR01:exit:spine",
+        "edge_id": "exit-in:router:Spine02<->server:EGR01",
+        "group": "exit-spine",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 290.68464222836565,
+              "y": 208.03731903435227
+            },
+            {
+              "x": 470.80936704406645,
+              "y": 330.3442309462478
+            }
+          ],
+          "from": [
+            {
+              "x": 290.68464222836565,
+              "y": 208.03731903435227
+            },
+            {
+              "x": 469.15475453921647,
+              "y": 329.2207286281398
+            }
+          ],
+          "to": [
+            {
+              "x": 470.80936704406645,
+              "y": 330.3442309462478
+            },
+            {
+              "x": 292.3392547332156,
+              "y": 209.16082135246026
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine02<->server:EGR02:spine:exit",
+        "edge_id": "exit:router:Spine02<->server:EGR02",
+        "group": "spine-exit",
+        "source_id": "router:Spine02",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 474.19163379578714,
+              "y": 326.8232678639051
+            },
+            {
+              "x": 397.37576737687885,
+              "y": 222.93295672357826
+            }
+          ],
+          "from": [
+            {
+              "x": 474.19163379578714,
+              "y": 326.8232678639051
+            },
+            {
+              "x": 398.5648235237497,
+              "y": 224.54110643041176
+            }
+          ],
+          "to": [
+            {
+              "x": 397.37576737687885,
+              "y": 222.93295672357826
+            },
+            {
+              "x": 473.0025776489163,
+              "y": 325.2151181570716
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine02<->server:EGR02:exit:spine",
+        "edge_id": "exit-in:router:Spine02<->server:EGR02",
+        "group": "exit-spine",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 403.80836620421286,
+              "y": 218.1767321360949
+            },
+            {
+              "x": 480.62423262312115,
+              "y": 322.06704327642177
+            }
+          ],
+          "from": [
+            {
+              "x": 403.80836620421286,
+              "y": 218.1767321360949
+            },
+            {
+              "x": 479.4351764762503,
+              "y": 320.45889356958827
+            }
+          ],
+          "to": [
+            {
+              "x": 480.62423262312115,
+              "y": 322.06704327642177
+            },
+            {
+              "x": 404.9974223510837,
+              "y": 219.7848818429284
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine02<->server:PUB01:spine:exit",
+        "edge_id": "exit:router:Spine02<->server:PUB01",
+        "group": "spine-exit",
+        "source_id": "router:Spine02",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 496.0,
+              "y": 317.0
+            },
+            {
+              "x": 496.0,
+              "y": 228.0
+            }
+          ],
+          "from": [
+            {
+              "x": 496.0,
+              "y": 317.0
+            },
+            {
+              "x": 496.0,
+              "y": 230.0
+            }
+          ],
+          "to": [
+            {
+              "x": 496.0,
+              "y": 228.0
+            },
+            {
+              "x": 496.0,
+              "y": 315.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine02<->server:PUB01:exit:spine",
+        "edge_id": "exit-in:router:Spine02<->server:PUB01",
+        "group": "exit-spine",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 504.0,
+              "y": 228.0
+            },
+            {
+              "x": 504.0,
+              "y": 317.0
+            }
+          ],
+          "from": [
+            {
+              "x": 504.0,
+              "y": 228.0
+            },
+            {
+              "x": 504.0,
+              "y": 315.0
+            }
+          ],
+          "to": [
+            {
+              "x": 504.0,
+              "y": 317.0
+            },
+            {
+              "x": 504.0,
+              "y": 230.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine02<->server:REV01:spine:exit",
+        "edge_id": "exit:router:Spine02<->server:REV01",
+        "edge": {
+          "id": "exit:router:Spine02<->server:REV01",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine02",
+          "b": "server:REV01",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine02",
+        "target_id": "server:REV01",
+        "paths": {
+          "topology": [
+            {
+              "x": 519.3757673768788,
+              "y": 322.06704327642177
+            },
+            {
+              "x": 596.1916337957872,
+              "y": 218.1767321360949
+            }
+          ],
+          "from": [
+            {
+              "x": 519.3757673768788,
+              "y": 322.06704327642177
+            },
+            {
+              "x": 595.0025776489164,
+              "y": 219.7848818429284
+            }
+          ],
+          "to": [
+            {
+              "x": 596.1916337957872,
+              "y": 218.1767321360949
+            },
+            {
+              "x": 520.5648235237496,
+              "y": 320.45889356958827
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine02<->server:REV01:exit:spine",
+        "edge_id": "exit-in:router:Spine02<->server:REV01",
+        "group": "exit-spine",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 602.6242326231212,
+              "y": 222.93295672357826
+            },
+            {
+              "x": 525.8083662042128,
+              "y": 326.8232678639051
+            }
+          ],
+          "from": [
+            {
+              "x": 602.6242326231212,
+              "y": 222.93295672357826
+            },
+            {
+              "x": 526.9974223510836,
+              "y": 325.2151181570716
+            }
+          ],
+          "to": [
+            {
+              "x": 525.8083662042128,
+              "y": 326.8232678639051
+            },
+            {
+              "x": 601.4351764762504,
+              "y": 224.54110643041176
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine02<->server:REV02:spine:exit",
+        "edge_id": "exit:router:Spine02<->server:REV02",
+        "edge": {
+          "id": "exit:router:Spine02<->server:REV02",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine02",
+          "b": "server:REV02",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine02",
+        "target_id": "server:REV02",
+        "paths": {
+          "topology": [
+            {
+              "x": 529.1906329559336,
+              "y": 330.3442309462478
+            },
+            {
+              "x": 709.3153577716344,
+              "y": 208.03731903435227
+            }
+          ],
+          "from": [
+            {
+              "x": 529.1906329559336,
+              "y": 330.3442309462478
+            },
+            {
+              "x": 707.6607452667844,
+              "y": 209.16082135246026
+            }
+          ],
+          "to": [
+            {
+              "x": 709.3153577716344,
+              "y": 208.03731903435227
+            },
+            {
+              "x": 530.8452454607835,
+              "y": 329.2207286281398
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine02<->server:REV02:exit:spine",
+        "edge_id": "exit-in:router:Spine02<->server:REV02",
+        "group": "exit-spine",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 713.8093670440664,
+              "y": 214.65576905375218
+            },
+            {
+              "x": 533.6846422283656,
+              "y": 336.96268096564773
+            }
+          ],
+          "from": [
+            {
+              "x": 713.8093670440664,
+              "y": 214.65576905375218
+            },
+            {
+              "x": 535.3392547332156,
+              "y": 335.8391786475397
+            }
+          ],
+          "to": [
+            {
+              "x": 533.6846422283656,
+              "y": 336.96268096564773
+            },
+            {
+              "x": 712.1547545392165,
+              "y": 215.77927137186018
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine03<->server:EGR01:spine:exit",
+        "edge_id": "exit:router:Spine03<->server:EGR01",
+        "group": "spine-exit",
+        "source_id": "router:Spine03",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 645.1283392708352,
+              "y": 344.9759970534038
+            },
+            {
+              "x": 290.9763250859466,
+              "y": 207.48168566397638
+            }
+          ],
+          "from": [
+            {
+              "x": 645.1283392708352,
+              "y": 344.9759970534038
+            },
+            {
+              "x": 292.8407457652916,
+              "y": 208.2055195747809
+            }
+          ],
+          "to": [
+            {
+              "x": 290.9763250859466,
+              "y": 207.48168566397638
+            },
+            {
+              "x": 643.2639185914902,
+              "y": 344.2521631425992
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine03<->server:EGR01:exit:spine",
+        "edge_id": "exit-in:router:Spine03<->server:EGR01",
+        "group": "exit-spine",
+        "source_id": "server:EGR01",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 293.8716607291647,
+              "y": 200.02400294659626
+            },
+            {
+              "x": 648.0236749140535,
+              "y": 337.5183143360236
+            }
+          ],
+          "from": [
+            {
+              "x": 293.8716607291647,
+              "y": 200.02400294659626
+            },
+            {
+              "x": 646.1592542347084,
+              "y": 336.79448042521904
+            }
+          ],
+          "to": [
+            {
+              "x": 648.0236749140535,
+              "y": 337.5183143360236
+            },
+            {
+              "x": 295.73608140850973,
+              "y": 200.74783685740078
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine03<->server:EGR02:spine:exit",
+        "edge_id": "exit:router:Spine03<->server:EGR02",
+        "group": "spine-exit",
+        "source_id": "router:Spine03",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 646.6941413250835,
+              "y": 340.3884859365355
+            },
+            {
+              "x": 409.4896341866354,
+              "y": 211.64261857520677
+            }
+          ],
+          "from": [
+            {
+              "x": 646.6941413250835,
+              "y": 340.3884859365355
+            },
+            {
+              "x": 411.24741031457097,
+              "y": 212.59667469727708
+            }
+          ],
+          "to": [
+            {
+              "x": 409.4896341866354,
+              "y": 211.64261857520677
+            },
+            {
+              "x": 644.9363651971479,
+              "y": 339.43442981446526
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine03<->server:EGR02:exit:spine",
+        "edge_id": "exit-in:router:Spine03<->server:EGR02",
+        "group": "exit-spine",
+        "source_id": "server:EGR02",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 413.3058586749165,
+              "y": 204.61151406346448
+            },
+            {
+              "x": 650.5103658133647,
+              "y": 333.3573814247932
+            }
+          ],
+          "from": [
+            {
+              "x": 413.3058586749165,
+              "y": 204.61151406346448
+            },
+            {
+              "x": 648.7525896854291,
+              "y": 332.4033253027229
+            }
+          ],
+          "to": [
+            {
+              "x": 650.5103658133647,
+              "y": 333.3573814247932
+            },
+            {
+              "x": 415.0636348028521,
+              "y": 205.5655701855348
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine03<->server:PUB01:spine:exit",
+        "edge_id": "exit:router:Spine03<->server:PUB01",
+        "group": "spine-exit",
+        "source_id": "router:Spine03",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 651.160670516585,
+              "y": 332.44039545973
+            },
+            {
+              "x": 525.466056658955,
+              "y": 218.48648729209845
+            }
+          ],
+          "from": [
+            {
+              "x": 651.160670516585,
+              "y": 332.44039545973
+            },
+            {
+              "x": 526.9477773469122,
+              "y": 219.82980549821343
+            }
+          ],
+          "to": [
+            {
+              "x": 525.466056658955,
+              "y": 218.48648729209845
+            },
+            {
+              "x": 649.6789498286279,
+              "y": 331.097077253615
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine03<->server:PUB01:exit:spine",
+        "edge_id": "exit-in:router:Spine03<->server:PUB01",
+        "group": "exit-spine",
+        "source_id": "server:PUB01",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 530.839329483415,
+              "y": 212.55960454027002
+            },
+            {
+              "x": 656.533943341045,
+              "y": 326.51351270790155
+            }
+          ],
+          "from": [
+            {
+              "x": 530.839329483415,
+              "y": 212.55960454027002
+            },
+            {
+              "x": 655.0522226530878,
+              "y": 325.17019450178657
+            }
+          ],
+          "to": [
+            {
+              "x": 656.533943341045,
+              "y": 326.51351270790155
+            },
+            {
+              "x": 532.3210501713721,
+              "y": 213.902922746385
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine03<->server:REV01:spine:exit",
+        "edge_id": "exit:router:Spine03<->server:REV01",
+        "edge": {
+          "id": "exit:router:Spine03<->server:REV01",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine03",
+          "b": "server:REV01",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine03",
+        "target_id": "server:REV01",
+        "paths": {
+          "topology": [
+            {
+              "x": 665.2545899087515,
+              "y": 320.65482215978625
+            },
+            {
+              "x": 631.2270627033411,
+              "y": 227.0791223449074
+            }
+          ],
+          "from": [
+            {
+              "x": 665.2545899087515,
+              "y": 320.65482215978625
+            },
+            {
+              "x": 631.9105488295145,
+              "y": 228.9587091918843
+            }
+          ],
+          "to": [
+            {
+              "x": 631.2270627033411,
+              "y": 227.0791223449074
+            },
+            {
+              "x": 664.5711037825781,
+              "y": 318.77523531280934
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine03<->server:REV01:exit:spine",
+        "edge_id": "exit-in:router:Spine03<->server:REV01",
+        "group": "exit-spine",
+        "source_id": "server:REV01",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 638.7454100912485,
+              "y": 224.34517784021378
+            },
+            {
+              "x": 672.7729372966589,
+              "y": 317.92087765509257
+            }
+          ],
+          "from": [
+            {
+              "x": 638.7454100912485,
+              "y": 224.34517784021378
+            },
+            {
+              "x": 672.0894511704855,
+              "y": 316.04129080811566
+            }
+          ],
+          "to": [
+            {
+              "x": 672.7729372966589,
+              "y": 317.92087765509257
+            },
+            {
+              "x": 639.4288962174219,
+              "y": 226.22476468719069
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit:router:Spine03<->server:REV02:spine:exit",
+        "edge_id": "exit:router:Spine03<->server:REV02",
+        "edge": {
+          "id": "exit:router:Spine03<->server:REV02",
+          "link_type": "exit",
+          "group": "spine-exit",
+          "a": "router:Spine03",
+          "b": "server:REV02",
+          "a_to_b": null,
+          "b_to_a": null
+        },
+        "group": "spine-exit",
+        "source_id": "router:Spine03",
+        "target_id": "server:REV02",
+        "paths": {
+          "topology": [
+            {
+              "x": 691.4250196778781,
+              "y": 317.97070073480177
+            },
+            {
+              "x": 726.0713458379245,
+              "y": 224.25522833467676
+            }
+          ],
+          "from": [
+            {
+              "x": 691.4250196778781,
+              "y": 317.97070073480177
+            },
+            {
+              "x": 725.377828105294,
+              "y": 226.1311369557261
+            }
+          ],
+          "to": [
+            {
+              "x": 726.0713458379245,
+              "y": 224.25522833467676
+            },
+            {
+              "x": 692.1185374105086,
+              "y": 316.0947921137524
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-in:router:Spine03<->server:REV02:exit:spine",
+        "edge_id": "exit-in:router:Spine03<->server:REV02",
+        "group": "exit-spine",
+        "source_id": "server:REV02",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 733.5749803221219,
+              "y": 227.02929926519823
+            },
+            {
+              "x": 698.9286541620755,
+              "y": 320.74477166532324
+            }
+          ],
+          "from": [
+            {
+              "x": 733.5749803221219,
+              "y": 227.02929926519823
+            },
+            {
+              "x": 699.622171894706,
+              "y": 318.8688630442739
+            }
+          ],
+          "to": [
+            {
+              "x": 698.9286541620755,
+              "y": 320.74477166532324
+            },
+            {
+              "x": 732.8814625894914,
+              "y": 228.90520788624758
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Spine01<->router:Spine02:spine:pair",
+        "edge_id": "mesh:router:Spine01<->router:Spine02",
+        "group": "spine-spine",
+        "source_id": "router:Spine01",
+        "target_id": "router:Spine02",
+        "paths": {
+          "topology": [
+            {
+              "x": 356.0,
+              "y": 355.0
+            },
+            {
+              "x": 462.0,
+              "y": 355.0
+            }
+          ],
+          "from": [
+            {
+              "x": 356.0,
+              "y": 355.0
+            },
+            {
+              "x": 460.0,
+              "y": 355.0
+            }
+          ],
+          "to": [
+            {
+              "x": 462.0,
+              "y": 355.0
+            },
+            {
+              "x": 358.0,
+              "y": 355.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Spine02<->router:Spine03:spine:pair",
+        "edge_id": "mesh:router:Spine02<->router:Spine03",
+        "group": "spine-spine",
+        "source_id": "router:Spine02",
+        "target_id": "router:Spine03",
+        "paths": {
+          "topology": [
+            {
+              "x": 538.0,
+              "y": 355.0
+            },
+            {
+              "x": 644.0,
+              "y": 355.0
+            }
+          ],
+          "from": [
+            {
+              "x": 538.0,
+              "y": 355.0
+            },
+            {
+              "x": 642.0,
+              "y": 355.0
+            }
+          ],
+          "to": [
+            {
+              "x": 644.0,
+              "y": 355.0
+            },
+            {
+              "x": 540.0,
+              "y": 355.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "mesh:router:Spine01<->router:Spine03:spine:wrap",
+        "edge_id": "mesh:router:Spine01<->router:Spine03",
+        "group": "spine-spine",
+        "source_id": "router:Spine03",
+        "target_id": "router:Spine01",
+        "paths": {
+          "topology": [
+            {
+              "x": 720,
+              "y": 355
+            },
+            {
+              "x": 845.0,
+              "y": 355
+            },
+            {
+              "x": 845.0,
+              "y": 104.0
+            },
+            {
+              "x": 155.0,
+              "y": 104.0
+            },
+            {
+              "x": 155.0,
+              "y": 355
+            },
+            {
+              "x": 280,
+              "y": 355
+            }
+          ],
+          "from": [
+            {
+              "x": 720,
+              "y": 355
+            },
+            {
+              "x": 845.0,
+              "y": 355
+            },
+            {
+              "x": 845.0,
+              "y": 104.0
+            },
+            {
+              "x": 155.0,
+              "y": 104.0
+            },
+            {
+              "x": 155.0,
+              "y": 355
+            },
+            {
+              "x": 280,
+              "y": 355
+            }
+          ],
+          "to": [
+            {
+              "x": 280,
+              "y": 355
+            },
+            {
+              "x": 155.0,
+              "y": 355
+            },
+            {
+              "x": 155.0,
+              "y": 104.0
+            },
+            {
+              "x": 845.0,
+              "y": 104.0
+            },
+            {
+              "x": 845.0,
+              "y": 355
+            },
+            {
+              "x": 720,
+              "y": 355
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-exit:server:EGR01<->server:EGR02:exit:pair",
+        "edge_id": "exit-exit:server:EGR01<->server:EGR02",
+        "group": "exit-exit",
+        "source_id": "server:EGR01",
+        "target_id": "server:EGR02",
+        "paths": {
+          "topology": [
+            {
+              "x": 295.0,
+              "y": 190.0
+            },
+            {
+              "x": 340.0,
+              "y": 190.0
+            }
+          ],
+          "from": [
+            {
+              "x": 295.0,
+              "y": 190.0
+            },
+            {
+              "x": 338.0,
+              "y": 190.0
+            }
+          ],
+          "to": [
+            {
+              "x": 340.0,
+              "y": 190.0
+            },
+            {
+              "x": 297.0,
+              "y": 190.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-exit:server:EGR02<->server:PUB01:exit:pair",
+        "edge_id": "exit-exit:server:EGR02<->server:PUB01",
+        "group": "exit-exit",
+        "source_id": "server:EGR02",
+        "target_id": "server:PUB01",
+        "paths": {
+          "topology": [
+            {
+              "x": 416.0,
+              "y": 190.0
+            },
+            {
+              "x": 462.0,
+              "y": 190.0
+            }
+          ],
+          "from": [
+            {
+              "x": 416.0,
+              "y": 190.0
+            },
+            {
+              "x": 460.0,
+              "y": 190.0
+            }
+          ],
+          "to": [
+            {
+              "x": 462.0,
+              "y": 190.0
+            },
+            {
+              "x": 418.0,
+              "y": 190.0
+            }
+          ]
+        }
+        },
+        {
+        "visual_id": "exit-exit:server:EGR01<->server:PUB01:exit:wrap",
+        "edge_id": "exit-exit:server:EGR01<->server:PUB01",
+        "group": "exit-exit",
+        "source_id": "server:PUB01",
+        "target_id": "server:EGR01",
+        "paths": {
+          "topology": [
+            {
+              "x": 538,
+              "y": 190
+            },
+            {
+              "x": 566.0,
+              "y": 190
+            },
+            {
+              "x": 566.0,
+              "y": 134.0
+            },
+            {
+              "x": 191.0,
+              "y": 134.0
+            },
+            {
+              "x": 191.0,
+              "y": 190
+            },
+            {
+              "x": 219,
+              "y": 190
+            }
+          ],
+          "from": [
+            {
+              "x": 538,
+              "y": 190
+            },
+            {
+              "x": 566.0,
+              "y": 190
+            },
+            {
+              "x": 566.0,
+              "y": 134.0
+            },
+            {
+              "x": 191.0,
+              "y": 134.0
+            },
+            {
+              "x": 191.0,
+              "y": 190
+            },
+            {
+              "x": 219,
+              "y": 190
+            }
+          ],
+          "to": [
+            {
+              "x": 219,
+              "y": 190
+            },
+            {
+              "x": 191.0,
+              "y": 190
+            },
+            {
+              "x": 191.0,
+              "y": 134.0
+            },
+            {
+              "x": 566.0,
+              "y": 134.0
+            },
+            {
+              "x": 566.0,
+              "y": 190
+            },
+            {
+              "x": 538,
+              "y": 190
+            }
+          ]
+        }
+        }
+        ]
+        }
+        };
+        const canvas = document.getElementById('topologyCanvas');
+        const ctx = canvas.getContext('2d');
+        const panel = document.getElementById('panel');
+        const tooltip = document.getElementById('tooltip');
+        const colorMode = document.getElementById('colorMode');
+        const groupControls = document.getElementById('groupControls');
+        const speedControls = document.getElementById('speedControls');
+        const speedLegend = document.getElementById('speedLegend');
+        const speedMin = document.getElementById('speedMin');
+        const speedMax = document.getElementById('speedMax');
+        const speedRangeValue = document.getElementById('speedRangeValue');
+        const hideOutside = document.getElementById('hideOutside');
+        const maskLeft = document.querySelector('.mask-left');
+        const maskRight = document.querySelector('.mask-right');
+        const NODE_R = 38;
+        const SPEED_LO = 5;
+        const SPEED_ZERO = 0;
+        const SPEED_HI = 500;
+
+        const linkColor = {
+        'spine-spine': '#2563eb',
+        'leaf-spine': '#22c55e',
+        'exit-spine': '#d946ef',
+        'spine-exit': '#22d3ee',
+        'exit-exit': '#facc15',
+        'leaf-exit': '#ef4444',
+        };
+        const nodeColor = {
+        'public-exit': '#f97316',
+        'reverse-exit': '#a78bfa',
+        'spine': '#60a5fa',
+        'leaf': '#22c55e',
+        };
+        const speedColorMap = [
+        '#000004', '#010005', '#010106', '#010108', '#020109', '#02020b',
+        '#02020d', '#03030f', '#030312', '#040414', '#050416', '#060518',
+        '#06051a', '#07061c', '#08071e', '#090720', '#0a0822', '#0b0924',
+        '#0c0926', '#0d0a29', '#0e0b2b', '#100b2d', '#110c2f', '#120d31',
+        '#130d34', '#140e36', '#150e38', '#160f3b', '#180f3d', '#19103f',
+        '#1a1042', '#1c1044', '#1d1147', '#1e1149', '#20114b', '#21114e',
+        '#221150', '#241253', '#251255', '#271258', '#29115a', '#2a115c',
+        '#2c115f', '#2d1161', '#2f1163', '#311165', '#331067', '#341069',
+        '#36106b', '#38106c', '#390f6e', '#3b0f70', '#3d0f71', '#3f0f72',
+        '#400f74', '#420f75', '#440f76', '#451077', '#471078', '#491078',
+        '#4a1079', '#4c117a', '#4e117b', '#4f127b', '#51127c', '#52137c',
+        '#54137d', '#56147d', '#57157e', '#59157e', '#5a167e', '#5c167f',
+        '#5d177f', '#5f187f', '#601880', '#621980', '#641a80', '#651a80',
+        '#671b80', '#681c81', '#6a1c81', '#6b1d81', '#6d1d81', '#6e1e81',
+        '#701f81', '#721f81', '#732081', '#752181', '#762181', '#782281',
+        '#792282', '#7b2382', '#7c2382', '#7e2482', '#802582', '#812581',
+        '#832681', '#842681', '#862781', '#882781', '#892881', '#8b2981',
+        '#8c2981', '#8e2a81', '#902a81', '#912b81', '#932b80', '#942c80',
+        '#962c80', '#982d80', '#992d80', '#9b2e7f', '#9c2e7f', '#9e2f7f',
+        '#a02f7f', '#a1307e', '#a3307e', '#a5317e', '#a6317d', '#a8327d',
+        '#aa337d', '#ab337c', '#ad347c', '#ae347b', '#b0357b', '#b2357b',
+        '#b3367a', '#b5367a', '#b73779', '#b83779', '#ba3878', '#bc3978',
+        '#bd3977', '#bf3a77', '#c03a76', '#c23b75', '#c43c75', '#c53c74',
+        '#c73d73', '#c83e73', '#ca3e72', '#cc3f71', '#cd4071', '#cf4070',
+        '#d0416f', '#d2426f', '#d3436e', '#d5446d', '#d6456c', '#d8456c',
+        '#d9466b', '#db476a', '#dc4869', '#de4968', '#df4a68', '#e04c67',
+        '#e24d66', '#e34e65', '#e44f64', '#e55064', '#e75263', '#e85362',
+        '#e95462', '#ea5661', '#eb5760', '#ec5860', '#ed5a5f', '#ee5b5e',
+        '#ef5d5e', '#f05f5e', '#f1605d', '#f2625d', '#f2645c', '#f3655c',
+        '#f4675c', '#f4695c', '#f56b5c', '#f66c5c', '#f66e5c', '#f7705c',
+        '#f7725c', '#f8745c', '#f8765c', '#f9785d', '#f9795d', '#f97b5d',
+        '#fa7d5e', '#fa7f5e', '#fa815f', '#fb835f', '#fb8560', '#fb8761',
+        '#fc8961', '#fc8a62', '#fc8c63', '#fc8e64', '#fc9065', '#fd9266',
+        '#fd9467', '#fd9668', '#fd9869', '#fd9a6a', '#fd9b6b', '#fe9d6c',
+        '#fe9f6d', '#fea16e', '#fea36f', '#fea571', '#fea772', '#fea973',
+        '#feaa74', '#feac76', '#feae77', '#feb078', '#feb27a', '#feb47b',
+        '#feb67c', '#feb77e', '#feb97f', '#febb81', '#febd82', '#febf84',
+        '#fec185', '#fec287', '#fec488', '#fec68a', '#fec88c', '#feca8d',
+        '#fecc8f', '#fecd90', '#fecf92', '#fed194', '#fed395', '#fed597',
+        '#fed799', '#fed89a', '#fdda9c', '#fddc9e', '#fddea0', '#fde0a1',
+        '#fde2a3', '#fde3a5', '#fde5a7', '#fde7a9', '#fde9aa', '#fdebac',
+        '#fcecae', '#fceeb0', '#fcf0b2', '#fcf2b4', '#fcf4b6', '#fcf6b8',
+        '#fcf7b9', '#fcf9bb', '#fcfbbd', '#fcfdbf',
+        ];
+
+        const nodeById = new Map(DATA.nodes.map(node => [node.id, node]));
+        const edgeById = new Map(DATA.edges.map(edge => [edge.id, edge]));
+        const layout = DATA.layout_2d;
+        const visualNodes = layout.nodes.map(item => ({
+          ...nodeById.get(item.node_id),
+          visualId: item.visual_id,
+          x: item.x,
+          y: item.y,
+          row: item.row,
+          directView: item.direct_view,
+        }));
+        const visualEdges = layout.edges
+          .map(item => ({
+            visualId: item.visual_id,
+            edge: item.edge || edgeById.get(item.edge_id),
+            group: item.group,
+            sourceId: item.source_id,
+            targetId: item.target_id,
+            paths: item.paths,
+          }))
+          .filter(item => item.edge);
+
+        const meta = panel.querySelector('.meta');
+        const metaSummary = document.createElement('div');
+        metaSummary.textContent =
+          `${DATA.nodes.length} nodes, ${visualEdges.length} links`;
+        meta.appendChild(metaSummary);
+        if (DATA.source) {
+        const source = document.createElement('div');
+        source.className = 'source';
+        source.textContent = DATA.source;
+        meta.appendChild(source);
+        }
+
+        const groupLabels = new Map(DATA.groups.map(group => [group.id, group.label]));
+        const groupOrder = DATA.groups.map(group => group.id);
+        const visualGroupCounts = new Map();
+        visualEdges.forEach(edge => {
+        visualGroupCounts.set(edge.group, (visualGroupCounts.get(edge.group) || 0) + 1);
+        });
+        for (const groupId of groupOrder) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.dataset.group = groupId;
+        input.checked = (visualGroupCounts.get(groupId) || 0) > 0;
+        label.appendChild(input);
+        const line = document.createElement('span');
+        line.className = 'legend-line';
+        line.style.background = linkColor[groupId] || '#94a3b8';
+        line.style.color = linkColor[groupId] || '#94a3b8';
+        label.appendChild(line);
+        const text = document.createElement('span');
+        text.className = 'legend-text';
+        const name = document.createElement('span');
+        name.className = 'legend-name';
+        name.textContent = groupLabels.get(groupId) || groupId;
+        text.appendChild(name);
+        const count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = `(${visualGroupCounts.get(groupId) || 0})`;
+        text.append(' ', count);
+        label.appendChild(text);
+        groupControls.appendChild(label);
+        }
+
+        if (DATA.topology_only) {
+        colorMode.value = 'topology';
+        colorMode.querySelectorAll('option').forEach(option => {
+          option.disabled = option.value !== 'topology';
+        });
+        } else if (
+          DATA.initial_mode &&
+          colorMode.querySelector(`option[value="${DATA.initial_mode}"]`)
+        ) {
+        colorMode.value = DATA.initial_mode;
+        }
+
+        function activeGroups() {
+        const out = new Set();
+        document.querySelectorAll('input[data-group]').forEach(input => {
+          if (input.checked) out.add(input.dataset.group);
+        });
+        return out;
+        }
+        function metricForDirection(edge, sourceId) {
+        return sourceId === edge.a ? edge.a_to_b : edge.b_to_a;
+        }
+        function directedVisualEdge(visualEdge, mode) {
+        if (mode === 'to') {
+          return {
+            sourceId: visualEdge.targetId,
+            targetId: visualEdge.sourceId,
+            metric: metricForDirection(visualEdge.edge, visualEdge.targetId),
+            points: visualEdge.paths.to,
+          };
+        }
+        return {
+          sourceId: visualEdge.sourceId,
+          targetId: visualEdge.targetId,
+          metric: metricForDirection(visualEdge.edge, visualEdge.sourceId),
+          points: mode === 'topology'
+            ? visualEdge.paths.topology
+            : visualEdge.paths.from,
+        };
+        }
+        function metricValue(visualEdge, mode) {
+        if (mode === 'topology' || DATA.topology_only) return null;
+        const directed = directedVisualEdge(visualEdge, mode);
+        if (!directed.metric || directed.metric.status !== 'up') return 0;
+        return directed.metric.mbps;
+        }
+        function speedColor(mbps) {
+        const lo = Math.log10(SPEED_LO);
+        const hi = Math.log10(SPEED_HI);
+        const value = Math.log10(Math.max(SPEED_LO, mbps));
+        const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
+        return speedColorMap[Math.round(t * (speedColorMap.length - 1))];
+        }
+        function metricStatus(visualEdge, mode) {
+        if (mode === 'topology' || DATA.topology_only) return null;
+        const directed = directedVisualEdge(visualEdge, mode);
+        return directed.metric ? directed.metric.status : 'missing';
+        }
+        function statusColor(status) {
+        if (status === 'down') return '#f59e0b';
+        if (status === 'iperf-fail') return '#38bdf8';
+        if (status === 'ssh-fail') return '#38bdf8';
+        if (status === 'jq-missing') return '#38bdf8';
+        if (status === 'missing') return '#38bdf8';
+        return '#38bdf8';
+        }
+        function colorFor(visualEdge, mode) {
+        const mbps = metricValue(visualEdge, mode);
+        if (mbps === null) return linkColor[visualEdge.group] || '#94a3b8';
+        if (mbps <= 0) return statusColor(metricStatus(visualEdge, mode));
+        return speedColor(mbps);
+        }
+        function sliderToSpeed(value) {
+        const numeric = Number(value);
+        if (numeric <= 0) return SPEED_ZERO;
+        const fraction = numeric / 1000;
+        return SPEED_LO * Math.pow(SPEED_HI / SPEED_LO, fraction);
+        }
+        function speedToText(value) {
+        if (value <= 0) return '0';
+        if (value < 10) return value.toFixed(1);
+        if (value < 100) return value.toFixed(1);
+        return value.toFixed(0);
+        }
+        function selectedSpeedRange() {
+        return {
+          min: sliderToSpeed(speedMin.value),
+          max: sliderToSpeed(speedMax.value),
+        };
+        }
+        function metricInRange(visualEdge, mode) {
+        const mbps = metricValue(visualEdge, mode);
+        const range = selectedSpeedRange();
+        if (mbps === null) return true;
+        if (mbps <= 0) return range.min === SPEED_ZERO;
+        const aboveMin = Number(speedMin.value) === 0 || mbps >= range.min;
+        const belowMax = Number(speedMax.value) === 1000 || mbps <= range.max;
+        return aboveMin && belowMax;
+        }
+        function updateSpeedRangeUi(changed) {
+        let lo = Number(speedMin.value);
+        let hi = Number(speedMax.value);
+        if (lo > hi) {
+          if (changed === speedMin) hi = lo;
+          else lo = hi;
+          speedMin.value = String(lo);
+          speedMax.value = String(hi);
+        }
+        const range = selectedSpeedRange();
+        speedRangeValue.textContent =
+          `${speedToText(range.min)}-${speedToText(range.max)} Mbit/s`;
+        maskLeft.style.width = `${lo / 10}%`;
+        maskRight.style.width = `${(1000 - hi) / 10}%`;
+        draw();
+        }
+        function metricText(metric) {
+        if (!metric) return 'missing';
+        return `${metric.mbps.toFixed(1)} Mbit/s ${metric.status}`;
+        }
+        function edgeTooltip(visualEdge) {
+        const source = nodeById.get(visualEdge.sourceId);
+        const target = nodeById.get(visualEdge.targetId);
+        if (!source || !target) return `${visualEdge.group} (${visualEdge.edge.link_type})`;
+        const forward = metricForDirection(visualEdge.edge, source.id);
+        const reverse = metricForDirection(visualEdge.edge, target.id);
+        return `${visualEdge.group} (${visualEdge.edge.link_type})\n` +
+          `${source.name} -> ${target.name}: ${metricText(forward)}\n` +
+          `${target.name} -> ${source.name}: ${metricText(reverse)}`;
+        }
+
+        function refreshLegend() {
+        const mode = colorMode.value;
+        const title = speedLegend.querySelector('.legend-title');
+        const scale = speedLegend.querySelector('.speed-scale');
+        const labels = speedLegend.querySelector('.speed-scale-labels');
+        const note = speedLegend.querySelector('.legend-note');
+        const statusKey = document.getElementById('statusKey');
+        speedLegend.hidden = false;
+        const topologyMode = DATA.topology_only || mode === 'topology';
+        speedControls.hidden = topologyMode;
+        statusKey.hidden = topologyMode;
+        if (topologyMode) {
+          title.textContent = 'topology colors';
+          scale.style.background = [
+            'linear-gradient(90deg',
+            '#2563eb 0%',
+            '#22c55e 20%',
+            '#d946ef 40%',
+            '#22d3ee 60%',
+            '#ef4444 80%',
+            '#facc15 100%)',
+          ].join(', ');
+          labels.innerHTML = [
+            '<span style="left:0;transform:none">spine-spine</span>',
+            '<span style="left:20%;transform:translateX(-50%)">leaf-spine</span>',
+            '<span style="left:40%;transform:translateX(-50%)">exit-spine</span>',
+            '<span style="left:60%;transform:translateX(-50%)">spine-exit</span>',
+            '<span style="left:80%;transform:translateX(-50%)">leaf-exit</span>',
+            '<span style="right:0">exit-exit</span>',
+          ].join('');
+          note.textContent = 'Link colors show topology groups only. The speed range is inactive.';
+          return;
+        }
+        title.textContent = `speed colors: ${mode}`;
+        scale.style.background = [
+          'linear-gradient(90deg',
+          '#000004 0%',
+          '#2c115f 18%',
+          '#721f81 35%',
+          '#b73779 52%',
+          '#f1605d 68%',
+          '#feb078 84%',
+          '#fcfdbf 100%)',
+        ].join(', ');
+        labels.innerHTML = [
+          '<span style="left:0;transform:none">0</span>',
+          '<span style="left:30%;transform:translateX(-50%)">20</span>',
+          '<span style="left:65%;transform:translateX(-50%)">100</span>',
+          '<span style="right:0">500 Mbit/s</span>',
+        ].join('');
+        note.textContent = [
+          `Arrows and colors show ${mode} direction.`,
+          'Amber means down. Cyan means the link is absent or no usable',
+          'speed measurement was obtained.',
+          'A filter minimum of 0 includes down and links absent / not measured.',
+        ].join(' ');
+        }
+
+        let view = { scale: 1, x: 0, y: 0 };
+        let deviceScale = 1;
+        let dragging = false;
+        let dragPoint = null;
+        let hovered = null;
+
+        function fitView() {
+        const leftInset = innerWidth >= 900 ? 430 : 20;
+        const rightInset = 20;
+        const topInset = 20;
+        const bottomInset = 20;
+        const availableWidth = Math.max(200, innerWidth - leftInset - rightInset);
+        const availableHeight = Math.max(200, innerHeight - topInset - bottomInset);
+        view.scale = Math.min(
+          availableWidth / layout.width,
+          availableHeight / layout.height,
+        );
+        view.scale = Math.max(0.2, Math.min(3.5, view.scale));
+        view.x = leftInset + (availableWidth - layout.width * view.scale) / 2;
+        view.y = topInset + (availableHeight - layout.height * view.scale) / 2;
+        draw();
+        }
+        function resizeCanvas() {
+        deviceScale = Math.min(devicePixelRatio || 1, 2);
+        canvas.width = Math.round(innerWidth * deviceScale);
+        canvas.height = Math.round(innerHeight * deviceScale);
+        canvas.style.width = `${innerWidth}px`;
+        canvas.style.height = `${innerHeight}px`;
+        fitView();
+        }
+        function screenToWorld(clientX, clientY) {
+        return {
+          x: (clientX - view.x) / view.scale,
+          y: (clientY - view.y) / view.scale,
+        };
+        }
+        function setWorldTransform() {
+        ctx.setTransform(
+          deviceScale * view.scale,
+          0,
+          0,
+          deviceScale * view.scale,
+          deviceScale * view.x,
+          deviceScale * view.y,
+        );
+        }
+        function drawGrid() {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.16)';
+        ctx.lineWidth = 1 / view.scale;
+        ctx.beginPath();
+        for (let x = 0; x <= layout.width; x += 50) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, layout.height);
+        }
+        for (let y = 0; y <= layout.height; y += 50) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(layout.width, y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.28)';
+        ctx.strokeRect(0, 0, layout.width, layout.height);
+        ctx.restore();
+        }
+        function drawRowLabels() {
+        ctx.save();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 15px system-ui, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        layout.row_labels.forEach(label => {
+          ctx.fillText(label.text, label.x, label.y);
+        });
+        ctx.restore();
+        }
+        function pathMarker(points, fraction) {
+        if (points.length < 2) return null;
+        const lengths = [];
+        let total = 0;
+        for (let index = 0; index < points.length - 1; index += 1) {
+          const length = Math.hypot(
+            points[index + 1].x - points[index].x,
+            points[index + 1].y - points[index].y,
+          );
+          lengths.push(length);
+          total += length;
+        }
+        if (total < 0.01) return null;
+        let remaining = total * fraction;
+        for (let index = 0; index < lengths.length; index += 1) {
+          const length = lengths[index];
+          if (remaining > length && index < lengths.length - 1) {
+            remaining -= length;
+            continue;
+          }
+          const start = points[index];
+          const end = points[index + 1];
+          const ratio = Math.min(1, remaining / Math.max(length, 0.01));
+          return {
+            x: start.x + (end.x - start.x) * ratio,
+            y: start.y + (end.y - start.y) * ratio,
+            angle: Math.atan2(end.y - start.y, end.x - start.x),
+          };
+        }
+        return null;
+        }
+        function drawArrow(points, color, alpha) {
+        const marker = pathMarker(points, 0.62);
+        if (!marker) return;
+        const size = 12;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(marker.x, marker.y);
+        ctx.rotate(marker.angle);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = 'rgba(2, 6, 23, 0.92)';
+        ctx.lineWidth = 2.4;
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.72, -size * 0.62);
+        ctx.lineTo(-size * 0.72, size * 0.62);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        }
+        function edgeLineWidth(group) {
+        if (group === 'spine-spine') return 2.4;
+        if (group === 'exit-exit') return 2.2;
+        if (group === 'spine-exit' || group === 'exit-spine') return 1.8;
+        return 1.9;
+        }
+        function drawEdge(visualEdge, mode, active, hover) {
+        if (!active.has(visualEdge.group)) return;
+        const inRange = metricInRange(visualEdge, mode);
+        if (!inRange && hideOutside.checked) return;
+        const directed = directedVisualEdge(visualEdge, mode);
+        const points = directed.points;
+        const color = colorFor(visualEdge, mode);
+        const alpha = inRange ? 0.92 : 0.10;
+        const baseWidth = edgeLineWidth(visualEdge.group);
+        ctx.save();
+        ctx.globalAlpha = hover ? 1 : alpha;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = hover ? baseWidth + 1.8 : baseWidth;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.shadowColor = color;
+        ctx.shadowBlur = hover ? 12 : 4;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.stroke();
+        ctx.restore();
+        if ((mode === 'from' || mode === 'to') && (inRange || !hideOutside.checked)) {
+          drawArrow(points, color, hover ? 1 : alpha);
+        }
+        }
+        function drawNode(node, hover) {
+        const fill = nodeColor[node.layer] || '#94a3b8';
+        ctx.save();
+        ctx.shadowColor = fill;
+        ctx.shadowBlur = hover ? 20 : 9;
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = hover ? '#f8fafc' : 'rgba(226, 232, 240, 0.68)';
+        ctx.lineWidth = hover ? 3 : 1.5;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, NODE_R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#07111f';
+        ctx.font = '700 13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = node.name.length > 12
+          ? `${node.name.slice(0, 9)}...`
+          : node.name;
+        ctx.fillText(label, node.x, node.y);
+        ctx.restore();
+        }
+        function draw() {
+        ctx.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
+        ctx.clearRect(0, 0, innerWidth, innerHeight);
+        ctx.fillStyle = '#0b1020';
+        ctx.fillRect(0, 0, innerWidth, innerHeight);
+        setWorldTransform();
+        drawGrid();
+        drawRowLabels();
+        const mode = colorMode.value;
+        const active = activeGroups();
+        for (const edge of visualEdges) {
+          drawEdge(edge, mode, active, hovered && hovered.kind === 'edge' && hovered.item === edge);
+        }
+        for (const node of visualNodes) {
+          drawNode(node, hovered && hovered.kind === 'node' && hovered.item === node);
+        }
+        }
+
+        function pointSegmentDistance(point, a, b) {
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSquared = dx * dx + dy * dy;
+        if (!lengthSquared) return Math.hypot(point.x - a.x, point.y - a.y);
+        let t = ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+        }
+        function findHovered(world) {
+        for (let index = visualNodes.length - 1; index >= 0; index -= 1) {
+          const node = visualNodes[index];
+          if (Math.hypot(world.x - node.x, world.y - node.y) <= NODE_R + 4 / view.scale) {
+            return { kind: 'node', item: node };
+          }
+        }
+        const active = activeGroups();
+        const mode = colorMode.value;
+        const threshold = 8 / view.scale;
+        for (let index = visualEdges.length - 1; index >= 0; index -= 1) {
+          const edge = visualEdges[index];
+          if (!active.has(edge.group)) continue;
+          if (!metricInRange(edge, mode) && hideOutside.checked) continue;
+          const points = directedVisualEdge(edge, mode).points;
+          for (let segment = 0; segment < points.length - 1; segment += 1) {
+            const distance = pointSegmentDistance(
+              world,
+              points[segment],
+              points[segment + 1],
+            );
+            if (distance <= threshold) {
+              return { kind: 'edge', item: edge };
+            }
+          }
+        }
+        return null;
+        }
+        function showTooltip(event) {
+        if (!hovered) {
+          tooltip.style.display = 'none';
+          return;
+        }
+        if (hovered.kind === 'node') {
+          const node = hovered.item;
+          tooltip.textContent = `${node.kind}:${node.name}\nlayer: ${node.layer}` +
+            (node.directView ? '\nview: direct leaf-exit row' : '');
+        } else {
+          tooltip.textContent = edgeTooltip(hovered.item);
+        }
+        tooltip.style.display = 'block';
+        const left = Math.min(event.clientX + 14, innerWidth - tooltip.offsetWidth - 14);
+        const top = Math.min(event.clientY + 14, innerHeight - tooltip.offsetHeight - 14);
+        tooltip.style.left = `${Math.max(8, left)}px`;
+        tooltip.style.top = `${Math.max(8, top)}px`;
+        }
+
+        canvas.addEventListener('pointerdown', event => {
+        dragging = true;
+        dragPoint = { x: event.clientX, y: event.clientY };
+        canvas.classList.add('dragging');
+        canvas.setPointerCapture(event.pointerId);
+        tooltip.style.display = 'none';
+        });
+        canvas.addEventListener('pointermove', event => {
+        if (dragging && dragPoint) {
+          view.x += event.clientX - dragPoint.x;
+          view.y += event.clientY - dragPoint.y;
+          dragPoint = { x: event.clientX, y: event.clientY };
+          hovered = null;
+          draw();
+          return;
+        }
+        const next = findHovered(screenToWorld(event.clientX, event.clientY));
+        if (!hovered || !next || hovered.kind !== next.kind || hovered.item !== next.item) {
+          hovered = next;
+          draw();
+        }
+        showTooltip(event);
+        });
+        function stopDragging(event) {
+        dragging = false;
+        dragPoint = null;
+        canvas.classList.remove('dragging');
+        if (event && canvas.hasPointerCapture(event.pointerId)) {
+          canvas.releasePointerCapture(event.pointerId);
+        }
+        }
+        canvas.addEventListener('pointerup', stopDragging);
+        canvas.addEventListener('pointercancel', stopDragging);
+        canvas.addEventListener('pointerleave', event => {
+        if (!dragging) {
+          hovered = null;
+          tooltip.style.display = 'none';
+          draw();
+        }
+        });
+        canvas.addEventListener('wheel', event => {
+        event.preventDefault();
+        const before = screenToWorld(event.clientX, event.clientY);
+        const factor = Math.exp(-event.deltaY * 0.0012);
+        view.scale = Math.max(0.15, Math.min(5, view.scale * factor));
+        view.x = event.clientX - before.x * view.scale;
+        view.y = event.clientY - before.y * view.scale;
+        draw();
+        }, { passive: false });
+        canvas.addEventListener('dblclick', fitView);
+
+        document.querySelectorAll('input[data-group]').forEach(input => {
+        input.addEventListener('change', draw);
+        });
+        colorMode.addEventListener('change', () => {
+        refreshLegend();
+        draw();
+        });
+        speedMin.addEventListener('input', () => updateSpeedRangeUi(speedMin));
+        speedMax.addEventListener('input', () => updateSpeedRangeUi(speedMax));
+        hideOutside.addEventListener('change', draw);
+        document.getElementById('resetRange').addEventListener('click', () => {
+        speedMin.value = '0';
+        speedMax.value = '1000';
+        updateSpeedRangeUi(null);
+        });
+        document.getElementById('fitView').addEventListener('click', fitView);
+        addEventListener('resize', resizeCanvas);
+
+        refreshLegend();
+        updateSpeedRangeUi(null);
+        resizeCanvas();
+        </script>
+    </body>
+</html>

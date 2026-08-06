@@ -18,6 +18,7 @@ from tools.common import (
     exit_out_iface_name,
     mesh_link_specs,
     mesh_server_iface_name_for_target,
+    public_exit_hub_names,
 )
 from tools.topology_index import load_generated_topology_index
 from tools.topology_metrics import (
@@ -38,8 +39,11 @@ def config_roles(cfg: ConfigData) -> TopologyRoles:
     routers = [r.name for r in cfg.routers]
     spines = [h.name for h in cfg.mesh_hubs]
     leafs = [name for name in routers if name not in set(spines)]
-    public_exits = [h.name for h in cfg.exit_hubs if h.listen_ip]
-    reverse_exits = [h.name for h in cfg.exit_hubs if not h.listen_ip]
+    public_exits = public_exit_hub_names(cfg)
+    public_exit_set = set(public_exits)
+    reverse_exits = [
+        hub.name for hub in cfg.exit_hubs if hub.name not in public_exit_set
+    ]
     exits = public_exits + reverse_exits
     return TopologyRoles(
         routers=routers,

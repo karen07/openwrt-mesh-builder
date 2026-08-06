@@ -5,138 +5,57 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.config_io import load_json_config
-from tools.process import die
 from tools.common import ConfigData, build_config_data
-from tools.layout import topology_2d_path
+from tools.config_io import load_json_config
+from tools.layout import topology_2d_path, topology_2d_svg_path
+from tools.process import die
+from tools.topology_2d_layout import build_topology_2d_layout
+from tools.topology_2d_page import html_page
+from tools.topology_3d_graph import graph_from_rows
 from tools.topology_cli import (
     add_output_arg,
     add_topology_input_args,
     resolved_output_path,
     write_topology_output,
 )
-from tools.topology_svg import SvgFile, render_topology_overview_svg
 from tools.topology_data import (
     SpeedIndex,
+    SpeedRow,
+    TopologyRoles,
     config_roles,
     format_ts,
     infer_roles_from_rows,
     load_config_roles,
     load_speed_rows,
+    node_names_from_rows,
     topology_rows_from_config,
     topology_rows_from_generated,
 )
-
-
-def output_paths(out_path: Path) -> dict[str, Path]:
-    stem = out_path.stem
-    for suffix in ("_topology", "_from", "_to"):
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-
-    return {
-        "topology": out_path.with_name(f"{stem}_topology{out_path.suffix}"),
-        "from": out_path.with_name(f"{stem}_from{out_path.suffix}"),
-        "to": out_path.with_name(f"{stem}_to{out_path.suffix}"),
-    }
-
-
-def build_svgs(args: argparse.Namespace) -> list[SvgFile]:
-    if args.topology_only:
-        raw_cfg = load_json_config(Path(args.config))
-        cfg: ConfigData = build_config_data(raw_cfg)
-        roles = config_roles(cfg)
-        if args.topology_source == "config":
-            rows = topology_rows_from_config(cfg)
-            generated_text = "config topology only"
-        else:
-            rows, warnings = topology_rows_from_generated(cfg)
-            for warning in warnings:
-                print(f"topology warning: {warning}", file=sys.stderr)
-            if not rows:
-                die("no generated topology links found")
-            generated_text = "generated AWG/UCI topology"
-        topology_only_data = True
-    else:
-        rows, generated_at, iperf_time = load_speed_rows(Path(args.speeds_json))
-        if not rows:
-            die(f"{args.speeds_json}: no rows found")
-
-        roles = load_config_roles(Path(args.config), rows) or infer_roles_from_rows(
-            rows
-        )
-        generated_text = format_ts(generated_at)
-        if iperf_time:
-            generated_text = f"{generated_text}, iperf_time={iperf_time}s"
-        topology_only_data = False
-
-    speeds = SpeedIndex(rows)
-    svgs: list[SvgFile] = []
-
-    if args.topology_only or args.only in {"all", "topology"}:
-        svgs.append(
-            SvgFile(
-                name="topology",
-                text=render_topology_overview_svg(
-                    roles,
-                    speeds,
-                    args.title,
-                    generated_text,
-                    topology_only_data,
-                    "topology",
-                ),
-            )
-        )
-
-    if args.topology_only:
-        return svgs
-
-    svgs.extend(
-        [
-            SvgFile(
-                name="from",
-                text=render_topology_overview_svg(
-                    roles,
-                    speeds,
-                    args.title,
-                    generated_text,
-                    topology_only_data,
-                    "from",
-                ),
-            ),
-            SvgFile(
-                name="to",
-                text=render_topology_overview_svg(
-                    roles,
-                    speeds,
-                    args.title,
-                    generated_text,
-                    topology_only_data,
-                    "to",
-                ),
-            ),
-        ]
-    )
-    return svgs
+from tools.topology_svg import render_topology_overview_svg
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(
-        description="Render measured or configured topology SVGs"
+        description="Render interactive 2D canvas HTML and topology SVG"
     )
     add_topology_input_args(ap)
-    add_output_arg(ap, help_text="output SVG path")
+    add_output_arg(ap, help_text="output HTML path")
+    ap.add_argument(
+        "--svg-out",
+        default=None,
+        help="output topology-only SVG path",
+    )
     ap.add_argument(
         "--only",
         choices=("all", "topology", "from", "to"),
         default="all",
-        help="which SVG to write",
+        help=(
+            "initial HTML color mode; 'all' keeps all interactive modes and "
+            "starts with from"
+        ),
     )
-    # Deprecated compatibility switches. The current SVG renderer uses link
-    # colors and SVG tooltips, not inline speed labels/degraded classes. Keep
-    # accepting old command lines, but do not advertise no-op flags in --help.
+    # Deprecated compatibility switches retained for old command lines.
     ap.add_argument(
         "--degraded-mbps",
         type=float,
@@ -149,33 +68,121 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="none",
         help=argparse.SUPPRESS,
     )
-
     args = ap.parse_args(raw_argv)
 
     if args.topology_only and args.only in {"from", "to"}:
         die(f"--only {args.only} requires measured --speeds-json data")
-
     if args.degraded_mbps < 0:
         die("--degraded-mbps must be non-negative")
-
     return args
+
+
+def measured_roles(
+    config_path: Path,
+    cfg: ConfigData | None,
+    rows: list[SpeedRow],
+) -> TopologyRoles:
+    row_roles = infer_roles_from_rows(rows)
+    if cfg is None:
+        return row_roles
+
+    cfg_roles = config_roles(cfg)
+    cfg_names = set(cfg_roles.routers + cfg_roles.exits)
+    row_routers, row_exits = node_names_from_rows(rows)
+    row_names = row_routers | row_exits
+
+    # Do not mix an unrelated default/sample config into imported measurements.
+    if row_names and not (row_names & cfg_names):
+        return row_roles
+    return load_config_roles(config_path, rows) or row_roles
+
+
+def load_render_data(
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], TopologyRoles, SpeedIndex, str, bool]:
+    config_path = Path(args.config)
+    cfg: ConfigData | None = None
+    if config_path.exists():
+        cfg = build_config_data(load_json_config(config_path))
+
+    if args.topology_only:
+        if cfg is None:
+            die(f"missing config file: {config_path}")
+        if args.topology_source == "config":
+            rows = topology_rows_from_config(cfg)
+            source_text = "config topology only"
+        else:
+            rows, warnings = topology_rows_from_generated(cfg)
+            for warning in warnings:
+                print(f"topology warning: {warning}", file=sys.stderr)
+            if not rows:
+                die("no generated topology links found")
+            source_text = "generated AWG/UCI topology"
+        roles = config_roles(cfg)
+        generated_text = source_text
+        topology_only = True
+    else:
+        rows, generated_at, iperf_time = load_speed_rows(Path(args.speeds_json))
+        if not rows:
+            die(f"{args.speeds_json}: no rows found")
+        parts = []
+        if generated_at:
+            parts.append(f"generated_at={generated_at}")
+        if iperf_time:
+            parts.append(f"iperf_time={iperf_time}s")
+        source_text = ", ".join(parts) or str(args.speeds_json)
+        generated_text = format_ts(generated_at)
+        if iperf_time:
+            generated_text = f"{generated_text}, iperf_time={iperf_time}s"
+        roles = measured_roles(config_path, cfg, rows)
+        topology_only = False
+
+    data = graph_from_rows(
+        rows=rows,
+        cfg=cfg,
+        title=args.title,
+        topology_only=topology_only,
+        source_text=source_text,
+    )
+    return data, roles, SpeedIndex(rows), generated_text, topology_only
+
+
+def resolved_svg_output(args: argparse.Namespace, html_out: Path) -> Path:
+    if args.svg_out is not None:
+        return Path(args.svg_out)
+    if args.out is not None:
+        return html_out.with_suffix(".svg")
+    return topology_2d_svg_path()
 
 
 def main() -> None:
     args = parse_args()
-    svgs = build_svgs(args)
-    out_path = resolved_output_path(args.out, topology_2d_path())
-    paths = output_paths(out_path)
+    data, roles, speeds, generated_text, topology_only = load_render_data(args)
+    if data["topology_only"]:
+        data["initial_mode"] = "topology"
+    elif args.only in {"topology", "from", "to"}:
+        data["initial_mode"] = args.only
+    else:
+        data["initial_mode"] = "from"
 
-    for svg in svgs:
-        if args.only != "all" and args.only != svg.name:
-            continue
-        if args.topology_only:
-            path = out_path
-        else:
-            path = paths[svg.name]
-        write_topology_output(path, svg.text)
-        print(path)
+    data["layout_2d"] = build_topology_2d_layout(data)
+    html_out = resolved_output_path(args.out, topology_2d_path())
+    svg_out = resolved_svg_output(args, html_out)
+
+    write_topology_output(html_out, html_page(data))
+    write_topology_output(
+        svg_out,
+        render_topology_overview_svg(
+            roles,
+            speeds,
+            args.title,
+            generated_text,
+            topology_only,
+            "topology",
+        ),
+    )
+    print(html_out)
+    print(svg_out)
 
 
 if __name__ == "__main__":

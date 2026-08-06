@@ -209,7 +209,13 @@ def main() -> None:
     ap.add_argument("--iperf-time", type=int, default=IPERF_TIME_SEC)
     ap.add_argument("--iperf-bitrate", default=IPERF_BITRATE)
     ap.add_argument("--format", choices=("table", "tsv", "json"), default="table")
-    ap.add_argument("--out", help="optional output file in the selected format")
+    ap.add_argument(
+        "--out",
+        help=(
+            "write the report in the selected format to this file; "
+            "when set, the report is not printed to stdout"
+        ),
+    )
     ap.add_argument(
         "--json-out",
         help="optional JSON output file, useful for later SVG rendering",
@@ -264,10 +270,11 @@ def main() -> None:
             generated=generated,
         )
         if args.progress:
-            eprint(
+            print(
                 f"[{idx}/{len(sources)}] "
                 f"{source.kind}:{source.name} "
-                f"ssh={'/'.join(source.ssh_hosts)} targets={len(targets)}"
+                f"ssh={'/'.join(source.ssh_hosts)} targets={len(targets)}",
+                flush=True,
             )
 
         if args.list_targets:
@@ -317,8 +324,10 @@ def main() -> None:
     else:
         text = format_table(all_rows)
 
-    print(text)
-    write_optional(args.out, text)
+    if args.out:
+        write_optional(args.out, text)
+    else:
+        print(text)
     write_optional(args.json_out, json_text)
 
 

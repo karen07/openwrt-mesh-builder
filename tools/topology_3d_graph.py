@@ -18,7 +18,13 @@ from .topology_data import (
 )
 from .config_io import load_json_config
 from .process import die
-from .common import ConfigData, build_config_data
+from .common import (
+    ConfigData,
+    build_config_data,
+    exit_exit_link_pairs,
+    public_exit_hub_names,
+    ring_link_pairs,
+)
 from .topology_metrics import display_link_text
 
 LINK_GROUPS = (
@@ -49,6 +55,8 @@ class GraphEdge:
     group: str
     a: str
     b: str
+    source_id: str
+    target_id: str
     a_to_b: dict[str, Any] | None
     b_to_a: dict[str, Any] | None
 
@@ -112,8 +120,9 @@ def public_and_reverse_exits(
     if cfg is None:
         return exits, []
 
-    public = [hub.name for hub in cfg.exit_hubs if hub.listen_ip]
-    reverse = [hub.name for hub in cfg.exit_hubs if not hub.listen_ip]
+    public = public_exit_hub_names(cfg)
+    public_set = set(public)
+    reverse = [hub.name for hub in cfg.exit_hubs if hub.name not in public_set]
     public = keep_order([name for name in public if name in set(exits)])
     reverse = keep_order([name for name in reverse if name in set(exits)])
 
@@ -248,31 +257,78 @@ def group_metadata(edges: list[GraphEdge]) -> list[dict[str, Any]]:
     return out
 
 
+def ring_directions(
+    cfg: ConfigData | None,
+    node_by_id: dict[str, GraphNode],
+) -> dict[tuple[str, str, str], tuple[str, str]]:
+    directions: dict[tuple[str, str, str], tuple[str, str]] = {}
+
+    if cfg is not None:
+        spine_names = [hub.name for hub in cfg.mesh_hubs]
+        for source_name, target_name in ring_link_pairs(spine_names):
+            source = node_id("router", source_name)
+            target = node_id("router", target_name)
+            if source not in node_by_id or target not in node_by_id:
+                continue
+            a, b = sorted_pair(source, target)
+            directions[("mesh", a, b)] = (source, target)
+
+        for source_name, target_name in exit_exit_link_pairs(cfg):
+            source = node_id("server", source_name)
+            target = node_id("server", target_name)
+            if source not in node_by_id or target not in node_by_id:
+                continue
+            a, b = sorted_pair(source, target)
+            directions[("exit-exit", a, b)] = (source, target)
+
+    public_exits = [
+        node.id for node in node_by_id.values() if node.layer == "public-exit"
+    ]
+    spines = [node.id for node in node_by_id.values() if node.layer == "spine"]
+    for link_type, ordered in (("mesh", spines), ("exit-exit", public_exits)):
+        for source, target in ring_link_pairs(ordered):
+            a, b = sorted_pair(source, target)
+            directions.setdefault((link_type, a, b), (source, target))
+    return directions
+
+
 def graph_edges(
     rows: list[SpeedRow],
     node_by_id: dict[str, GraphNode],
+    cfg: ConfigData | None,
 ) -> list[GraphEdge]:
     seen: set[tuple[str, str, str]] = set()
+    first_direction: dict[tuple[str, str, str], tuple[str, str]] = {}
     for row in rows:
         a, b = sorted_pair(row.source_id, row.peer_id)
-        seen.add((row.link_type, a, b))
+        key = (row.link_type, a, b)
+        seen.add(key)
+        first_direction.setdefault(key, (row.source_id, row.peer_id))
 
+    directions = ring_directions(cfg, node_by_id)
     speeds = SpeedIndex(rows)
     out: list[GraphEdge] = []
     for link_type, a, b in sorted(seen):
         pair = speeds.pair(link_type, a, b)
+        group = graph_edge_group(
+            link_type=link_type,
+            a=a,
+            b=b,
+            node_by_id=node_by_id,
+        )
+        source_id, target_id = directions.get(
+            (link_type, a, b),
+            first_direction[(link_type, a, b)],
+        )
         out.append(
             GraphEdge(
                 id=f"{link_type}:{a}<->{b}",
                 link_type=link_type,
-                group=graph_edge_group(
-                    link_type=link_type,
-                    a=a,
-                    b=b,
-                    node_by_id=node_by_id,
-                ),
+                group=group,
                 a=a,
                 b=b,
+                source_id=source_id,
+                target_id=target_id,
                 a_to_b=metric_to_dict(pair.a_to_b),
                 b_to_a=metric_to_dict(pair.b_to_a),
             )
@@ -293,7 +349,7 @@ def graph_from_rows(
     node_ids = set(node_by_id)
     edges = [
         edge
-        for edge in graph_edges(rows, node_by_id)
+        for edge in graph_edges(rows, node_by_id, cfg)
         if edge.a in node_ids and edge.b in node_ids
     ]
 
