@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
-# Python wrapper only. Keep all page markup in topology-3d-template.html.
+# Python wrapper only. Keep all page markup in topology-2d-template.html.
 import json
 from html import escape
 from pathlib import Path
 from typing import Any
 
-TEMPLATE_PATH = Path(__file__).with_name("topology-3d-template.html")
+TEMPLATE_PATH = Path(__file__).with_name("topology-2d-template.html")
 
 
 def clean_generated_html(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
 
 
-def html_page(data: dict[str, Any], three_url: str, orbit_url: str) -> str:
+def html_page(data: dict[str, Any]) -> str:
     data_json = json.dumps(data, ensure_ascii=False, indent=2)
     replacements = {
         "__TITLE__": escape(str(data["title"]), quote=True),
-        "__THREE_URL_JSON__": json.dumps(three_url, ensure_ascii=False),
-        "__ORBIT_URL_JSON__": json.dumps(orbit_url, ensure_ascii=False),
         "__DATA_JSON__": data_json,
     }
 

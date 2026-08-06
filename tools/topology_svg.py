@@ -41,10 +41,8 @@ def canonical_offset(
 from .topology_svg_geometry import (
     add_overview_directed_link,
     add_overview_ring_links,
-    layout_leaf_row,
-    layout_spine_row,
+    build_overview_layout,
     overview_directed_metric,
-    overview_ring_wrap_envelope,
 )
 from .topology_svg_theme import (
     SvgFile,
@@ -75,59 +73,23 @@ def render_topology_overview_svg(
     reverse_exits = list(roles.reverse_exits)
     exits = public_exits + reverse_exits
     leafs = roles.leafs
-    max_count = max(len(spines), len(exits), len(public_exits), len(leafs), 2)
-    width = max(1000, 128 * max_count + 220)
-    height = 930
-    margin = 135
-    # Keep enough header room for wrapped subtitles and the outer spine ring.
-    # The spine ring is drawn above the exit row, so the diagram starts lower
-    # than a normal four-row layout.
-    exit_y = 190
-    spine_y = 355
-    leaf_y = 585
-    direct_exit_y = 780
-
-    exit_pos = layout_spine_row(exits, exit_y, width, margin)
-    spine_pos = layout_spine_row(spines, spine_y, width, margin)
-    leaf_pos = layout_leaf_row(leafs, leaf_y, width, margin)
-    direct_exit_pos = layout_spine_row(public_exits, direct_exit_y, width, margin)
-
-    exit_ring_envelope = overview_ring_wrap_envelope(
+    layout = build_overview_layout(
+        spines,
         public_exits,
-        exit_pos,
-        "top",
+        reverse_exits,
+        leafs,
     )
-    all_exit_envelope = overview_ring_wrap_envelope(
-        exits,
-        exit_pos,
-        "top",
-    )
-
-    if exits:
-        # The spine ring is an outer envelope for the whole visible exit row,
-        # including reverse exits.  If the public-exit ring is present, place
-        # the spine wrap slightly above it; otherwise place it slightly above
-        # the exit nodes.
-        exit_xs = [x for x, _ in exit_pos.values()]
-        if all_exit_envelope is not None:
-            exit_left, exit_right, _ = all_exit_envelope
-        else:
-            exit_left = min(exit_xs) - NODE_R - 28
-            exit_right = max(exit_xs) + NODE_R + 28
-
-        if exit_ring_envelope is not None:
-            _, _, exit_wrap_y = exit_ring_envelope
-            spine_wrap_y = exit_wrap_y - 30
-        else:
-            spine_wrap_y = exit_y - NODE_R - 30
-
-        spine_ring_envelope = (
-            exit_left - 36,
-            exit_right + 36,
-            spine_wrap_y,
-        )
-    else:
-        spine_ring_envelope = None
+    width = layout.width
+    height = layout.height
+    exit_y = layout.exit_y
+    spine_y = layout.spine_y
+    leaf_y = layout.leaf_y
+    direct_exit_y = layout.direct_exit_y
+    exit_pos = layout.exit_pos
+    spine_pos = layout.spine_pos
+    leaf_pos = layout.leaf_pos
+    direct_exit_pos = layout.direct_exit_pos
+    spine_ring_envelope = layout.spine_ring_envelope
 
     if topology_only_data:
         origin = "Topology from generated AWG/UCI topology"

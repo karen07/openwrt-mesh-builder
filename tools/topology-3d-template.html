@@ -14,6 +14,9 @@
         }
         </script>
         <style>
+        :root {
+        color-scheme: dark;
+        }
         html,
         body {
         margin: 0;
@@ -29,19 +32,20 @@
         #app {
         width: 100vw;
         height: 100vh;
+        display: block;
         }
         #panel {
         position: fixed;
         top: 20px;
         left: 20px;
         z-index: 10;
-        width: 360px;
+        width: 380px;
         max-width: calc(100vw - 40px);
         max-height: calc(100vh - 40px);
         overflow-x: hidden;
         overflow-y: auto;
         box-sizing: border-box;
-        background: rgba(15, 23, 42, 0.78);
+        background: rgba(15, 23, 42, 0.82);
         border: 1px solid rgba(148, 163, 184, 0.30);
         border-radius: 16px;
         padding: 18px 18px 16px;
@@ -64,29 +68,35 @@
         #panel .meta .source {
         margin-top: 4px;
         }
-        #panel select {
+        #panel select,
+        #panel button {
         background: rgba(15, 23, 42, 0.95);
         color: #f3f4f6;
         border: 1px solid rgba(148, 163, 184, 0.35);
         border-radius: 6px;
-        padding: 4px 28px 4px 8px;
+        padding: 4px 9px;
         font: inherit;
+        }
+        #panel button {
+        cursor: pointer;
         }
         #groupControls {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 12px 22px;
         }
-        #groupControls label {
+        #groupControls label,
+        .check-row {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 9px;
         margin: 0;
         cursor: pointer;
         user-select: none;
         min-width: 0;
         }
-        #groupControls input[type="checkbox"] {
+        #groupControls input[type="checkbox"],
+        .check-row input[type="checkbox"] {
         width: 15px;
         height: 15px;
         margin: 0;
@@ -104,7 +114,9 @@
         font-size: 14px;
         color: #e5e7eb;
         min-width: 0;
-        overflow-wrap: anywhere;
+        }
+        .legend-name {
+        white-space: nowrap;
         }
         #groupControls .count {
         color: #94a3b8;
@@ -114,23 +126,139 @@
         .panel-row {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 8px;
         margin-top: 18px;
-        font-size: 16px;
+        font-size: 15px;
         color: #e5e7eb;
+        }
+        .panel-row .spacer {
+        flex: 1 1 auto;
         }
         .panel-help {
         color: #94a3b8;
         font-size: 12px;
+        line-height: 1.4;
         margin-top: 14px;
         }
+        #speedControls,
         #speedLegend {
         margin-top: 14px;
         padding-top: 14px;
         border-top: 1px solid rgba(148, 163, 184, 0.20);
         }
+        #speedControls[hidden],
         #speedLegend[hidden] {
         display: none;
+        }
+        .speed-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+        font-size: 13px;
+        color: #cbd5e1;
+        }
+        .speed-heading .value {
+        margin-left: auto;
+        color: #f8fafc;
+        font-variant-numeric: tabular-nums;
+        }
+        .dual-range {
+        position: relative;
+        height: 28px;
+        margin: 0 1px;
+        }
+        .dual-range .track {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 10px;
+        height: 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.30);
+        background: linear-gradient(
+        90deg,
+        #000004 0%,
+        #2c115f 18%,
+        #721f81 35%,
+        #b73779 52%,
+        #f1605d 68%,
+        #feb078 84%,
+        #fcfdbf 100%
+        );
+        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.32);
+        }
+        .dual-range .mask {
+        position: absolute;
+        top: 10px;
+        height: 12px;
+        background: rgba(2, 6, 23, 0.72);
+        pointer-events: none;
+        }
+        .dual-range .mask-left {
+        left: 0;
+        border-radius: 999px 0 0 999px;
+        }
+        .dual-range .mask-right {
+        right: 0;
+        border-radius: 0 999px 999px 0;
+        }
+        .dual-range input[type="range"] {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 28px;
+        margin: 0;
+        appearance: none;
+        background: transparent;
+        pointer-events: none;
+        }
+        .dual-range input[type="range"]::-webkit-slider-runnable-track {
+        height: 10px;
+        background: transparent;
+        border: 0;
+        }
+        .dual-range input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        margin-top: -3px;
+        border-radius: 50%;
+        border: 2px solid #e2e8f0;
+        background: #0f172a;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+        pointer-events: auto;
+        cursor: ew-resize;
+        }
+        .dual-range input[type="range"]::-moz-range-track {
+        height: 10px;
+        background: transparent;
+        border: 0;
+        }
+        .dual-range input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid #e2e8f0;
+        background: #0f172a;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+        pointer-events: auto;
+        cursor: ew-resize;
+        }
+        .range-options {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+        color: #cbd5e1;
+        font-size: 12px;
+        }
+        .range-options button {
+        margin-left: auto;
+        padding: 2px 8px;
+        font-size: 12px;
         }
         #speedLegend .legend-title {
         font-size: 13px;
@@ -147,17 +275,6 @@
         height: 12px;
         border-radius: 999px;
         border: 1px solid rgba(148, 163, 184, 0.30);
-        background: linear-gradient(
-        90deg,
-        #111827 0%,
-        #2b2f77 10%,
-        #2745cc 22%,
-        #1287e3 38%,
-        #10cbe6 52%,
-        #19d87f 67%,
-        #8be34a 82%,
-        #facc15 100%
-        );
         box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.32);
         }
         .speed-scale-labels {
@@ -172,15 +289,46 @@
         top: 0;
         white-space: nowrap;
         }
+        .status-key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 10px;
+        color: #cbd5e1;
+        font-size: 12px;
+        }
+        .status-key-item {
+        --status-color: #94a3b8;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        }
+        .status-key-item::before {
+        content: "";
+        display: block;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 5px;
+        border-radius: 999px;
+        background-color: var(--status-color);
+        box-shadow: 0 0 7px var(--status-color);
+        }
+        .status-key-down {
+        --status-color: #f59e0b;
+        }
+        .status-key-missing {
+        --status-color: #38bdf8;
+        }
         #tooltip {
         position: fixed;
         display: none;
         z-index: 20;
         pointer-events: none;
-        max-width: 460px;
+        max-width: min(540px, calc(100vw - 28px));
         padding: 8px 10px;
         border-radius: 8px;
-        background: rgba(2, 6, 23, 0.92);
+        background: rgba(2, 6, 23, 0.94);
         border: 1px solid #475569;
         color: #e5e7eb;
         font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -209,20 +357,37 @@
                     </option>
                 </select>
             </div>
+            <div id="speedControls" hidden="">
+                <div class="speed-heading">
+                    <span>speed range</span> <span class="value" id="speedRangeValue"></span>
+                </div>
+                <div class="dual-range">
+                    <div class="track"></div>
+                    <div class="mask mask-left"></div>
+                    <div class="mask mask-right"></div><input id="speedMin" type="range" min="0"
+                    max="1000" value="0" step="1" aria-label="minimum speed"> <input id="speedMax"
+                    type="range" min="0" max="1000" value="1000" step="1" aria-label=
+                    "maximum speed">
+                </div>
+                <div class="range-options">
+                    <label class="check-row"><input id="hideOutside" type="checkbox"> <span>hide
+                    outside range</span></label> <button id="resetRange" type=
+                    "button">reset</button>
+                </div>
+            </div>
             <div id="speedLegend" hidden="">
                 <div class="legend-title"></div>
                 <div class="speed-scale"></div>
-                <div class="speed-scale-labels">
-                    <span style="left:0;transform:none">5</span> <span style=
-                    "left:30%;transform:translateX(-50%)">20</span> <span style=
-                    "left:65%;transform:translateX(-50%)">100</span> <span style="right:0">500
-                    Mbit/s</span>
+                <div class="speed-scale-labels"></div>
+                <div id="statusKey" class="status-key" hidden="">
+                    <span class="status-key-item status-key-down">down</span> <span class=
+                    "status-key-item status-key-missing">link absent / not measured</span>
                 </div>
                 <div class="legend-note"></div>
             </div>
             <div class="panel-help">
-                drag = rotate, wheel = zoom, right drag = pan, hover = details; arrows show visible
-                direction in from/to
+                drag = rotate, wheel = zoom, right drag = pan, hover = details; arrows point from
+                the measured source to its destination
             </div>
         </div>
         <div id="tooltip"></div>
@@ -247,9 +412,20 @@
         }
 
         const groupControls = document.getElementById('groupControls');
+        const speedControls = document.getElementById('speedControls');
         const speedLegend = document.getElementById('speedLegend');
         const speedLegendTitle = speedLegend.querySelector('.legend-title');
         const speedLegendNote = speedLegend.querySelector('.legend-note');
+        const statusKey = document.getElementById('statusKey');
+        const speedMin = document.getElementById('speedMin');
+        const speedMax = document.getElementById('speedMax');
+        const speedRangeValue = document.getElementById('speedRangeValue');
+        const hideOutside = document.getElementById('hideOutside');
+        const maskLeft = speedControls.querySelector('.mask-left');
+        const maskRight = speedControls.querySelector('.mask-right');
+        const SPEED_LO = 5;
+        const SPEED_ZERO = 0;
+        const SPEED_HI = 500;
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0b1020);
@@ -367,7 +543,10 @@
 
         const text = document.createElement('span');
         text.className = 'legend-text';
-        text.append(group.label);
+        const name = document.createElement('span');
+        name.className = 'legend-name';
+        name.textContent = group.label;
+        text.appendChild(name);
 
         const count = document.createElement('span');
         count.className = 'count';
@@ -482,6 +661,11 @@
         };
         }
 
+        if (edge.group === 'spine-spine' || edge.group === 'exit-exit') {
+        const source = nodeById.get(edge.source_id);
+        const target = nodeById.get(edge.target_id);
+        if (source && target) return withOrder(source, target);
+        }
         if (edge.group === 'leaf-spine') {
         return a.layer === 'leaf' ? withOrder(a, b) : withOrder(b, a);
         }
@@ -526,11 +710,74 @@
         return new THREE.Color(speedColorMap[idx]);
         }
 
+        function metricStatus(edge, mode) {
+        if (mode === 'topology' || DATA.topology_only) return null;
+        const directed = directedEdge(edge, mode);
+        return directed && directed.metric ? directed.metric.status : 'missing';
+        }
+
+        function statusColor(status) {
+        if (status === 'down') return 0xf59e0b;
+        if (status === 'iperf-fail') return 0x38bdf8;
+        if (status === 'ssh-fail') return 0x38bdf8;
+        if (status === 'jq-missing') return 0x38bdf8;
+        if (status === 'missing') return 0x38bdf8;
+        return 0x38bdf8;
+        }
+
         function colorFor(edge, mode) {
         const mbps = metricValue(edge, mode);
         if (mbps === null) return linkColor[edge.group] || 0x94a3b8;
-        if (mbps <= 0) return 0x111827;
+        if (mbps <= 0) return statusColor(metricStatus(edge, mode));
         return speedColor(mbps);
+        }
+
+        function sliderToSpeed(value) {
+        const numeric = Number(value);
+        if (numeric <= 0) return SPEED_ZERO;
+        const fraction = numeric / 1000;
+        return SPEED_LO * Math.pow(SPEED_HI / SPEED_LO, fraction);
+        }
+
+        function speedToText(value) {
+        if (value <= 0) return '0';
+        if (value < 10) return value.toFixed(1);
+        if (value < 100) return value.toFixed(1);
+        return value.toFixed(0);
+        }
+
+        function selectedSpeedRange() {
+        return {
+          min: sliderToSpeed(speedMin.value),
+          max: sliderToSpeed(speedMax.value),
+        };
+        }
+
+        function metricInRange(edge, mode) {
+        const mbps = metricValue(edge, mode);
+        const range = selectedSpeedRange();
+        if (mbps === null) return true;
+        if (mbps <= 0) return range.min === SPEED_ZERO;
+        const aboveMin = Number(speedMin.value) === 0 || mbps >= range.min;
+        const belowMax = Number(speedMax.value) === 1000 || mbps <= range.max;
+        return aboveMin && belowMax;
+        }
+
+        function updateSpeedRangeUi(changed) {
+        let lo = Number(speedMin.value);
+        let hi = Number(speedMax.value);
+        if (lo > hi) {
+          if (changed === speedMin) hi = lo;
+          else lo = hi;
+          speedMin.value = String(lo);
+          speedMax.value = String(hi);
+        }
+        const range = selectedSpeedRange();
+        speedRangeValue.textContent =
+          `${speedToText(range.min)}-${speedToText(range.max)} Mbit/s`;
+        maskLeft.style.width = `${lo / 10}%`;
+        maskRight.style.width = `${(1000 - hi) / 10}%`;
+        refreshEdges();
         }
 
         function metricText(m) {
@@ -540,25 +787,15 @@
         }
 
         function edgeTooltip(edge, mode) {
-        const a = nodeById.get(edge.a);
-        const b = nodeById.get(edge.b);
-        if (mode === 'from' || mode === 'to') {
-        const directed = directedEdge(edge, mode);
-        if (!directed) return `${edge.group} (${edge.link_type})`;
+        const ordered = edgeOrderedEnds(edge);
+        if (!ordered) return `${edge.group} (${edge.link_type})`;
+        const forward = ordered.source.id === edge.a ? edge.a_to_b : edge.b_to_a;
+        const reverse = ordered.target.id === edge.a ? edge.a_to_b : edge.b_to_a;
         return `${edge.group} (${edge.link_type})
         ` +
-          `${directed.source.name} -> ${directed.target.name}: ` +
-          `${metricText(directed.metric)}
+        `${ordered.source.name} -> ${ordered.target.name}: ${metricText(forward)}
         ` +
-          `${a.name} -> ${b.name}: ${metricText(edge.a_to_b)}
-        ` +
-          `${b.name} -> ${a.name}: ${metricText(edge.b_to_a)}`;
-        }
-        return `${edge.group} (${edge.link_type})
-        ` +
-        `${a.name} -> ${b.name}: ${metricText(edge.a_to_b)}
-        ` +
-        `${b.name} -> ${a.name}: ${metricText(edge.b_to_a)}`;
+        `${ordered.target.name} -> ${ordered.source.name}: ${metricText(reverse)}`;
         }
 
         function updateArrow(line, mode) {
@@ -589,12 +826,13 @@
         return;
         }
         dir.normalize();
-        arrow.position.copy(end).addScaledVector(dir, -22);
+        arrow.position.copy(start).lerp(end, 0.62);
         arrow.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
         dir,
         );
         arrow.material.color.set(line.material.color);
+        arrow.material.opacity = line.material.opacity;
         arrow.visible = line.visible;
         }
 
@@ -606,16 +844,22 @@
         edgePoints(a, b, edge),
         );
         const mat = new THREE.LineBasicMaterial({
-        color: colorFor(edge, 'best'),
+        color: colorFor(edge, 'topology'),
         linewidth: 2,
+        transparent: true,
+        opacity: 1,
         });
         const line = new THREE.Line(geom, mat);
         const arrow = new THREE.Mesh(
-        new THREE.ConeGeometry(6, 18, 12),
+        new THREE.ConeGeometry(7, 20, 12),
         new THREE.MeshStandardMaterial({
-          color: colorFor(edge, 'best'),
+          color: colorFor(edge, 'topology'),
+          transparent: true,
+          opacity: 1,
+          depthTest: false,
         }),
         );
+        arrow.renderOrder = 10;
         arrow.visible = false;
         line.userData = { type: 'edge', edge, arrow };
         scene.add(line);
@@ -641,6 +885,8 @@
         const labels = speedLegend.querySelector('.speed-scale-labels');
         speedLegend.hidden = false;
         if (DATA.topology_only || mode === 'topology') {
+        speedControls.hidden = true;
+        statusKey.hidden = true;
         speedLegendTitle.textContent = 'topology colors';
         speedLegendNote.textContent = [
           'Link colors show topology groups only.',
@@ -665,11 +911,14 @@
         ].join('');
         return;
         }
+        speedControls.hidden = false;
+        statusKey.hidden = false;
         speedLegendTitle.textContent = `speed colors: ${mode}`;
         speedLegendNote.textContent = [
         `Arrows and colors show ${mode} direction.`,
-        'Magma log scale from 5 to 500 Mbit/s.',
-        'Dark links mean down or missing metrics.',
+        'Amber means down. Cyan means the link is absent or no usable',
+        'speed measurement was obtained.',
+        'A filter minimum of 0 includes down and links absent / not measured.',
         ].join(' ');
         scale.style.background = [
         'linear-gradient(90deg',
@@ -682,7 +931,7 @@
         '#fcfdbf 100%)',
         ].join(', ');
         labels.innerHTML = [
-        '<span style="left:0;transform:none">5</span>',
+        '<span style="left:0;transform:none">0</span>',
         '<span style="left:30%;transform:translateX(-50%)">20</span>',
         '<span style="left:65%;transform:translateX(-50%)">100</span>',
         '<span style="right:0">500 Mbit/s</span>',
@@ -694,12 +943,31 @@
         const mode = document.getElementById('colorMode').value;
         for (const line of edgeObjects) {
         const edge = line.userData.edge;
-        line.visible = active.has(edge.group);
+        const inRange = metricInRange(edge, mode);
+        line.visible = active.has(edge.group) && (inRange || !hideOutside.checked);
         line.material.color.set(colorFor(edge, mode));
+        line.material.opacity = inRange ? 1 : 0.10;
         updateArrow(line, mode);
         }
         refreshSpeedLegend(mode);
         }
+
+        if (DATA.topology_only) {
+        const modeSelect = document.getElementById('colorMode');
+        modeSelect.value = 'topology';
+        modeSelect.querySelectorAll('option').forEach(option => {
+          option.disabled = option.value !== 'topology';
+        });
+        }
+
+        speedMin.addEventListener('input', () => updateSpeedRangeUi(speedMin));
+        speedMax.addEventListener('input', () => updateSpeedRangeUi(speedMax));
+        hideOutside.addEventListener('change', refreshEdges);
+        document.getElementById('resetRange').addEventListener('click', () => {
+        speedMin.value = '0';
+        speedMax.value = '1000';
+        updateSpeedRangeUi(null);
+        });
 
         document.querySelectorAll('input[data-group]').forEach(input => {
         input.addEventListener('change', refreshEdges);
@@ -741,6 +1009,7 @@
         controls.update();
         renderer.render(scene, camera);
         }
+        updateSpeedRangeUi(null);
         refreshEdges();
         animate();
         </script>

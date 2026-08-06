@@ -12,6 +12,7 @@ try:
         SERVER_BABELD_CONF_SUFFIX,
         SERVER_ROOT,
         TOPOLOGY_2D_OUT,
+        TOPOLOGY_2D_SVG_OUT,
         TOPOLOGY_3D_OUT,
     )
 except ImportError:
@@ -22,6 +23,7 @@ except ImportError:
         SERVER_BABELD_CONF_SUFFIX,
         SERVER_ROOT,
         TOPOLOGY_2D_OUT,
+        TOPOLOGY_2D_SVG_OUT,
         TOPOLOGY_3D_OUT,
     )
 
@@ -109,6 +111,10 @@ def server_babeld_conf_remote_path(exit: str) -> str:
 
 def topology_2d_path() -> Path:
     return Path(TOPOLOGY_2D_OUT)
+
+
+def topology_2d_svg_path() -> Path:
+    return Path(TOPOLOGY_2D_SVG_OUT)
 
 
 def topology_3d_html_path() -> Path:

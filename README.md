@@ -1,6 +1,6 @@
 # OpenWrt Spine-Leaf Mesh Builder
 
-![Topology](./topology/topology_2d_topology.svg)
+![Static topology](./topology/topology-2d.svg)
 
 OpenWrt Spine-Leaf Mesh Builder собирает из OpenWrt роутеров и Linux серверов небольшой routed fabric.
 
@@ -293,6 +293,9 @@ servers/example
 |   `-- example
 |-- tools
 `-- topology
+    |-- topology-2d.html
+    |-- topology-2d.svg
+    `-- topology-3d.html
 ```
 
 Основные файлы:
@@ -307,12 +310,12 @@ servers/example
 | `run_routers.py` | Запуск команд на роутерах. |
 | `run_servers.py` | Запуск команд на exit серверах. |
 | `collect_link_speeds.py` | Сбор iperf3 замеров между узлами. |
-| `render_topology_2d.py` | Рендер 2D SVG topology. |
+| `render_topology_2d.py` | Рендер 2D Canvas HTML и статического topology SVG. |
 | `render_topology_3d.py` | Рендер интерактивной 3D HTML topology. |
 | `routers/example` | Шаблон OpenWrt router tree. |
 | `servers/example` | Шаблон Linux server tree. |
 | `tools/` | Генераторы, defaults, secrets, validation и helper scripts. |
-| `topology/` | Сгенерированные topology SVG/HTML файлы. |
+| `topology/` | Сгенерированные topology HTML и SVG файлы. |
 
 ## Модель сети
 
@@ -1640,16 +1643,23 @@ leaf routers -> mesh hubs except main_router -> main_router
 ./collect_link_speeds.py --list-targets
 ```
 
-Собрать таблицу:
+Собрать таблицу в файл и одновременно сохранить JSON для renderer:
+
+```sh
+./collect_link_speeds.py \
+  --progress \
+  --out link-speeds.txt \
+  --json-out link-speeds.json
+```
+
+В таком режиме stdout содержит только progress. Человекочитаемая таблица
+записывается в `link-speeds.txt`, а структурированные данные - в
+`link-speeds.json`. Предупреждения и ошибки по-прежнему выводятся в stderr.
+
+Без `--out` отчёт, как и раньше, печатается в stdout:
 
 ```sh
 ./collect_link_speeds.py --progress
-```
-
-Сохранить JSON для renderer:
-
-```sh
-./collect_link_speeds.py --progress --json-out link-speeds.json
 ```
 
 Полезные опции:
@@ -1676,22 +1686,24 @@ jq
 
 ## Рендер topology
 
-### SVG
+### 2D HTML and SVG
 
-`render_topology_2d.py` строит SVG карты.
+`render_topology_2d.py` строит интерактивную HTML карту на Canvas и
+статический SVG с topology colors.
 
-Без аргументов читает `link-speeds.json` и строит полный measured view:
+Раскладка повторяет прежнюю SVG-развертку:
 
-- topology
-- speed map `from`
-- speed map `to`
+- верхний ряд exit, включая public и reverse exit
+- spine ring
+- leaf -> spine links
+- раздельные `spine -> exit` и `exit -> spine` lanes
+- нижний direct-view ряд public exit для `leaf -> exit`
+- public `exit <-> exit` ring
 
-Это такое же default поведение, как у `render_topology_3d.py`, только 2D renderer пишет несколько SVG файлов.
-
-Если `link-speeds.json` еще нет, сначала соберите замеры или используйте `--topology-only`.
+Без аргументов renderer читает `link-speeds.json`:
 
 ```sh
-./collect_link_speeds.py --progress --json-out link-speeds.json
+./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
 ./render_topology_2d.py
 ```
 
@@ -1701,23 +1713,37 @@ jq
 ./render_topology_2d.py --speeds-json /path/to/link-speeds.json
 ```
 
-По умолчанию файлы пишутся в:
+По умолчанию один запуск пишет два файла:
 
 ```text
-topology/
+topology/topology-2d.html
+topology/topology-2d.svg
 ```
 
-Для measured speed view создаются:
+SVG всегда содержит только topology view. Отдельные SVG для `from` и `to`
+не генерируются. Путь SVG можно изменить через `--svg-out`. Если задан
+`--out`, но не задан `--svg-out`, SVG получает тот же basename и
+расширение `.svg`.
 
-```text
-topology/topology_2d_topology.svg
-topology/topology_2d_from.svg
-topology/topology_2d_to.svg
-```
+В одной странице доступны:
 
-`from` показывает качество направления от выбранного узла.
+- режимы цветов `from`, `to` и `topology`
+- включение и выключение групп `spine-spine`, `leaf-spine`,
+  `exit-spine`, `spine-exit`, `exit-exit`, `leaf-exit`
+- диапазон скоростей от 0 до 500 Mbit/s с двумя ползунками
+- затемнение либо полное скрытие links вне выбранного диапазона
+- одинаковая легенда и фильтры в 2D и 3D
+- pan, zoom, fit и hover tooltip
 
-`to` показывает качество направления к нему.
+В speed режимах янтарный цвет означает `down`. Cyan не входит в шкалу
+скоростей и обозначает отсутствующий link либо отсутствие пригодного замера
+для выбранного направления (`iperf-fail`, `ssh-fail`, `jq-missing` или
+полностью отсутствующий результат).
+
+Порядок узлов в кольцах одинаков для 2D и 3D. Public exit идут в порядке
+`exit_order`, а spine - в порядке `mesh_hubs`, который после загрузки
+конфигурации является стабильным. Направление замыкающего ребра сохраняет
+тот же обход кольца.
 
 Topology-only без замеров:
 
@@ -1729,21 +1755,7 @@ Topology-only без замеров:
 ./render_topology_2d.py --topology-only --topology-source generated
 ```
 
-Topology-only пишет один SVG по умолчанию:
-
-```text
-topology/topology_2d_topology.svg
-```
-
-Выбор конкретной SVG карты:
-
-```sh
-./render_topology_2d.py --only topology
-./render_topology_2d.py --only from
-./render_topology_2d.py --only to
-```
-
-Подписи скоростей на основных measured картах сейчас не выводятся: цвет и tooltip на SVG link являются источником информации о скорости.
+`--only topology`, `--only from` и `--only to` сохранены для совместимости и задают начальный режим страницы. Переключить режим после открытия всё равно можно в панели.
 
 ### 3D HTML
 
@@ -1758,8 +1770,10 @@ topology/topology_2d_topology.svg
 По умолчанию HTML пишется сюда:
 
 ```text
-topology/topology_3d.html
+topology/topology-3d.html
 ```
+
+В measured режиме 3D renderer использует такой же двойной логарифмический фильтр скоростей, как 2D renderer: links вне диапазона можно затемнять или полностью скрывать.
 
 ## Предусловия
 
@@ -1841,12 +1855,12 @@ ls -lh images/
 ./run_servers.py --no-clear
 
 # 8. Собираем текущие скорости и рендерим measured topology
-./collect_link_speeds.py --progress --json-out link-speeds.json
+./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
 ./render_topology_2d.py
 ./render_topology_3d.py
 
 # 9. Проверяем links и рисуем карту из нестандартного JSON
-./collect_link_speeds.py --progress --json-out /tmp/link-speeds.json
+./collect_link_speeds.py --progress --out /tmp/link-speeds.txt --json-out /tmp/link-speeds.json
 ./render_topology_2d.py --speeds-json /tmp/link-speeds.json
 ./render_topology_3d.py --speeds-json /tmp/link-speeds.json
 ```
@@ -1956,7 +1970,7 @@ vim config.json
 ```sh
 ./run_routers.py
 ./run_servers.py
-./collect_link_speeds.py --progress --json-out link-speeds.json
+./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
 ./render_topology_2d.py
 ./render_topology_3d.py
 ```
