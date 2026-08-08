@@ -3,16 +3,24 @@ import sys
 
 sys.dont_write_bytecode = True
 import argparse
+import asyncio
 import json
 import shlex
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from tools.config_io import load_json_config
 from tools.process import die, eprint
-from tools.remote_exec import run_captured_remote
-from tools.common import build_config_data
-from tools.default import CONFIG_PATH, IPERF_BITRATE, IPERF_TIME_SEC, SSH_TIMEOUT
+from tools.remote_exec import CapturedRemoteResult, ssh_config_args
+from tools.common import ConfigData, build_config_data
+from tools.default import (
+    CONFIG_PATH,
+    IPERF_BITRATE,
+    IPERF_TIME_SEC,
+    SSH_COMMAND_TIMEOUT_GRACE_SEC,
+    SSH_TIMEOUT,
+)
 from tools.file_ops import write_text_output
 from tools.link_speed_model import (
     IperfTarget,
@@ -27,6 +35,252 @@ from tools.link_speed_model import (
     targets_for_source,
 )
 from tools.topology_index import GeneratedTopologyIndex, load_generated_topology_index
+
+NodeKey = tuple[str, str]
+
+
+@dataclass(frozen=True)
+class MeasurementTask:
+    source: NodeRef
+    target: IperfTarget
+
+    @property
+    def endpoints(self) -> frozenset[NodeKey]:
+        return frozenset(
+            (
+                (self.source.kind, self.source.name),
+                (self.target.peer_kind, self.target.peer_name),
+            )
+        )
+
+    @property
+    def label(self) -> str:
+        return (
+            f"{self.source.kind}:{self.source.name} -> "
+            f"{self.target.peer_kind}:{self.target.peer_name} "
+            f"({self.target.link_type})"
+        )
+
+
+def positive_jobs(raw_value: str) -> int:
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return value
+
+
+def default_jobs(tasks: list[MeasurementTask]) -> int:
+    nodes: set[NodeKey] = set()
+    for task in tasks:
+        nodes.update(task.endpoints)
+    return max(1, len(nodes) // 2)
+
+
+def build_measurement_tasks(
+    cfg: ConfigData,
+    sources: list[NodeRef],
+    *,
+    topology_source: str,
+    generated: GeneratedTopologyIndex | None,
+) -> list[MeasurementTask]:
+    tasks: list[MeasurementTask] = []
+    for source in sources:
+        targets = targets_for_source(
+            cfg,
+            source,
+            topology_source=topology_source,
+            generated=generated,
+        )
+        tasks.extend(MeasurementTask(source, target) for target in targets)
+    return tasks
+
+
+def pop_schedulable_task(
+    pending: list[MeasurementTask],
+    busy_nodes: set[NodeKey],
+) -> MeasurementTask | None:
+    for idx, task in enumerate(pending):
+        if task.endpoints.isdisjoint(busy_nodes):
+            return pending.pop(idx)
+    return None
+
+
+def progress_result_text(rows: list[LinkSpeedRow]) -> str:
+    if not rows:
+        return "no-result"
+    row = rows[0]
+    if row.status == "up":
+        return f"{row.mbps:.1f} Mbps"
+    return row.status
+
+
+async def run_ssh_async(
+    host: str,
+    command: str,
+    *,
+    ssh_timeout: int,
+    config_path: str | Path,
+) -> tuple[int, str, str]:
+    argv = [
+        "ssh",
+        *ssh_config_args(config_path),
+        "-o",
+        f"ConnectTimeout={ssh_timeout}",
+        "-o",
+        "BatchMode=yes",
+        host,
+        command,
+    ]
+    process_timeout = ssh_timeout + SSH_COMMAND_TIMEOUT_GRACE_SEC
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=process_timeout,
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.communicate()
+            return (
+                1,
+                "",
+                f"ssh to {host} timed out after {process_timeout} seconds",
+            )
+    except Exception as exc:
+        return 1, "", str(exc)
+
+    return (
+        process.returncode or 0,
+        stdout.decode(errors="replace"),
+        stderr.decode(errors="replace"),
+    )
+
+
+async def run_captured_remote_async(
+    label: str,
+    hosts: tuple[str, ...] | list[str],
+    command: str,
+    *,
+    ssh_timeout: int = SSH_TIMEOUT,
+    command_timeout: int | None = None,
+    config_path: str | Path = CONFIG_PATH,
+) -> CapturedRemoteResult:
+    host_tuple = tuple(hosts)
+    if not host_tuple:
+        raise ValueError(f"{label}: empty SSH host list")
+
+    timeout = command_timeout if command_timeout is not None else ssh_timeout
+    last_host = host_tuple[-1]
+    last_rc = 1
+    last_out = ""
+    last_err = "no SSH hosts tried"
+
+    for host in host_tuple:
+        rc, out, err = await run_ssh_async(
+            host,
+            command,
+            ssh_timeout=timeout,
+            config_path=config_path,
+        )
+        if rc == 0:
+            return CapturedRemoteResult(label, host_tuple, host, rc, out, err)
+        last_host, last_rc, last_out, last_err = host, rc, out, err
+
+    return CapturedRemoteResult(
+        label,
+        host_tuple,
+        last_host,
+        last_rc,
+        last_out,
+        last_err,
+    )
+
+
+async def collect_speeds_async(
+    tasks: list[MeasurementTask],
+    *,
+    jobs: int,
+    ssh_timeout: int,
+    iperf_time: int,
+    iperf_bitrate: str,
+    verbose: bool,
+    progress: bool,
+    config_path: str | Path = CONFIG_PATH,
+) -> list[LinkSpeedRow]:
+    if not tasks:
+        return []
+
+    task_limit = min(jobs, len(tasks))
+    pending = list(tasks)
+    running: dict[
+        asyncio.Task[list[LinkSpeedRow]],
+        tuple[MeasurementTask, frozenset[NodeKey]],
+    ] = {}
+    busy_nodes: set[NodeKey] = set()
+    all_rows: list[LinkSpeedRow] = []
+    completed = 0
+
+    if progress:
+        print(
+            f"measurements={len(tasks)} jobs={task_limit} "
+            "conflict-policy=no-shared-node scheduler=asyncio",
+            flush=True,
+        )
+
+    while pending or running:
+        while len(running) < task_limit:
+            task = pop_schedulable_task(pending, busy_nodes)
+            if task is None:
+                break
+
+            endpoints = task.endpoints
+            busy_nodes.update(endpoints)
+            async_task = asyncio.create_task(
+                collect_source_speeds(
+                    task.source,
+                    [task.target],
+                    ssh_timeout=ssh_timeout,
+                    iperf_time=iperf_time,
+                    iperf_bitrate=iperf_bitrate,
+                    verbose=verbose,
+                    config_path=config_path,
+                )
+            )
+            running[async_task] = (task, endpoints)
+
+        if not running:
+            raise RuntimeError(
+                "measurement scheduler stalled with pending work and no active task"
+            )
+
+        done, _ = await asyncio.wait(
+            running,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for async_task in done:
+            task, endpoints = running.pop(async_task)
+            busy_nodes.difference_update(endpoints)
+            rows = await async_task
+            all_rows.extend(rows)
+            completed += 1
+
+            if progress:
+                print(
+                    f"[{completed}/{len(tasks)}] {task.label}: "
+                    f"{progress_result_text(rows)}",
+                    flush=True,
+                )
+
+    return all_rows
 
 
 def shell_printf_targets(targets: list[IperfTarget]) -> str:
@@ -99,7 +353,7 @@ printf '%s\n' "$targets" \
 """
 
 
-def collect_source_speeds(
+async def collect_source_speeds(
     source: NodeRef,
     targets: list[IperfTarget],
     *,
@@ -121,7 +375,7 @@ def collect_source_speeds(
         len(targets) * per_target_budget_sec + ssh_timeout + 5,
     )
 
-    remote = run_captured_remote(
+    remote = await run_captured_remote_async(
         f"{source.kind}:{source.name}",
         source.ssh_hosts,
         cmd,
@@ -243,6 +497,16 @@ def main() -> None:
             "server_<name>_node first then server_<name>; node/public force one alias"
         ),
     )
+    ap.add_argument(
+        "-j",
+        "--jobs",
+        type=positive_jobs,
+        default=None,
+        help=(
+            "maximum simultaneous measurements; active measurements never share "
+            "a router/server endpoint (default: half the number of topology nodes)"
+        ),
+    )
     ap.add_argument("--progress", action="store_true")
     ap.add_argument("--verbose", action="store_true")
 
@@ -260,42 +524,33 @@ def main() -> None:
             eprint(f"topology warning: {warning}")
 
     sources = source_nodes(cfg, args.server_ssh_mode)
-    all_rows: list[LinkSpeedRow] = []
+    tasks = build_measurement_tasks(
+        cfg,
+        sources,
+        topology_source=args.topology_source,
+        generated=generated,
+    )
 
-    for idx, source in enumerate(sources, start=1):
-        targets = targets_for_source(
-            cfg,
-            source,
-            topology_source=args.topology_source,
-            generated=generated,
-        )
-        if args.progress:
-            print(
-                f"[{idx}/{len(sources)}] "
-                f"{source.kind}:{source.name} "
-                f"ssh={'/'.join(source.ssh_hosts)} targets={len(targets)}",
-                flush=True,
+    if args.list_targets:
+        all_rows = [
+            row_from_target(
+                task.source,
+                task.target,
+                source_ssh="/".join(task.source.ssh_hosts),
             )
-
-        if args.list_targets:
-            all_rows.extend(
-                row_from_target(
-                    source,
-                    target,
-                    source_ssh="/".join(source.ssh_hosts),
-                )
-                for target in targets
-            )
-            continue
-
-        all_rows.extend(
-            collect_source_speeds(
-                source,
-                targets,
+            for task in tasks
+        ]
+    else:
+        jobs = args.jobs if args.jobs is not None else default_jobs(tasks)
+        all_rows = asyncio.run(
+            collect_speeds_async(
+                tasks,
+                jobs=jobs,
                 ssh_timeout=args.ssh_timeout,
                 iperf_time=args.iperf_time,
                 iperf_bitrate=args.iperf_bitrate,
                 verbose=args.verbose,
+                progress=args.progress,
                 config_path=args.config,
             )
         )

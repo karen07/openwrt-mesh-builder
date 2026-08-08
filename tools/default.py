@@ -123,6 +123,7 @@ INSTALL_IMAGE_TYPES = (
 REL_NETWORK = Path("files/etc/config/network_part")
 REL_BABELD = Path("files/etc/config/babeld")
 REL_FIREWALL = Path("files/etc/config/firewall_part")
+REL_DHCP = Path("files/etc/config/dhcp_part")
 REL_BOOTSTRAP = Path("files/etc/uci-defaults/99-firstboot-custom")
 REL_OPENVPN_ROOT = Path("files/etc/openvpn")
 REL_OPENVPN_UCI = Path("files/etc/config/openvpn")
@@ -139,6 +140,7 @@ REL = {
     "network": REL_NETWORK,
     "babeld": REL_BABELD,
     "firewall": REL_FIREWALL,
+    "dhcp": REL_DHCP,
     "bootstrap": REL_BOOTSTRAP,
     "openvpn": REL_OPENVPN_ROOT,
     "openvpn_uci": REL_OPENVPN_UCI,
@@ -402,8 +404,8 @@ ROUTING_MODES = {ROUTING_MODE_WAN, ROUTING_MODE_SPLIT, ROUTING_MODE_EXIT}
 
 EXIT_POLICY_BASE = 10000
 EXIT_RULE_PRIORITY = 80
-EXIT_RULE_SECTION_PREFIX = "owmb_exit_rule_"
-EXIT_RULE_ROUTE_SECTION_PREFIX = "owmb_exit_route_"
+LEGACY_EXIT_RULE_SECTION_PREFIX = "owmb_exit_rule_"
+LEGACY_EXIT_RULE_ROUTE_SECTION_PREFIX = "owmb_exit_route_"
 ROUTING_WAN_MARK_TEXT = "9999"
 ROUTING_FIREWALL_RULE_PREFIX = "Routing-"
 EXIT_ROUTE_INTERVAL = 5

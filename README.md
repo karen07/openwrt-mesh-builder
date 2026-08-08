@@ -513,6 +513,31 @@ Source сетью будет subnet access группы, а target роутер�
 
 Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, потому что этот диапазон принадлежит generated infra/exit tunnel ports.
 
+Для `protocol: "amneziawg"` параметры AWG можно задать прямо в access группе. Готовый пример, чтобы был под рукой:
+
+```json
+"awg": {
+  "jc": 4,
+  "jmin": 64,
+  "jmax": 205,
+  "s1": 56,
+  "s2": 48,
+  "s3": 32,
+  "s4": 16,
+  "h1": "1517469637-1517625231",
+  "h2": "1615261508-1615356639",
+  "h3": "1930310431-1930508571",
+  "h4": "2892801623-2893040131",
+  "i1": "<r 128>",
+  "i2": "",
+  "i3": "",
+  "i4": "",
+  "i5": ""
+}
+```
+
+Этот блок вставляется рядом с `name`, `protocol`, `port`, `subnet` и `users` соответствующей AmneziaWG access группы.
+
 ## Быстрый старт
 
 ```sh
@@ -976,6 +1001,25 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 - делает `uci commit`
 
 ## DoH и DNS failover
+
+Для каждого роутера генератор ведет managed DNS-записи в начале
+`files/etc/config/dhcp_part` по объединению всех его `allow_to_router`: как
+router-level правила, так и `allow_to_router` внутри access-групп этого роутера.
+Если хотя бы одно правило содержит `allow_to_router: ["all"]`, создаются записи
+для всех остальных роутеров; иначе создается union всех явно указанных target
+routers. Например:
+
+```text
+router-spine01.mesh -> 10.101.1.1
+router-leaf01.mesh  -> 10.101.11.1
+```
+
+Каждая запись указывает на LAN-адрес target роутера (`.1` его `/24`). Имя
+приводится к lowercase, а `_` заменяется на `-`. Generated `hostrecord` секции
+анонимные; записи пространства `router-*.mesh` в начале `dhcp_part`
+пересобираются целиком, а все остальные существующие записи `dhcp_part`
+сохраняются без удаления. Если `allow_to_router` изменится или будет удален,
+устаревшие generated DNS-записи также удалятся.
 
 В шаблоне `https-dns-proxy` настроены несколько DoH endpoints.
 
@@ -1637,6 +1681,12 @@ leaf routers -> mesh hubs except main_router -> main_router
 
 `collect_link_speeds.py` собирает directed iperf3 замеры для router-router, router-exit и exit-exit links.
 
+Замеры запускаются параллельно, но только для link-ов без общей вершины. Пока
+идёт `A -> B`, scheduler не запустит одновременно ни `A -> X`, ни `X -> A`,
+ни `B -> X`, ни `X -> B`. Как только замер заканчивается, обе его вершины
+освобождаются и scheduler сразу ищет следующий совместимый link. Это не даёт
+нескольким iperf3-тестам одновременно нагружать один router/server.
+
 Посмотреть матрицу целей без запуска iperf3:
 
 ```sh
@@ -1669,6 +1719,8 @@ leaf routers -> mesh hubs except main_router -> main_router
 --topology-source config
 --iperf-time 3
 --iperf-bitrate 50M
+-j 4
+--jobs 4
 --format table|tsv|json
 --server-ssh-mode auto|node|public
 ```
@@ -1676,6 +1728,10 @@ leaf routers -> mesh hubs except main_router -> main_router
 `generated` читает реальные generated AWG/UCI files.
 
 `config` строит плановую topology из `config.json`.
+
+`--jobs` ограничивает число одновременно запущенных замеров. Без этой опции
+лимит равен половине числа узлов topology; фактический parallelism может быть
+ниже из-за правила no-shared-node. `--jobs 1` полностью отключает parallelism.
 
 Для замеров на узлах нужны:
 

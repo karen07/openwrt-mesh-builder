@@ -12,6 +12,7 @@ try:
         PROTOCOL_OPENVPN,
         PROTOCOL_WIREGUARD,
         REL_DIRECT_IPSET,
+        REL_DHCP,
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
@@ -49,6 +50,7 @@ except ImportError:
         PROTOCOL_OPENVPN,
         PROTOCOL_WIREGUARD,
         REL_DIRECT_IPSET,
+        REL_DHCP,
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
@@ -128,6 +130,7 @@ def expected_router_generated_exact_paths(
         REL_DIRECT_STATIC_IPSET,
         REL_RUNTIME_ENV,
         REL_DIRECT_IPSET,
+        REL_DHCP,
     }
 
     if any(g.protocol == PROTOCOL_OPENVPN for g in cfg.access.get(router_name, [])):

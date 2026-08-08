@@ -117,41 +117,45 @@ def validate_exit_rule_network_objects(
         }
         for exit_name in expected_exit_names:
             policy_id = policy_ids[exit_name]
-            suffix = exit_name.lower()
-
-            rule_name = f"{EXIT_RULE_SECTION_PREFIX}{suffix}"
-            rule_block = parsed.get(rule_name)
-            if rule_block is None or rule_block.get("type") != "rule":
-                die(f"router {router_name}: missing routing exit rule {rule_name}")
-            rule_opts = rule_block.get("options", {})
             rule_expected = {
                 "priority": str(EXIT_RULE_PRIORITY),
                 "mark": str(policy_id),
                 "lookup": str(policy_id),
             }
-            for key, value in rule_expected.items():
-                if rule_opts.get(key) != value:
-                    die(
-                        f"router {router_name}: routing exit rule {rule_name}: "
-                        f"bad {key}; expected {value!r}, got {rule_opts.get(key)!r}"
-                    )
+            rule_blocks = [
+                block
+                for block in parsed.values()
+                if block.get("type") == "rule"
+                and all(
+                    block.get("options", {}).get(key) == value
+                    for key, value in rule_expected.items()
+                )
+            ]
+            if len(rule_blocks) != 1:
+                die(
+                    f"router {router_name}: expected exactly one routing exit rule "
+                    f"for {exit_name}, found {len(rule_blocks)}"
+                )
 
-            route_name = f"{EXIT_RULE_ROUTE_SECTION_PREFIX}{suffix}"
-            route_block = parsed.get(route_name)
-            if route_block is None or route_block.get("type") != "route":
-                die(f"router {router_name}: missing routing exit route {route_name}")
-            route_opts = route_block.get("options", {})
             route_expected = {
                 "interface": router_exit_ipip_iface_name(exit_name),
                 "target": "0.0.0.0/0",
                 "table": str(policy_id),
             }
-            for key, value in route_expected.items():
-                if route_opts.get(key) != value:
-                    die(
-                        f"router {router_name}: routing exit route {route_name}: "
-                        f"bad {key}; expected {value!r}, got {route_opts.get(key)!r}"
-                    )
+            route_blocks = [
+                block
+                for block in parsed.values()
+                if block.get("type") == "route"
+                and all(
+                    block.get("options", {}).get(key) == value
+                    for key, value in route_expected.items()
+                )
+            ]
+            if len(route_blocks) != 1:
+                die(
+                    f"router {router_name}: expected exactly one routing exit route "
+                    f"for {exit_name}, found {len(route_blocks)}"
+                )
 
 
 def network4(value: str, where: str) -> ipaddress.IPv4Network:

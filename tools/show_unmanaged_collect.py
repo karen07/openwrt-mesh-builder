@@ -27,6 +27,7 @@ try:
         build_material_for_exit_reverse,
     )
     from .generate_firewall import build_firewall_blocks
+    from .generate_dhcp import build_mesh_dns_text
     from .generate_mesh import build_mesh_state
     from .generate_router_misc import (
         build_doh_source_addr_block,
@@ -61,6 +62,7 @@ except ImportError:
         build_material_for_exit_reverse,
     )
     from generate_firewall import build_firewall_blocks  # type: ignore
+    from generate_dhcp import build_mesh_dns_text  # type: ignore
     from generate_mesh import build_mesh_state  # type: ignore
     from generate_router_misc import (  # type: ignore
         build_doh_source_addr_block,
@@ -208,9 +210,12 @@ def expected_router_generation_state(
             )
         ).strip()
 
+        dhcp_text = build_mesh_dns_text(cfg, router_name)
+
         state[router_name] = {
             "network": uci_counter_from_text(network_text, where="show_unmanaged"),
             "firewall": uci_counter_from_text(firewall_text, where="show_unmanaged"),
+            "dhcp": uci_counter_from_text(dhcp_text, where="show_unmanaged"),
         }
 
     EXPECTED_GENERATION_STATE_CACHE[id(cfg)] = state
@@ -290,6 +295,18 @@ def collect_unmanaged_firewall_above_marker(
 
     expected = expected_router_generation_state(cfg)[router_name]["firewall"].copy()
     return collect_unmanaged_uci_blocks(before_marker, expected, where="show_unmanaged")
+
+
+def collect_unmanaged_dhcp(
+    cfg: ConfigData,
+    router_name: str,
+) -> list[str]:
+    path = router_path(cfg, router_name, "dhcp")
+    if not path.exists():
+        return []
+
+    expected = expected_router_generation_state(cfg)[router_name]["dhcp"].copy()
+    return collect_unmanaged_uci_blocks(read(path), expected, where="show_unmanaged")
 
 
 def collect_unmanaged_bootstrap_above_marker(
