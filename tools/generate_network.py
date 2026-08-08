@@ -6,15 +6,19 @@ sys.dont_write_bytecode = True
 try:
     from .common import *
     from .managed_blocks import (
+        consume_expected_uci_block,
         generated_uci_management_keys,
         render_marked_uci_text,
+        uci_counter_from_text,
         uci_management_key,
     )
 except ImportError:
     from common import *  # type: ignore
     from managed_blocks import (  # type: ignore
+        consume_expected_uci_block,
         generated_uci_management_keys,
         render_marked_uci_text,
+        uci_counter_from_text,
         uci_management_key,
     )
 
@@ -36,8 +40,28 @@ def update_network_part(
 
     generated_parts = [access_text, mesh_text, exit_text, ipip_text, exit_rule_text]
     managed_keys = generated_uci_management_keys(generated_parts)
+    anonymous_exit_blocks = uci_counter_from_text(
+        exit_rule_text, where="generate_network"
+    )
 
     def keep_block(parsed: dict[str, object]) -> bool:
+        # Migrate the old named exit policy sections to anonymous UCI blocks.
+        name = str(parsed.get("name", ""))
+        typ = str(parsed.get("type", ""))
+        if typ == "rule" and name.startswith(LEGACY_EXIT_RULE_SECTION_PREFIX):
+            return False
+        if typ == "route" and name.startswith(LEGACY_EXIT_RULE_ROUTE_SECTION_PREFIX):
+            return False
+
+        # Current exit rule/route sections are anonymous.  Consume an exact
+        # generated match so repeated generation stays idempotent without
+        # assigning artificial UCI section names.  Changed/obsolete anonymous
+        # blocks remain unmanaged, matching the existing stale-object policy.
+        raw = str(parsed.get("raw", ""))
+        if raw and consume_expected_uci_block(
+            anonymous_exit_blocks, raw, where="generate_network"
+        ):
+            return False
         return uci_management_key(parsed) not in managed_keys
 
     preserved_before = filter_preserved_before_marker(before_marker, keep_block)

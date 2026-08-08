@@ -21,6 +21,7 @@ try:
     from .show_unmanaged_collect import (
         collect_unmanaged_bootstrap_above_marker,
         collect_unmanaged_firewall_above_marker,
+        collect_unmanaged_dhcp,
         collect_unmanaged_network_above_marker,
         collect_unmanaged_router_files,
         collect_unmanaged_server_files,
@@ -37,6 +38,7 @@ except ImportError:
     from show_unmanaged_collect import (  # type: ignore
         collect_unmanaged_bootstrap_above_marker,
         collect_unmanaged_firewall_above_marker,
+        collect_unmanaged_dhcp,
         collect_unmanaged_network_above_marker,
         collect_unmanaged_router_files,
         collect_unmanaged_server_files,
@@ -114,12 +116,14 @@ def print_unmanaged_report(cfg: ConfigData) -> None:
     for router_name in cfg.router_names:
         unmanaged_network = collect_unmanaged_network_above_marker(cfg, router_name)
         unmanaged_firewall = collect_unmanaged_firewall_above_marker(cfg, router_name)
+        unmanaged_dhcp = collect_unmanaged_dhcp(cfg, router_name)
         unmanaged_bootstrap = collect_unmanaged_bootstrap_above_marker(cfg, router_name)
         unmanaged_files = collect_unmanaged_router_files(cfg, router_name)
 
         if (
             not unmanaged_network
             and not unmanaged_firewall
+            and not unmanaged_dhcp
             and not unmanaged_bootstrap.strip()
             and not unmanaged_files
         ):
@@ -130,6 +134,7 @@ def print_unmanaged_report(cfg: ConfigData) -> None:
 
         print_uci_section("network_part", unmanaged_network)
         print_uci_section("firewall_part", unmanaged_firewall)
+        print_uci_section("dhcp_part", unmanaged_dhcp)
         print_text_section("bootstrap.sh", unmanaged_bootstrap)
         print_file_list_section("extra files", unmanaged_files)
 
@@ -157,7 +162,7 @@ def sha256_text(text: str) -> str:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(
         description=(
-            "Show unmanaged parts above marker in router managed files. "
+            "Show unmanaged parts in router managed files. "
             "Generated UCI/bootstrap blocks are hidden only on byte-exact "
             "match against blocks derived from config.json and existing secrets; "
             "extra files are compared against the expected file set."

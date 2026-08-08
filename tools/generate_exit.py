@@ -249,11 +249,9 @@ def build_exit_rule_network_blocks(cfg: ConfigData, router_name: str) -> str:
         rule.exit_name for rule in rules if rule.exit_name is not None
     ):
         policy_id = policy_ids[exit_name]
-        section_suffix = exit_name.lower()
         blocks.append(
             uci_block(
                 "rule",
-                f"{EXIT_RULE_SECTION_PREFIX}{section_suffix}",
                 options={
                     "priority": str(EXIT_RULE_PRIORITY),
                     "mark": str(policy_id),
@@ -264,7 +262,6 @@ def build_exit_rule_network_blocks(cfg: ConfigData, router_name: str) -> str:
         blocks.append(
             uci_block(
                 "route",
-                f"{EXIT_RULE_ROUTE_SECTION_PREFIX}{section_suffix}",
                 options={
                     "interface": router_exit_ipip_iface_name(exit_name),
                     "target": "0.0.0.0/0",

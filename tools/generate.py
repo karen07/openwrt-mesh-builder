@@ -8,6 +8,7 @@ from pathlib import Path
 try:
     from .common import *
     from .generate_firewall import update_firewall_part
+    from .generate_dhcp import update_dhcp_part
     from .generate_router_misc import update_bootstrap
     from .generate_access import build_access_state
     from .generate_clients import (
@@ -49,6 +50,7 @@ try:
 except ImportError:
     from common import *
     from generate_firewall import update_firewall_part
+    from generate_dhcp import update_dhcp_part
     from generate_router_misc import update_bootstrap
     from generate_access import build_access_state
     from generate_clients import (
@@ -395,6 +397,7 @@ def main(argv: list[str] | None = None) -> None:
             exit_ipip_ifaces=sorted(set(active_exit_ipip_ifaces)),
             access_groups_for_router=cfg.access.get(router_name, []),
         )
+        update_dhcp_part(cfg=cfg, router_name=router_name)
         update_bootstrap(cfg=cfg, router_name=router_name)
         update_openvpn_uci(
             cfg=cfg,
