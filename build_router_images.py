@@ -88,7 +88,7 @@ def imagebuilder_spec(profile: DeviceProfile, version: str) -> ImageBuilderSpec:
         f"openwrt-imagebuilder-{version}"
         f"-{profile.target}-{profile.subtarget}.Linux-x86_64"
     )
-    archive_path = Path(f"{directory_name}.tar.zst")
+    archive_path = Path("imagebuilders") / f"{directory_name}.tar.zst"
     download_url = (
         f"{OPENWRT_RELEASE_BASE_URL}/{version}"
         f"/targets/{profile.target}/{profile.subtarget}/{archive_path.name}"

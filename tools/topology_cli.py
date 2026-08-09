@@ -6,17 +6,17 @@ import argparse
 from pathlib import Path
 
 try:
-    from .default import CONFIG_PATH, TOPOLOGY_TITLE
+    from .default import CONFIG_PATH, LINK_SPEEDS_JSON_PATH, TOPOLOGY_TITLE
     from .file_ops import write_text_output
 except ImportError:
-    from default import CONFIG_PATH, TOPOLOGY_TITLE  # type: ignore
+    from default import CONFIG_PATH, LINK_SPEEDS_JSON_PATH, TOPOLOGY_TITLE  # type: ignore
     from file_ops import write_text_output  # type: ignore
 
 
 def add_topology_input_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--speeds-json",
-        default="link-speeds.json",
+        default=str(LINK_SPEEDS_JSON_PATH),
         help="JSON file produced by collect_link_speeds.py --json-out",
     )
     parser.add_argument(

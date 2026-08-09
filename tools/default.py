@@ -20,6 +20,9 @@ ROUTER_FILES_DIRNAME = "files"
 ROUTER_PACKAGES_DIRNAME = "packages"
 PACKAGE_SOURCE_ROOT = Path("packages")
 IMAGES_DIR = Path("images")
+LINK_SPEEDS_DIR = Path("link-speeds")
+LINK_SPEEDS_TEXT_PATH = LINK_SPEEDS_DIR / "link-speeds.txt"
+LINK_SPEEDS_JSON_PATH = LINK_SPEEDS_DIR / "link-speeds.json"
 
 
 # ============================================================
