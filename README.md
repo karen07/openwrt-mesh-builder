@@ -1693,24 +1693,17 @@ leaf routers -> mesh hubs except main_router -> main_router
 ./collect_link_speeds.py --list-targets
 ```
 
-Собрать таблицу в файл и одновременно сохранить JSON для renderer:
+Обычный запуск показывает progress и одновременно сохраняет оба результата:
 
 ```sh
-./collect_link_speeds.py \
-  --progress \
-  --out link-speeds.txt \
-  --json-out link-speeds.json
+./collect_link_speeds.py
 ```
 
-В таком режиме stdout содержит только progress. Человекочитаемая таблица
-записывается в `link-speeds.txt`, а структурированные данные - в
-`link-speeds.json`. Предупреждения и ошибки по-прежнему выводятся в stderr.
-
-Без `--out` отчёт, как и раньше, печатается в stdout:
-
-```sh
-./collect_link_speeds.py --progress
-```
+Человекочитаемая таблица записывается в
+`link-speeds/link-speeds.txt`, а структурированные данные - в
+`link-speeds/link-speeds.json`. Папка `link-speeds/` создаётся автоматически.
+Предупреждения и ошибки по-прежнему выводятся в stderr. Progress можно
+отключить через `--no-progress`.
 
 Полезные опции:
 
@@ -1723,6 +1716,7 @@ leaf routers -> mesh hubs except main_router -> main_router
 --jobs 4
 --format table|tsv|json
 --server-ssh-mode auto|node|public
+--no-progress
 ```
 
 `generated` читает реальные generated AWG/UCI files.
@@ -1756,10 +1750,10 @@ jq
 - нижний direct-view ряд public exit для `leaf -> exit`
 - public `exit <-> exit` ring
 
-Без аргументов renderer читает `link-speeds.json`:
+Без аргументов renderer читает `link-speeds/link-speeds.json`:
 
 ```sh
-./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
+./collect_link_speeds.py
 ./render_topology_2d.py
 ```
 
@@ -1818,7 +1812,7 @@ Topology-only без замеров:
 `render_topology_3d.py` строит интерактивную Three.js карту.
 
 ```sh
-./render_topology_3d.py --speeds-json link-speeds.json
+./render_topology_3d.py
 ./render_topology_3d.py --topology-only --topology-source generated
 ./render_topology_3d.py --topology-only --topology-source config
 ```
@@ -1911,7 +1905,7 @@ ls -lh images/
 ./run_servers.py --no-clear
 
 # 8. Собираем текущие скорости и рендерим measured topology
-./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
+./collect_link_speeds.py
 ./render_topology_2d.py
 ./render_topology_3d.py
 
@@ -2026,7 +2020,7 @@ vim config.json
 ```sh
 ./run_routers.py
 ./run_servers.py
-./collect_link_speeds.py --progress --out link-speeds.txt --json-out link-speeds.json
+./collect_link_speeds.py
 ./render_topology_2d.py
 ./render_topology_3d.py
 ```

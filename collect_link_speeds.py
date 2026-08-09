@@ -18,6 +18,8 @@ from tools.default import (
     CONFIG_PATH,
     IPERF_BITRATE,
     IPERF_TIME_SEC,
+    LINK_SPEEDS_JSON_PATH,
+    LINK_SPEEDS_TEXT_PATH,
     SSH_COMMAND_TIMEOUT_GRACE_SEC,
     SSH_TIMEOUT,
 )
@@ -466,13 +468,16 @@ def main() -> None:
     ap.add_argument(
         "--out",
         help=(
-            "write the report in the selected format to this file; "
-            "when set, the report is not printed to stdout"
+            "write the report in the selected format to this file "
+            f"(default for measurements: {LINK_SPEEDS_TEXT_PATH})"
         ),
     )
     ap.add_argument(
         "--json-out",
-        help="optional JSON output file, useful for later SVG rendering",
+        help=(
+            "write JSON output for topology rendering "
+            f"(default for measurements: {LINK_SPEEDS_JSON_PATH})"
+        ),
     )
     ap.add_argument(
         "--list-targets",
@@ -507,7 +512,12 @@ def main() -> None:
             "a router/server endpoint (default: half the number of topology nodes)"
         ),
     )
-    ap.add_argument("--progress", action="store_true")
+    ap.add_argument(
+        "--progress",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="show measurement progress (default: enabled; use --no-progress to disable)",
+    )
     ap.add_argument("--verbose", action="store_true")
 
     args = ap.parse_args()
@@ -579,11 +589,19 @@ def main() -> None:
     else:
         text = format_table(all_rows)
 
-    if args.out:
-        write_optional(args.out, text)
+    out_path = args.out
+    json_out_path = args.json_out
+    if not args.list_targets:
+        if out_path is None:
+            out_path = str(LINK_SPEEDS_TEXT_PATH)
+        if json_out_path is None:
+            json_out_path = str(LINK_SPEEDS_JSON_PATH)
+
+    if out_path:
+        write_optional(out_path, text)
     else:
         print(text)
-    write_optional(args.json_out, json_text)
+    write_optional(json_out_path, json_text)
 
 
 if __name__ == "__main__":

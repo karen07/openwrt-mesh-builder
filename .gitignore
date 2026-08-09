@@ -4,9 +4,7 @@ openwrt-imagebuilder-*
 
 # Local temporary staging
 .server-deploy-*
-.apk-meta-*
 .ca-*
-.ca-sign-*
 .cert-*
 .validate-key-*
 .validate-cert-*
