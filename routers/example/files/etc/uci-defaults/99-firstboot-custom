@@ -20,8 +20,19 @@ update_release_from_deploy_version() {
     sed -i "s|^DISTRIB_DESCRIPTION=.*|DISTRIB_DESCRIPTION='${deploy_version}'|" /etc/openwrt_release
     sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /etc/os-release
     sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /usr/lib/os-release
+    sed -i "s|OpenWrt .*$|${deploy_version}|" /etc/banner
 
     rm -f /etc/deploy_version
+}
+
+patch_https_dns_proxy_respawn() {
+    init='/etc/init.d/https-dns-proxy'
+
+    [ -f "$init" ] || return 0
+
+    sed -i \
+        's/^\([[:space:]]*procd_set_param[[:space:]][[:space:]]*respawn\).*$/\1 3600 5 0/' \
+        "$init"
 }
 
 setup_doh() {
@@ -49,6 +60,9 @@ append_if_exists /etc/config/firewall_part /etc/config/firewall
 # Log size
 uci -q set system.@system[0].log_size='10240'
 
+# Make https-dns-proxy retry forever after crashes
+patch_https_dns_proxy_respawn
+
 # Set DOH
 setup_doh
 
@@ -62,9 +76,8 @@ uci -q delete uhttpd.main.listen_https
 # Disable wan6 autostart
 uci -q set network.wan6.auto='0'
 
-# Replace literal $clientid with "-C" inside udhcpc call block
-sed -i "/proto_run_command.*udhcpc/,/^[[:space:]]*}[[:space:]]*$/ s/\\\$clientid/\"-C\"/" \
-    /lib/netifd/proto/dhcp.sh
+# Do not send DHCP Client Identifier (Option 61)
+uci -q set network.wan.sendclientid='none'
 
 # Update release from deploy version
 update_release_from_deploy_version
