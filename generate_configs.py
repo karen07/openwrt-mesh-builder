@@ -13,6 +13,8 @@ from tools.default import (
     CONFIG_PATH,
     AWG_PACKAGE_NAMES,
     AWG_RELEASE_BASE_URL,
+    CARES_PACKAGE_NAMES,
+    CARES_RELEASE_BASE_URL,
     MIN_OPENWRT_VERSION_TEXT,
     PACKAGE_EXTENSION,
     PACKAGE_SOURCE_ROOT,
@@ -61,9 +63,12 @@ def package_source_dir_from_profile(version: str, profile: DeviceProfile) -> Pat
     return PACKAGE_SOURCE_ROOT / version / profile.board / profile.arch
 
 
-def ensure_named_awg_packages_for_profile(
+def ensure_named_release_packages_for_profile(
     version: str,
     profile: DeviceProfile,
+    package_names: list[str],
+    release_base_url: str,
+    label: str,
 ) -> None:
     board, arch, target, subtarget = profile_board_arch(profile)
 
@@ -72,9 +77,9 @@ def ensure_named_awg_packages_for_profile(
     remove_package_indexes(dst_dir)
 
     postfix = f"_v{version}_{arch}_{target}_{subtarget}"
-    base_url = f"{AWG_RELEASE_BASE_URL}/v{version}"
+    base_url = f"{release_base_url}/v{version}"
 
-    for package_name in AWG_PACKAGE_NAMES:
+    for package_name in package_names:
         simple_dst = dst_dir / f"{package_name}.{PACKAGE_EXTENSION}"
 
         if simple_dst.is_file() and simple_dst.stat().st_size > 0:
@@ -86,7 +91,7 @@ def ensure_named_awg_packages_for_profile(
 
         if not try_download_file(url, tmp_dst):
             die(
-                "failed to download AWG2 apk package "
+                f"failed to download {label} apk package "
                 f"{package_name} for {version} {board} {arch}. Tried: {url}"
             )
 
@@ -94,10 +99,13 @@ def ensure_named_awg_packages_for_profile(
         print(f"Downloaded: {simple_dst}")
 
 
-def ensure_awg_packages(
+def ensure_release_packages(
     cfg: ConfigData,
     routers: list[RouterDef],
     version: str,
+    package_names: list[str],
+    release_base_url: str,
+    label: str,
 ) -> None:
     seen: set[tuple[str, str]] = set()
 
@@ -110,7 +118,13 @@ def ensure_awg_packages(
             continue
 
         seen.add(key)
-        ensure_named_awg_packages_for_profile(version, profile)
+        ensure_named_release_packages_for_profile(
+            version,
+            profile,
+            package_names,
+            release_base_url,
+            label,
+        )
 
 
 def copy_apk_repo_with_canonical_names(
@@ -193,6 +207,11 @@ def main() -> None:
         help="do not download AWG packages from GitHub releases",
     )
     ap.add_argument(
+        "--skip-cares-download",
+        action="store_true",
+        help="do not download libcares from the c-ares GitHub release",
+    )
+    ap.add_argument(
         "--skip-package-sync",
         action="store_true",
         help="do not copy per-router apk package repositories",
@@ -243,7 +262,24 @@ def main() -> None:
         ensure_router_from_example(EXAMPLE_ROUTER_DIR, router)
 
     if not args.skip_awg_download:
-        ensure_awg_packages(cfg_data, routers, cfg_data.openwrt_version)
+        ensure_release_packages(
+            cfg_data,
+            routers,
+            cfg_data.openwrt_version,
+            AWG_PACKAGE_NAMES,
+            AWG_RELEASE_BASE_URL,
+            "AWG2",
+        )
+
+    if not args.skip_cares_download:
+        ensure_release_packages(
+            cfg_data,
+            routers,
+            cfg_data.openwrt_version,
+            CARES_PACKAGE_NAMES,
+            CARES_RELEASE_BASE_URL,
+            "c-ares",
+        )
 
     if not args.skip_package_sync:
         for router in routers:

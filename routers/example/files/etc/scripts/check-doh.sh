@@ -91,7 +91,7 @@ nslookup_ok() {
     nslookup "$DOMAIN" "$_ep" >/dev/null 2>&1
 }
 
-first_working_endpoint() {
+best_available_endpoint() {
     for _ep in "$@"; do
         if nslookup_ok "$_ep"; then
             echo "$_ep"
@@ -158,6 +158,31 @@ dnsmasq_domain_server_value() {
     echo "/${_domain_server_domain}/${_domain_server_upstream}"
 }
 
+dnsmasq_server_value_configured() {
+    _expected="$1"
+
+    for _configured in $(uci -q get dhcp.@dnsmasq[0].server 2>/dev/null); do
+        [ "$_configured" = "$_expected" ] && return 0
+    done
+
+    return 1
+}
+
+dnsmasq_provider_domains_configured() {
+    _provider_eps_resolv="$(get_nameservers_from_resolv)"
+
+    for _provider_domain in $PROVIDER_DOMAINS; do
+        for _provider_ep_resolv in $_provider_eps_resolv; do
+            _provider_val="$(
+                dnsmasq_domain_server_value "$_provider_domain" "$_provider_ep_resolv"
+            )"
+            dnsmasq_server_value_configured "$_provider_val" || return 1
+        done
+    done
+
+    return 0
+}
+
 add_dnsmasq_provider_domain_servers() {
     _provider_eps_resolv="$(get_nameservers_from_resolv)"
 
@@ -199,18 +224,26 @@ apply_once() {
     cur="$(current_endpoint || true)"
 
     # shellcheck disable=SC2086
-    target="$(first_working_endpoint $endpoints || true)"
+    target="$(best_available_endpoint $endpoints || true)"
 
     if [ -z "$target" ]; then
         # shellcheck disable=SC2086
         target="$(last_endpoint $endpoints || true)"
-        echo "no working DNS endpoint; use fallback=${target:-none} endpoints=[$endpoints]"
+        echo "no working DNS endpoint; fallback=${target:-none} endpoints=[$endpoints]"
     fi
 
     [ -n "$target" ] || return 0
-    [ "$cur" = "$target" ] && return 0
 
-    echo "switch DNS endpoint: current=${cur:-none} target=$target"
+    if [ "$cur" = "$target" ]; then
+        if dnsmasq_provider_domains_configured; then
+            return 0
+        fi
+
+        echo "repair dnsmasq provider-domain forwards"
+    else
+        echo "switch DNS endpoint: current=${cur:-none} target=$target"
+    fi
+
     set_dnsmasq_server_endpoint "$target" || return 1
 }
 
