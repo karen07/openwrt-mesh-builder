@@ -316,7 +316,7 @@ WIFI_ENCRYPTION = "psk2"
 WIFI_CELL_DENSITY = "0"
 
 # ============================================================
-# OPENWRT / AWG PACKAGE BUILD DEFAULTS
+# OPENWRT / CUSTOM PACKAGE BUILD DEFAULTS
 # ============================================================
 
 MIN_OPENWRT_MAJOR = 25
@@ -325,12 +325,21 @@ MIN_OPENWRT_VERSION = (MIN_OPENWRT_MAJOR, MIN_OPENWRT_MINOR)
 MIN_OPENWRT_VERSION_TEXT = f"{MIN_OPENWRT_MAJOR}.{MIN_OPENWRT_MINOR}"
 
 OPENWRT_RELEASE_BASE_URL = "https://downloads.openwrt.org/releases"
-AWG_RELEASE_BASE_URL = "https://github.com/karen07/amneziawg-openwrt/releases/download"
+AWG_RELEASE_BASE_URL = (
+    "https://github.com/karen07/amneziawg-openwrt-package/releases/download"
+)
+CARES_RELEASE_BASE_URL = (
+    "https://github.com/karen07/c-ares-openwrt-package/releases/download"
+)
 
 AWG_PACKAGE_NAMES = [
     "kmod-amneziawg",
     "amneziawg-tools",
     "luci-proto-amneziawg",
+]
+
+CARES_PACKAGE_NAMES = [
+    "libcares",
 ]
 
 # OpenWrt image packages required by generated router configs and
@@ -340,6 +349,7 @@ ROUTER_REQUIRED_PACKAGES = [
     "curl",
     "iperf3",
     "jq-full",
+    "libcares",
     "luci-app-https-dns-proxy",
     "luci-app-watchcat",
     "luci-proto-amneziawg",

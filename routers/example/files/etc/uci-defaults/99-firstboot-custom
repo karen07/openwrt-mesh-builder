@@ -25,16 +25,6 @@ update_release_from_deploy_version() {
     rm -f /etc/deploy_version
 }
 
-patch_https_dns_proxy_respawn() {
-    init='/etc/init.d/https-dns-proxy'
-
-    [ -f "$init" ] || return 0
-
-    sed -i \
-        's/^\([[:space:]]*procd_set_param[[:space:]][[:space:]]*respawn\).*$/\1 3600 5 0/' \
-        "$init"
-}
-
 setup_doh() {
     echo 'doh:x:4453:' >>/etc/group
     echo 'doh:x:4453:4453:doh:/var/run/doh:/bin/false' >>/etc/passwd
@@ -59,9 +49,6 @@ append_if_exists /etc/config/firewall_part /etc/config/firewall
 
 # Log size
 uci -q set system.@system[0].log_size='10240'
-
-# Make https-dns-proxy retry forever after crashes
-patch_https_dns_proxy_respawn
 
 # Set DOH
 setup_doh
