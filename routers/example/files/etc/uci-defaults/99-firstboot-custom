@@ -66,6 +66,10 @@ uci -q set network.wan6.auto='0'
 # Do not send DHCP Client Identifier (Option 61)
 uci -q set network.wan.sendclientid='none'
 
+# Restart https-dns-proxy indefinitely if it keeps crashing
+sed -i 's/procd_set_param respawn$/procd_set_param respawn 3600 30 0/' \
+    /etc/init.d/https-dns-proxy
+
 # Update release from deploy version
 update_release_from_deploy_version
 
