@@ -190,7 +190,8 @@ def main(argv: list[str] | None = None) -> None:
         right_alias = build_exit_exit_alias(cfg, right_hub.name, left_hub.name)
         link = compute_exit_exit_link_params(cfg, left_hub, right_hub)
         key = exit_exit_link_key(left_hub.name, right_hub.name)
-        awg = awg_for_infra_link(key)
+        left_awg = awg_for_infra_direction(key, left_hub.name, right_hub.name)
+        right_awg = awg_for_infra_direction(key, right_hub.name, left_hub.name)
         keys = build_material_for_exit_exit(
             cfg=cfg,
             left_hub=left_hub,
@@ -200,11 +201,11 @@ def main(argv: list[str] | None = None) -> None:
 
         write(
             server_client_conf_path(left_hub.name, left_alias),
-            build_exit_exit_server_conf(left_hub, right_hub, link, keys, awg),
+            build_exit_exit_server_conf(left_hub, right_hub, link, keys, left_awg),
         )
         write(
             server_client_conf_path(right_hub.name, right_alias),
-            build_exit_exit_server_conf(right_hub, left_hub, link, keys, awg),
+            build_exit_exit_server_conf(right_hub, left_hub, link, keys, right_awg),
         )
         exit_exit_aliases_by_hub[left_hub.name].append(left_alias)
         exit_exit_aliases_by_hub[right_hub.name].append(right_alias)
@@ -224,7 +225,9 @@ def main(argv: list[str] | None = None) -> None:
             if exit_hub_is_public(hub):
                 client_alias = build_exit_client_alias(cfg, hub.name, router_name)
                 link = compute_exit_link_params(cfg, hub, router_name)
-                awg = awg_for_infra_link(exit_link_key(hub.name, router_name))
+                key = exit_link_key(hub.name, router_name)
+                router_awg = awg_for_infra_direction(key, router_name, hub.name)
+                server_awg = awg_for_infra_direction(key, hub.name, router_name)
                 iface_name = exit_out_iface_name(hub.name)
 
                 keys = build_material_for_exit(
@@ -238,10 +241,10 @@ def main(argv: list[str] | None = None) -> None:
 
                 write(
                     server_client_conf_path(hub.name, client_alias),
-                    build_server_direct_conf(client_alias, hub, link, keys, awg),
+                    build_server_direct_conf(client_alias, hub, link, keys, server_awg),
                 )
                 blocks.append(
-                    build_exit_out_network_interface_block(hub, link, keys, awg)
+                    build_exit_out_network_interface_block(hub, link, keys, router_awg)
                 )
                 router_exit_ifaces[router_name].append(iface_name)
 
@@ -252,7 +255,7 @@ def main(argv: list[str] | None = None) -> None:
                         hub=hub,
                         link=link,
                         keys=keys,
-                        awg=awg,
+                        awg=server_awg,
                     )
                 )
 
@@ -268,7 +271,8 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 link = compute_exit_reverse_link_params(cfg, hub, router_name)
                 key = exit_reverse_link_key(hub.name, router_name)
-                awg = awg_for_infra_link(key)
+                router_awg = awg_for_infra_direction(key, router_name, hub.name)
+                server_awg = awg_for_infra_direction(key, hub.name, router_name)
                 iface_name = exit_in_iface_name(hub.name)
 
                 keys = build_material_for_exit_reverse(
@@ -282,11 +286,11 @@ def main(argv: list[str] | None = None) -> None:
                 write(
                     server_client_conf_path(hub.name, client_alias),
                     build_server_reverse_conf(
-                        cfg, router_name, client_alias, hub, link, keys, awg
+                        cfg, router_name, client_alias, hub, link, keys, server_awg
                     ),
                 )
                 blocks.append(
-                    build_exit_in_network_interface_block(hub, link, keys, awg)
+                    build_exit_in_network_interface_block(hub, link, keys, router_awg)
                 )
                 router_exit_ifaces[router_name].append(iface_name)
 
@@ -297,7 +301,7 @@ def main(argv: list[str] | None = None) -> None:
                         hub=hub,
                         link=link,
                         keys=keys,
-                        awg=awg,
+                        awg=server_awg,
                     )
                 )
 

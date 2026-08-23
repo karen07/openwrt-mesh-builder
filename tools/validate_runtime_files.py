@@ -145,7 +145,8 @@ def validate_exit_server_confs(cfg: ConfigData) -> None:
             for router_name in cfg.router_names:
                 client_alias = build_exit_client_alias(cfg, hub.name, router_name)
                 link = compute_exit_link_params(cfg, hub, router_name)
-                awg = awg_for_infra_link(exit_link_key(hub.name, router_name))
+                key = exit_link_key(hub.name, router_name)
+                awg = awg_for_infra_direction(key, hub.name, router_name)
                 conf_path = server_client_conf_path(hub.name, client_alias)
                 conf = parse_tunnel_conf(conf_path)
                 require_tunnel_sections(conf, conf_path, {"Interface", "Peer"})
@@ -168,13 +169,17 @@ def validate_exit_server_confs(cfg: ConfigData) -> None:
                 if "Endpoint" in peer:
                     die(f"{conf_path}: unexpected Endpoint")
                 require_option(
-                    peer, "PersistentKeepalive", str(KEEPALIVE), str(conf_path)
+                    peer,
+                    "PersistentKeepalive",
+                    awg.persistent_keepalive,
+                    str(conf_path),
                 )
 
         for router_name in cfg.mesh_hubs_by_name:
             client_alias = build_exit_reverse_client_alias(cfg, hub.name, router_name)
             link = compute_exit_reverse_link_params(cfg, hub, router_name)
-            awg = awg_for_infra_link(exit_reverse_link_key(hub.name, router_name))
+            key = exit_reverse_link_key(hub.name, router_name)
+            awg = awg_for_infra_direction(key, hub.name, router_name)
             conf_path = server_client_conf_path(hub.name, client_alias)
             conf = parse_tunnel_conf(conf_path)
             require_tunnel_sections(conf, conf_path, {"Interface", "Peer"})
@@ -198,13 +203,15 @@ def validate_exit_server_confs(cfg: ConfigData) -> None:
             require_option(
                 peer, "Endpoint", f"{endpoint_host}:{endpoint_port}", str(conf_path)
             )
-            require_option(peer, "PersistentKeepalive", str(KEEPALIVE), str(conf_path))
+            require_option(
+                peer, "PersistentKeepalive", awg.persistent_keepalive, str(conf_path)
+            )
 
     for left_name, right_name in exit_exit_link_pairs(cfg):
         left_hub = cfg.exit_hubs_by_name[left_name]
         right_hub = cfg.exit_hubs_by_name[right_name]
         link = compute_exit_exit_link_params(cfg, left_hub, right_hub)
-        awg = awg_for_infra_link(exit_exit_link_key(left_hub.name, right_hub.name))
+        key = exit_exit_link_key(left_hub.name, right_hub.name)
 
         pairs = (
             (
@@ -235,6 +242,7 @@ def validate_exit_server_confs(cfg: ConfigData) -> None:
             local_port,
             peer_port,
         ) in pairs:
+            awg = awg_for_infra_direction(key, local_hub.name, peer_hub.name)
             conf_path = server_client_conf_path(local_hub.name, local_alias)
             conf = parse_tunnel_conf(conf_path)
             require_tunnel_sections(conf, conf_path, {"Interface", "Peer"})
@@ -260,7 +268,9 @@ def validate_exit_server_confs(cfg: ConfigData) -> None:
                 )
             elif "Endpoint" in peer:
                 die(f"{conf_path}: unexpected Endpoint")
-            require_option(peer, "PersistentKeepalive", str(KEEPALIVE), str(conf_path))
+            require_option(
+                peer, "PersistentKeepalive", awg.persistent_keepalive, str(conf_path)
+            )
 
 
 def parse_env_file(path: Path) -> dict[str, str]:

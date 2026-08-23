@@ -185,9 +185,12 @@ SERVER_ENV_IPSET_NAME = "exit_direct"
 
 IPIP_SERVER_IFACE = "ipip-exit"
 NODE_SERVER_IFACE = "awg-node"
-# IPIP MTU must be <= AWG/WG MTU - 20.
-# With AWG/WG MTU 1420, IPIP MTU 1400 is the maximum.
-IPIP_DEFAULT_MTU: int | None = 1400
+# Use one conservative tunnel MTU profile on every node, regardless of
+# whether the underlay is Ethernet or PPPoE. 1400 leaves room for the
+# AWG transport overhead plus the configured S4 padding on a 1480-byte
+# IPv4 PPPoE path, while remaining safe on ordinary 1500-byte Ethernet.
+# IPIP adds a 20-byte outer IPv4 header, so its MTU is 20 bytes lower.
+IPIP_DEFAULT_MTU: int | None = 1380
 
 # Generated compact exit service marker prefixes.
 # 10.254.0.0/24 is split into stable hash-selected /31 prefixes by exit name.
@@ -199,7 +202,7 @@ EXIT_ANNOUNCE_PREFIXLEN = 31
 EXIT_NODE_SUPERNET4 = "10.254.1.0/24"
 EXIT_NODE_PREFIXLEN = 31
 
-TUNNEL_MTU: int | None = None
+TUNNEL_MTU: int | None = 1400
 
 PPPOE_DEFAULT_MTU = 1480
 PPPOE_MTU_MIN = 1280
@@ -295,8 +298,12 @@ BABELD_LOG_FILE = "/dev/null"
 BABELD_UBUS_BINDINGS = "true"
 BABELD_TUNNEL_TYPE = "tunnel"
 BABELD_SPLIT_HORIZON = "true"
-BABELD_HELLO_INTERVAL = 2
-BABELD_UPDATE_INTERVAL = 10
+# Babel intervals are deterministic per local tunnel direction/interface.
+# Keep the spread narrow so convergence stays close to the old 2s/10s profile.
+BABELD_HELLO_INTERVAL_MIN = 2
+BABELD_HELLO_INTERVAL_MAX = 4
+BABELD_UPDATE_INTERVAL_MIN = 8
+BABELD_UPDATE_INTERVAL_MAX = 14
 BABELD_LAN_IFACE = "br-lan"
 
 SERVER_BABELD_CONF_PREFIX = "/etc/babel"
@@ -455,6 +462,9 @@ AWG_INFRA_AUTO_JC_MIN = AWG_JC_MIN
 AWG_INFRA_AUTO_JC_MAX = AWG_JC_MAX
 AWG_INFRA_AUTO_JUNK_SIZE_MIN = AWG_JUNK_SIZE_MIN
 AWG_INFRA_AUTO_JUNK_SIZE_MAX = AWG_JUNK_SIZE_MAX
+# Keep the legacy S1-S4 envelope while HeaderProtectionKey is disabled.
+# HPK has an additional S1-S4 >= 12 requirement and should be enabled in a
+# separate coordinated rollout once the kernel implementation is fixed.
 AWG_INFRA_AUTO_S1_MIN = AWG_S1_MIN
 AWG_INFRA_AUTO_S1_MAX = AWG_S1_MAX
 AWG_INFRA_AUTO_S2_MIN = AWG_S2_MIN
@@ -464,6 +474,29 @@ AWG_INFRA_AUTO_S3_MAX = AWG_S3_MAX
 AWG_INFRA_AUTO_S4_MIN = AWG_S4_MIN
 AWG_INFRA_AUTO_S4_MAX = AWG_S4_MAX
 
+# AWG 3.x timing/keepalive envelopes. A deterministic per-link sub-range
+# is selected inside each envelope; AWG then samples from that range at runtime.
+AWG_REKEY_AFTER_TIME_MIN = 105
+AWG_REKEY_AFTER_TIME_MAX = 145
+AWG_REKEY_TIMEOUT_MIN = 4
+AWG_REKEY_TIMEOUT_MAX = 7
+AWG_REJECT_AFTER_TIME_MIN = 175
+AWG_REJECT_AFTER_TIME_MAX = 220
+AWG_KEEPALIVE_TIMEOUT_MIN = 8
+AWG_KEEPALIVE_TIMEOUT_MAX = 15
+AWG_MAX_HANDSHAKE_ATTEMPTS_MIN = 15
+AWG_MAX_HANDSHAKE_ATTEMPTS_MAX = 24
+AWG_PERSISTENT_KEEPALIVE_MIN = 20
+AWG_PERSISTENT_KEEPALIVE_MAX = 30
+
+AWG_RANDOM_TRAILERS = True
+AWG_DISABLE_COOKIES = False
+AWG_CONTENT_PADDING_ADDITION = ""  # omitted/off so RandomTrailers is used
+
+# v3.1.20260812 kernel mode currently has upstream issue #216 with HPK.
+# Flip to True after the header-protection locking fix is present in kmod-amneziawg.
+AWG_HEADER_PROTECTION_ENABLED = False
+
 # AWG H range generator defaults.
 AWG_H_COUNT = 4
 AWG_H_SPAN_MIN = 65_536
@@ -472,13 +505,12 @@ AWG_H_MIN = 0
 AWG_H_MAX = 4_294_967_295
 AWG_H_GAP = 0
 
-# Infra links derive J/S/H parameters from the stable per-link hash.
-# I1-I5 are static CPS templates used for all generated infra links.
-AWG_INFRA_I1 = "<r 128>"
-AWG_INFRA_I2 = ""
-AWG_INFRA_I3 = ""
-AWG_INFRA_I4 = ""
-AWG_INFRA_I5 = ""
+# Infra links keep S/H shared per link; J and I1-I5 are derived per direction.
+AWG_INFRA_SIGNATURE_COUNT_MIN = 1
+AWG_INFRA_SIGNATURE_COUNT_MAX = 2
+AWG_INFRA_SIGNATURE_SIZE_MIN = 64
+AWG_INFRA_SIGNATURE_SIZE_MAX = 256
+AWG_INFRA_SIGNATURE_TAGS = ("r", "rc", "rd")
 
 # ============================================================
 # TOPOLOGY RENDER DEFAULTS

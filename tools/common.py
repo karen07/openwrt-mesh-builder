@@ -216,6 +216,7 @@ try:
     from .stable_model import (
         random_free_slots,
         ring_link_pairs,
+        stable_babel_intervals,
         stable_hash_u32,
         stable_port_avoiding_for,
         stable_port_for,
@@ -298,6 +299,7 @@ except ImportError:
     from stable_model import (  # type: ignore
         random_free_slots,
         ring_link_pairs,
+        stable_babel_intervals,
         stable_hash_u32,
         stable_port_avoiding_for,
         stable_port_for,
@@ -401,6 +403,7 @@ try:
     from .awg_model import (
         AWG_KEYS,
         awg_conf_lines,
+        awg_for_infra_direction,
         awg_for_infra_link,
         awg_uci_options,
         infra_awg_port_range,
@@ -421,6 +424,7 @@ except ImportError:
     from awg_model import (  # type: ignore
         AWG_KEYS,
         awg_conf_lines,
+        awg_for_infra_direction,
         awg_for_infra_link,
         awg_uci_options,
         infra_awg_port_range,

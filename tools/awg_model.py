@@ -2,6 +2,9 @@
 import sys
 
 sys.dont_write_bytecode = True
+import base64
+import hashlib
+import hmac
 import random
 import re
 
@@ -26,11 +29,11 @@ try:
         AWG_INFRA_AUTO_S3_MIN,
         AWG_INFRA_AUTO_S4_MAX,
         AWG_INFRA_AUTO_S4_MIN,
-        AWG_INFRA_I1,
-        AWG_INFRA_I2,
-        AWG_INFRA_I3,
-        AWG_INFRA_I4,
-        AWG_INFRA_I5,
+        AWG_INFRA_SIGNATURE_COUNT_MAX,
+        AWG_INFRA_SIGNATURE_COUNT_MIN,
+        AWG_INFRA_SIGNATURE_SIZE_MAX,
+        AWG_INFRA_SIGNATURE_SIZE_MIN,
+        AWG_INFRA_SIGNATURE_TAGS,
         AWG_JC_MAX,
         AWG_JC_MIN,
         AWG_JUNK_SIZE_MAX,
@@ -70,11 +73,11 @@ except ImportError:
         AWG_INFRA_AUTO_S3_MIN,
         AWG_INFRA_AUTO_S4_MAX,
         AWG_INFRA_AUTO_S4_MIN,
-        AWG_INFRA_I1,
-        AWG_INFRA_I2,
-        AWG_INFRA_I3,
-        AWG_INFRA_I4,
-        AWG_INFRA_I5,
+        AWG_INFRA_SIGNATURE_COUNT_MAX,
+        AWG_INFRA_SIGNATURE_COUNT_MIN,
+        AWG_INFRA_SIGNATURE_SIZE_MAX,
+        AWG_INFRA_SIGNATURE_SIZE_MIN,
+        AWG_INFRA_SIGNATURE_TAGS,
         AWG_JC_MAX,
         AWG_JC_MIN,
         AWG_JUNK_SIZE_MAX,
@@ -94,6 +97,51 @@ except ImportError:
     from process import die  # type: ignore
     from stable_model import random_free_slots, stable_seed_u64  # type: ignore
 
+try:
+    from .default import (
+        AWG_CONTENT_PADDING_ADDITION,
+        AWG_DISABLE_COOKIES,
+        AWG_HEADER_PROTECTION_ENABLED,
+        AWG_KEEPALIVE_TIMEOUT_MAX,
+        AWG_KEEPALIVE_TIMEOUT_MIN,
+        AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
+        AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
+        AWG_PERSISTENT_KEEPALIVE_MAX,
+        AWG_PERSISTENT_KEEPALIVE_MIN,
+        AWG_RANDOM_TRAILERS,
+        AWG_REJECT_AFTER_TIME_MAX,
+        AWG_REJECT_AFTER_TIME_MIN,
+        AWG_REKEY_AFTER_TIME_MAX,
+        AWG_REKEY_AFTER_TIME_MIN,
+        AWG_REKEY_TIMEOUT_MAX,
+        AWG_REKEY_TIMEOUT_MIN,
+        CONFIG_KEY_MATERIALS_KEY_PATH,
+        CONFIG_PATH,
+    )
+    from .secrets import master_key
+except ImportError:
+    from default import (  # type: ignore
+        AWG_CONTENT_PADDING_ADDITION,
+        AWG_DISABLE_COOKIES,
+        AWG_HEADER_PROTECTION_ENABLED,
+        AWG_KEEPALIVE_TIMEOUT_MAX,
+        AWG_KEEPALIVE_TIMEOUT_MIN,
+        AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
+        AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
+        AWG_PERSISTENT_KEEPALIVE_MAX,
+        AWG_PERSISTENT_KEEPALIVE_MIN,
+        AWG_RANDOM_TRAILERS,
+        AWG_REJECT_AFTER_TIME_MAX,
+        AWG_REJECT_AFTER_TIME_MIN,
+        AWG_REKEY_AFTER_TIME_MAX,
+        AWG_REKEY_AFTER_TIME_MIN,
+        AWG_REKEY_TIMEOUT_MAX,
+        AWG_REKEY_TIMEOUT_MIN,
+        CONFIG_KEY_MATERIALS_KEY_PATH,
+        CONFIG_PATH,
+    )
+    from secrets import master_key  # type: ignore
+
 
 AWG_KEYS = {
     "jc",
@@ -112,6 +160,16 @@ AWG_KEYS = {
     "i3",
     "i4",
     "i5",
+    "header_protection_key",
+    "content_padding_addition",
+    "rekey_after_time",
+    "rekey_timeout",
+    "reject_after_time",
+    "keepalive_timeout",
+    "max_handshake_attempts",
+    "random_trailers",
+    "disable_cookies",
+    "persistent_keepalive",
 }
 
 
@@ -214,9 +272,54 @@ def validate_awg_runtime_ranges(awg: AwgOptions, where: str) -> None:
         )
 
 
+def _parse_u16_range(
+    value: str, where: str, *, allow_empty: bool = False
+) -> tuple[int, int] | None:
+    value = value.strip()
+    if not value:
+        if allow_empty:
+            return None
+        die(f"{where} must not be empty")
+    m = re.fullmatch(r"(\d+)(?:-(\d+))?", value)
+    if not m:
+        die(f"{where} must be N or N-M")
+    start = int(m.group(1))
+    end = int(m.group(2) or m.group(1))
+    if start < 0 or end > 65535 or start > end:
+        die(f"{where} must be within 0..65535 and start <= end")
+    return start, end
+
+
+def validate_awg_v3_options(awg: AwgOptions, where: str) -> None:
+    for key in (
+        "rekey_after_time",
+        "rekey_timeout",
+        "reject_after_time",
+        "keepalive_timeout",
+        "max_handshake_attempts",
+        "persistent_keepalive",
+    ):
+        _parse_u16_range(getattr(awg, key), f"{where}.{key}")
+    _parse_u16_range(
+        awg.content_padding_addition,
+        f"{where}.content_padding_addition",
+        allow_empty=True,
+    )
+    if awg.header_protection_key:
+        try:
+            decoded = base64.b64decode(awg.header_protection_key, validate=True)
+        except Exception:
+            die(f"{where}.header_protection_key must be base64")
+        if len(decoded) != 32:
+            die(f"{where}.header_protection_key must decode to 32 bytes")
+        if min(awg.s1, awg.s2, awg.s3, awg.s4) < 12:
+            die(f"{where}: HeaderProtectionKey requires S1-S4 >= 12")
+
+
 def validate_awg_options(awg: AwgOptions, where: str) -> None:
     validate_awg_runtime_ranges(awg, where)
     validate_awg_h_ranges(awg, where)
+    validate_awg_v3_options(awg, where)
 
 
 def validate_awg_auto_ranges() -> None:
@@ -256,25 +359,61 @@ def validate_awg_auto_ranges() -> None:
         die("bad AWG_INFRA_AUTO_S4_MIN/AWG_INFRA_AUTO_S4_MAX")
 
 
-def stable_awg_runtime_params(
-    link_key: str,
-) -> tuple[int, int, int, int, int, int, int]:
-    # Derive per-link AWG runtime parameters from the same stable link key
-    # family as ports/link addresses/H-ranges.  This keeps generation
-    # deterministic without forcing identical AWG fingerprints on all links.
+def stable_awg_shared_runtime_params(link_key: str) -> tuple[int, int, int, int]:
+    """Parameters that must describe the same wire format on both ends."""
     validate_awg_auto_ranges()
+    # Preserve the S1-S4 values produced by the original builder.
+    # It used one RNG for J and S, so consume the legacy J draws before
+    # deriving S. Only J moves to a directional seed.
     rng = random.Random(stable_seed_u64(f"awg-runtime:{link_key}"))
-
-    jc = rng.randint(AWG_INFRA_AUTO_JC_MIN, AWG_INFRA_AUTO_JC_MAX)
-    j_left = rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
-    j_right = rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
-    jmin, jmax = sorted((j_left, j_right))
-
+    rng.randint(AWG_INFRA_AUTO_JC_MIN, AWG_INFRA_AUTO_JC_MAX)
+    rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
+    rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
     s1 = rng.randint(AWG_INFRA_AUTO_S1_MIN, AWG_INFRA_AUTO_S1_MAX)
     s2 = rng.randint(AWG_INFRA_AUTO_S2_MIN, AWG_INFRA_AUTO_S2_MAX)
     s3 = rng.randint(AWG_INFRA_AUTO_S3_MIN, AWG_INFRA_AUTO_S3_MAX)
     s4 = rng.randint(AWG_INFRA_AUTO_S4_MIN, AWG_INFRA_AUTO_S4_MAX)
+    return s1, s2, s3, s4
 
+
+def stable_awg_directional_runtime_params(
+    link_key: str, src: str, dst: str
+) -> tuple[int, int, int]:
+    """Local/send-side junk parameters; intentionally differ by direction."""
+    validate_awg_auto_ranges()
+    direction = f"{link_key}:{src}->{dst}"
+    rng = random.Random(stable_seed_u64(f"awg-direction-runtime:v1:{direction}"))
+    jc = rng.randint(AWG_INFRA_AUTO_JC_MIN, AWG_INFRA_AUTO_JC_MAX)
+    j_left = rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
+    j_right = rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
+    jmin, jmax = sorted((j_left, j_right))
+    return jc, jmin, jmax
+
+
+def stable_awg_signature_packets(
+    link_key: str, src: str, dst: str
+) -> tuple[str, str, str, str, str]:
+    direction = f"{link_key}:{src}->{dst}"
+    rng = random.Random(stable_seed_u64(f"awg-signatures:v1:{direction}"))
+    count = rng.randint(AWG_INFRA_SIGNATURE_COUNT_MIN, AWG_INFRA_SIGNATURE_COUNT_MAX)
+    values: list[str] = []
+    for _ in range(count):
+        tag = rng.choice(AWG_INFRA_SIGNATURE_TAGS)
+        size = rng.randint(AWG_INFRA_SIGNATURE_SIZE_MIN, AWG_INFRA_SIGNATURE_SIZE_MAX)
+        values.append(f"<{tag} {size}>")
+    values.extend([""] * (5 - len(values)))
+    return values[0], values[1], values[2], values[3], values[4]
+
+
+def stable_awg_runtime_params(
+    link_key: str, src: str | None = None, dst: str | None = None
+) -> tuple[int, int, int, int, int, int, int]:
+    # Compatibility helper: callers that do not provide a direction get a
+    # deterministic pseudo-direction based on the link key itself.
+    src = src or link_key
+    dst = dst or link_key
+    jc, jmin, jmax = stable_awg_directional_runtime_params(link_key, src, dst)
+    s1, s2, s3, s4 = stable_awg_shared_runtime_params(link_key)
     return jc, jmin, jmax, s1, s2, s3, s4
 
 
@@ -314,9 +453,105 @@ def stable_awg_h_ranges(link_key: str) -> tuple[str, str, str, str]:
     return ranges[0], ranges[1], ranges[2], ranges[3]
 
 
-def awg_for_infra_link(link_key: str) -> AwgOptions:
+def _stable_subrange(
+    link_key: str,
+    purpose: str,
+    minimum: int,
+    maximum: int,
+    width_min: int,
+    width_max: int,
+) -> str:
+    if minimum < 0 or maximum > 65535 or minimum > maximum:
+        die(f"bad AWG {purpose} envelope")
+    span = maximum - minimum
+    if span == 0:
+        return str(minimum)
+    width_min = max(1, min(width_min, span))
+    width_max = max(width_min, min(width_max, span))
+    rng = random.Random(stable_seed_u64(f"awg-{purpose}:{link_key}"))
+    width = rng.randint(width_min, width_max)
+    start = rng.randint(minimum, maximum - width)
+    return f"{start}-{start + width}"
+
+
+def stable_awg_header_protection_key(link_key: str) -> str:
+    root = master_key(CONFIG_KEY_MATERIALS_KEY_PATH, config_path=CONFIG_PATH)
+    msg = b"openwrt-mesh-builder:awg-header-protection:v1\0" + link_key.encode("utf-8")
+    return base64.b64encode(hmac.new(root, msg, hashlib.sha256).digest()).decode(
+        "ascii"
+    )
+
+
+def stable_awg_v3_params(
+    link_key: str, direction_key: str | None = None
+) -> dict[str, object]:
+    local_key = direction_key or link_key
+    return {
+        "header_protection_key": (
+            stable_awg_header_protection_key(link_key)
+            if AWG_HEADER_PROTECTION_ENABLED
+            else ""
+        ),
+        "content_padding_addition": AWG_CONTENT_PADDING_ADDITION,
+        "rekey_after_time": _stable_subrange(
+            local_key,
+            "rekey-after-time",
+            AWG_REKEY_AFTER_TIME_MIN,
+            AWG_REKEY_AFTER_TIME_MAX,
+            20,
+            30,
+        ),
+        "rekey_timeout": _stable_subrange(
+            local_key,
+            "rekey-timeout",
+            AWG_REKEY_TIMEOUT_MIN,
+            AWG_REKEY_TIMEOUT_MAX,
+            2,
+            3,
+        ),
+        "reject_after_time": _stable_subrange(
+            local_key,
+            "reject-after-time",
+            AWG_REJECT_AFTER_TIME_MIN,
+            AWG_REJECT_AFTER_TIME_MAX,
+            20,
+            30,
+        ),
+        "keepalive_timeout": _stable_subrange(
+            local_key,
+            "keepalive-timeout",
+            AWG_KEEPALIVE_TIMEOUT_MIN,
+            AWG_KEEPALIVE_TIMEOUT_MAX,
+            4,
+            6,
+        ),
+        "max_handshake_attempts": _stable_subrange(
+            local_key,
+            "max-handshake-attempts",
+            AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
+            AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
+            4,
+            7,
+        ),
+        "random_trailers": AWG_RANDOM_TRAILERS,
+        "disable_cookies": AWG_DISABLE_COOKIES,
+        "persistent_keepalive": _stable_subrange(
+            local_key,
+            "persistent-keepalive",
+            AWG_PERSISTENT_KEEPALIVE_MIN,
+            AWG_PERSISTENT_KEEPALIVE_MAX,
+            5,
+            8,
+        ),
+    }
+
+
+def awg_for_infra_direction(link_key: str, src: str, dst: str) -> AwgOptions:
     h1, h2, h3, h4 = stable_awg_h_ranges(link_key)
-    jc, jmin, jmax, s1, s2, s3, s4 = stable_awg_runtime_params(link_key)
+    s1, s2, s3, s4 = stable_awg_shared_runtime_params(link_key)
+    jc, jmin, jmax = stable_awg_directional_runtime_params(link_key, src, dst)
+    i1, i2, i3, i4, i5 = stable_awg_signature_packets(link_key, src, dst)
+    direction_key = f"{link_key}:{src}->{dst}"
     awg = AwgOptions(
         jc=jc,
         jmin=jmin,
@@ -329,14 +564,21 @@ def awg_for_infra_link(link_key: str) -> AwgOptions:
         h2=h2,
         h3=h3,
         h4=h4,
-        i1=AWG_INFRA_I1,
-        i2=AWG_INFRA_I2,
-        i3=AWG_INFRA_I3,
-        i4=AWG_INFRA_I4,
-        i5=AWG_INFRA_I5,
+        i1=i1,
+        i2=i2,
+        i3=i3,
+        i4=i4,
+        i5=i5,
+        **stable_awg_v3_params(link_key, direction_key),
     )
-    validate_awg_options(awg, f"infra AWG {link_key}")
+    validate_awg_options(awg, f"infra AWG {direction_key}")
     return awg
+
+
+def awg_for_infra_link(link_key: str) -> AwgOptions:
+    # Backward-compatible deterministic profile for tooling that has no local
+    # endpoint context. New infra generation should use awg_for_infra_direction.
+    return awg_for_infra_direction(link_key, link_key, link_key)
 
 
 def peer_endpoint(
@@ -347,12 +589,16 @@ def peer_endpoint(
     return listen_ip, port
 
 
-def load_awg_options(raw: object, where: str) -> AwgOptions:
+def load_awg_options(
+    raw: object, where: str, *, auto_key: str | None = None
+) -> AwgOptions:
     if raw is None:
         die(f"{where}.awg is required for AmneziaWG links")
     if not isinstance(raw, dict):
         die(f"{where}.awg must be an object")
     _require_known_keys(raw, f"{where}.awg", AWG_KEYS)
+
+    auto = stable_awg_v3_params(auto_key) if auto_key else {}
 
     def get_int(key: str) -> int:
         if key not in raw:
@@ -363,27 +609,25 @@ def load_awg_options(raw: object, where: str) -> AwgOptions:
             die(f"{where}.awg.{key} must be an integer")
 
     def get_str(key: str, default: str = "") -> str:
-        value = raw.get(key, default)
+        value = raw.get(key, auto.get(key, default))
         if value is None:
             return default
         return str(value).strip()
 
-    jc = get_int("jc")
-    jmin = get_int("jmin")
-    jmax = get_int("jmax")
-    s1 = get_int("s1")
-    s2 = get_int("s2")
-    s3 = get_int("s3")
-    s4 = get_int("s4")
+    def get_bool(key: str, default: bool) -> bool:
+        value = raw.get(key, auto.get(key, default))
+        if not isinstance(value, bool):
+            die(f"{where}.awg.{key} must be a boolean")
+        return value
 
     awg = AwgOptions(
-        jc=jc,
-        jmin=jmin,
-        jmax=jmax,
-        s1=s1,
-        s2=s2,
-        s3=s3,
-        s4=s4,
+        jc=get_int("jc"),
+        jmin=get_int("jmin"),
+        jmax=get_int("jmax"),
+        s1=get_int("s1"),
+        s2=get_int("s2"),
+        s3=get_int("s3"),
+        s4=get_int("s4"),
         h1=get_str("h1"),
         h2=get_str("h2"),
         h3=get_str("h3"),
@@ -393,6 +637,16 @@ def load_awg_options(raw: object, where: str) -> AwgOptions:
         i3=get_str("i3"),
         i4=get_str("i4"),
         i5=get_str("i5"),
+        header_protection_key=get_str("header_protection_key"),
+        content_padding_addition=get_str("content_padding_addition"),
+        rekey_after_time=get_str("rekey_after_time"),
+        rekey_timeout=get_str("rekey_timeout"),
+        reject_after_time=get_str("reject_after_time"),
+        keepalive_timeout=get_str("keepalive_timeout"),
+        max_handshake_attempts=get_str("max_handshake_attempts"),
+        random_trailers=get_bool("random_trailers", AWG_RANDOM_TRAILERS),
+        disable_cookies=get_bool("disable_cookies", AWG_DISABLE_COOKIES),
+        persistent_keepalive=get_str("persistent_keepalive"),
     )
     validate_awg_options(awg, f"{where}.awg")
     return awg
@@ -416,6 +670,23 @@ def awg_uci_options(awg: AwgOptions) -> dict[str, str]:
         **({"awg_i3": awg.i3} if awg.i3 else {}),
         **({"awg_i4": awg.i4} if awg.i4 else {}),
         **({"awg_i5": awg.i5} if awg.i5 else {}),
+        **(
+            {"awg_header_protection_key": awg.header_protection_key}
+            if awg.header_protection_key
+            else {}
+        ),
+        **(
+            {"awg_content_padding_addition": awg.content_padding_addition}
+            if awg.content_padding_addition
+            else {}
+        ),
+        "awg_rekey_after_time": awg.rekey_after_time,
+        "awg_rekey_timeout": awg.rekey_timeout,
+        "awg_reject_after_time": awg.reject_after_time,
+        "awg_keepalive_timeout": awg.keepalive_timeout,
+        "awg_max_handshake_attempts": awg.max_handshake_attempts,
+        "awg_random_trailers": "1" if awg.random_trailers else "0",
+        "awg_disable_cookies": "1" if awg.disable_cookies else "0",
     }
 
 
@@ -437,4 +708,21 @@ def awg_conf_lines(awg: AwgOptions) -> list[str]:
         *([f"I3 = {awg.i3}"] if awg.i3 else []),
         *([f"I4 = {awg.i4}"] if awg.i4 else []),
         *([f"I5 = {awg.i5}"] if awg.i5 else []),
+        *(
+            [f"HeaderProtectionKey = {awg.header_protection_key}"]
+            if awg.header_protection_key
+            else []
+        ),
+        *(
+            [f"ContentPaddingAddition = {awg.content_padding_addition}"]
+            if awg.content_padding_addition
+            else []
+        ),
+        f"RekeyAfterTime = {awg.rekey_after_time}",
+        f"RekeyTimeout = {awg.rekey_timeout}",
+        f"RejectAfterTime = {awg.reject_after_time}",
+        f"KeepaliveTimeout = {awg.keepalive_timeout}",
+        f"MaxHandshakeAttempts = {awg.max_handshake_attempts}",
+        f"RandomTrailers = {1 if awg.random_trailers else 0}",
+        f"DisableCookies = {1 if awg.disable_cookies else 0}",
     ]

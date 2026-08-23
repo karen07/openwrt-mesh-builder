@@ -178,7 +178,11 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
             policy = load_access_policy(raw.get(CONFIG_KEY_POLICY), f"{where}.policy")
             awg: AwgOptions | None = None
             if protocol == PROTOCOL_AMNEZIAWG:
-                awg = load_awg_options(raw.get(CONFIG_KEY_AWG), where)
+                awg = load_awg_options(
+                    raw.get(CONFIG_KEY_AWG),
+                    where,
+                    auto_key=f"access:{router_name}:{iface_name}",
+                )
             elif raw.get(CONFIG_KEY_AWG) is not None:
                 die(f"{where}.awg is only valid when protocol is amneziawg")
 

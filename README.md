@@ -31,7 +31,7 @@ OpenWrt firmware образы собираются отдельной коман
 ./build_router_images.py
 ```
 
-Проект рассчитан на OpenWrt 25.12+ с `apk` based ImageBuilder и AWG2 пакетами.
+Проект рассчитан на OpenWrt 25.12+ с `apk` based ImageBuilder и AmneziaWG 3.1 пакетами.
 
 > Текущий `config.json` - демонстрационный пример. Адреса из `203.0.113.0/24` и `198.51.100.0/24` нужно заменить на реальные адреса своей сети перед деплоем.
 
@@ -513,7 +513,7 @@ Source сетью будет subnet access группы, а target роутер�
 
 Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, потому что этот диапазон принадлежит generated infra/exit tunnel ports.
 
-Для `protocol: "amneziawg"` параметры AWG можно задать прямо в access группе. Готовый пример, чтобы был под рукой:
+Для `protocol: "amneziawg"` параметры AWG можно задать прямо в access группе. AWG 3.0/3.1 поля поддерживают диапазоны, поэтому полный пример выглядит так:
 
 ```json
 "awg": {
@@ -532,11 +532,21 @@ Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, по
   "i2": "",
   "i3": "",
   "i4": "",
-  "i5": ""
+  "i5": "",
+  "rekey_after_time": "116-142",
+  "rekey_timeout": "4-7",
+  "reject_after_time": "190-217",
+  "keepalive_timeout": "10-15",
+  "max_handshake_attempts": "15-21",
+  "random_trailers": true,
+  "disable_cookies": false,
+  "persistent_keepalive": "20-26"
 }
 ```
 
-Этот блок вставляется рядом с `name`, `protocol`, `port`, `subnet` и `users` соответствующей AmneziaWG access группы.
+Этот блок вставляется рядом с `name`, `protocol`, `port`, `subnet` и `users` соответствующей AmneziaWG access группы. Если новые AWG 3.x поля не указаны явно, builder детерминированно выводит их из access group key.
+
+`HeaderProtectionKey` и `ContentPaddingAddition` также поддерживаются как `header_protection_key` и `content_padding_addition`, но в текущем infra профиле не включаются: header protection по умолчанию отключен, а `ContentPaddingAddition` оставлен пустым, чтобы transport padding делал `RandomTrailers`.
 
 ## Быстрый старт
 
@@ -607,6 +617,27 @@ exit-exit ring      между public exit серверами
 Reverse exit без `listen_ip` не принимает входящие tunnel связи от роутеров. Он сам поднимает outbound туннели к публичным spine и становится доступен внутри overlay после bootstrap.
 
 На infra линках не включается обычный default route. Они используются как транспорт для Babel и служебной маршрутизации.
+
+### AWG 3.1 diversification
+
+Infra AWG профиль генерируется детерминированно, но разделен на shared per-link и local per-direction параметры. Это дает воспроизводимые конфиги без одинакового fingerprint у всех направлений.
+
+| Параметры | Модель |
+| --- | --- |
+| `S1-S4`, `H1-H4` | shared per-link: одинаковы на обоих концах одного линка |
+| `Jc/Jmin/Jmax` | per-direction: `A -> B` и `B -> A` получают разные значения |
+| `I1-I5` | per-direction; генерируется 1-2 signature packets размером 64-256 bytes |
+| `RekeyAfterTime`, `RekeyTimeout`, `RejectAfterTime` | per-direction ranges |
+| `KeepaliveTimeout`, `MaxHandshakeAttempts` | per-direction ranges |
+| `PersistentKeepalive` | per-direction range внутри 20-30 seconds |
+| `RandomTrailers` | включен |
+| `DisableCookies` | выключен |
+| `ContentPaddingAddition` | не задается |
+| `HeaderProtectionKey` | поддерживается моделью, но auto-generation сейчас выключен |
+
+Babel timers также диверсифицированы per local tunnel direction: `hello_interval` выбирается в диапазоне 2-4 seconds, а `update_interval` - 8-14 seconds с привязкой к hello interval.
+
+Для всех generated tunnel interfaces используется единый MTU profile: AWG/WG `1400`, IPIP `1380`. Физические Ethernet/PPPoE MTU builder этим не меняет.
 
 ## Служебная адресация
 
@@ -1545,7 +1576,7 @@ Profile name является безопасным ASCII identifier.
 
 1. читает и валидирует `config.json`
 1. создает `routers/` из `routers/example`
-1. скачивает AWG2 `.apk`, если не указан `--skip-awg-download`
+1. скачивает AmneziaWG `.apk`, если не указан `--skip-awg-download`
 1. скачивает `libcares` из `c-ares-openwrt-package`, если не указан `--skip-cares-download`
 1. синхронизирует per-router `packages/`, если не указан `--skip-package-sync`
 1. синхронизирует шаблонные файлы из `routers/example`

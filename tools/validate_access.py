@@ -59,24 +59,10 @@ def require_awg_client_options(
     if awg is None:
         die(f"{where}: missing awg options in config model")
 
-    expected = {
-        "Jc": str(awg.jc),
-        "Jmin": str(awg.jmin),
-        "Jmax": str(awg.jmax),
-        "S1": str(awg.s1),
-        "S2": str(awg.s2),
-        "S3": str(awg.s3),
-        "S4": str(awg.s4),
-        "H1": awg.h1,
-        "H2": awg.h2,
-        "H3": awg.h3,
-        "H4": awg.h4,
-    }
-    for key in ("I1", "I2", "I3", "I4", "I5"):
-        value = getattr(awg, key.lower())
-        if value:
-            expected[key] = value
-
+    expected = {}
+    for line in awg_conf_lines(awg):
+        key, value = line.split(" = ", 1)
+        expected[key] = value
     for key, value in expected.items():
         require_option(opts, key, value, where)
 
@@ -157,7 +143,12 @@ def validate_wireguard_access(
                 require_option(
                     peer_opts,
                     "persistent_keepalive",
-                    str(KEEPALIVE),
+                    (
+                        group.awg.persistent_keepalive
+                        if group.protocol == PROTOCOL_AMNEZIAWG
+                        and group.awg is not None
+                        else str(KEEPALIVE)
+                    ),
                     f"access {router_name}/{group.name}/{user_name}",
                 )
                 require_list(
@@ -192,7 +183,15 @@ def validate_wireguard_access(
                     str(client_conf),
                 )
                 require_option(
-                    client_peer, "PersistentKeepalive", str(KEEPALIVE), str(client_conf)
+                    client_peer,
+                    "PersistentKeepalive",
+                    (
+                        group.awg.persistent_keepalive
+                        if group.protocol == PROTOCOL_AMNEZIAWG
+                        and group.awg is not None
+                        else str(KEEPALIVE)
+                    ),
+                    str(client_conf),
                 )
                 host, port = parse_endpoint(
                     client_peer.get("Endpoint", ""), str(client_conf)

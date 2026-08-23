@@ -75,7 +75,7 @@ def build_mesh_server_block(state: MeshLinkState) -> str:
             "listen_port": str(state.link.port),
             "defaultroute": "0",
             **mtu_uci_options(),
-            **awg_uci_options(state.awg),
+            **awg_uci_options(state.server_awg),
         },
         lists={"addresses": [state.link.srv_ip4, state.link.srv_ll]},
     )
@@ -86,7 +86,7 @@ def build_mesh_server_block(state: MeshLinkState) -> str:
             "description": f"{state.server_iface_name}.conf",
             "public_key": state.keys.client_public,
             "route_allowed_ips": "1",
-            "persistent_keepalive": str(KEEPALIVE),
+            "persistent_keepalive": state.server_awg.persistent_keepalive,
         },
         lists={"allowed_ips": DEFAULT_ALLOWED_IPS},
     )
@@ -107,7 +107,7 @@ def build_mesh_client_block(state: MeshLinkState) -> str:
             "private_key": state.keys.client_private,
             "defaultroute": "0",
             **mtu_uci_options(),
-            **awg_uci_options(state.awg),
+            **awg_uci_options(state.client_awg),
         },
         lists={"addresses": [state.link.cli_ip4, state.link.cli_ll]},
     )
@@ -118,7 +118,7 @@ def build_mesh_client_block(state: MeshLinkState) -> str:
             "description": f"{state.client_iface_name}.conf",
             "public_key": state.keys.server_public,
             "route_allowed_ips": "1",
-            "persistent_keepalive": str(KEEPALIVE),
+            "persistent_keepalive": state.client_awg.persistent_keepalive,
             "endpoint_host": endpoint_host,
             "endpoint_port": str(endpoint_port),
         },
@@ -163,7 +163,12 @@ def build_mesh_state(
                 client_iface_name,
                 force,
             ),
-            awg=awg_for_infra_link(mesh_link_key(hub.name, target_router)),
+            server_awg=awg_for_infra_direction(
+                mesh_link_key(hub.name, target_router), hub.name, target_router
+            ),
+            client_awg=awg_for_infra_direction(
+                mesh_link_key(hub.name, target_router), target_router, hub.name
+            ),
         )
 
         network_blocks[hub.name] += build_mesh_server_block(state)

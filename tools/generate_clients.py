@@ -142,7 +142,7 @@ def build_wireguard_client_conf(
         f"PublicKey = {server_public}\n"
         f"Endpoint = {remote_host}:{remote_port}\n"
         f"AllowedIPs = {DEFAULT_ALLOWED_IPS_TEXT}\n"
-        f"PersistentKeepalive = {KEEPALIVE}\n"
+        f"PersistentKeepalive = {awg.persistent_keepalive if awg is not None else KEEPALIVE}\n"
     )
 
 

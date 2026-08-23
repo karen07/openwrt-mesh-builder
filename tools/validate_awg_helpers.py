@@ -52,6 +52,15 @@ def awg_conf_key_map() -> dict[str, str]:
         "awg_i3": "I3",
         "awg_i4": "I4",
         "awg_i5": "I5",
+        "awg_header_protection_key": "HeaderProtectionKey",
+        "awg_content_padding_addition": "ContentPaddingAddition",
+        "awg_rekey_after_time": "RekeyAfterTime",
+        "awg_rekey_timeout": "RekeyTimeout",
+        "awg_reject_after_time": "RejectAfterTime",
+        "awg_keepalive_timeout": "KeepaliveTimeout",
+        "awg_max_handshake_attempts": "MaxHandshakeAttempts",
+        "awg_random_trailers": "RandomTrailers",
+        "awg_disable_cookies": "DisableCookies",
     }
 
 
@@ -121,13 +130,17 @@ def validate_router_awg_interface_common(
 
 
 def validate_awg_peer_common(
-    block: dict[str, object], expected_public_key: str, where: str
+    block: dict[str, object],
+    expected_public_key: str,
+    where: str,
+    *,
+    awg: AwgOptions,
 ) -> None:
     opts = block.get("options", {})
     lists = block.get("lists", {})
     require_option(opts, "public_key", expected_public_key, where)
     require_option(opts, "route_allowed_ips", "1", where)
-    require_option(opts, "persistent_keepalive", str(KEEPALIVE), where)
+    require_option(opts, "persistent_keepalive", awg.persistent_keepalive, where)
     require_list(lists, "allowed_ips", DEFAULT_ALLOWED_IPS, where)
 
 

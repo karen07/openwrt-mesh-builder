@@ -171,7 +171,7 @@ def build_exit_out_network_interface_block(
             "description": f"{iface_name}.conf",
             "public_key": keys.server_public,
             "route_allowed_ips": "1",
-            "persistent_keepalive": str(KEEPALIVE),
+            "persistent_keepalive": awg.persistent_keepalive,
             "endpoint_host": endpoint_host,
             "endpoint_port": str(endpoint_port),
         },
@@ -207,7 +207,7 @@ def build_exit_in_network_interface_block(
             "description": f"{iface_name}.conf",
             "public_key": keys.client_public,
             "route_allowed_ips": "1",
-            "persistent_keepalive": str(KEEPALIVE),
+            "persistent_keepalive": awg.persistent_keepalive,
         },
         lists={"allowed_ips": DEFAULT_ALLOWED_IPS},
     )
@@ -293,7 +293,7 @@ def build_server_direct_conf(
         "[Peer]",
         f"PublicKey = {keys.client_public}",
         f"AllowedIPs = {DEFAULT_ALLOWED_IPS_TEXT}",
-        f"PersistentKeepalive = {KEEPALIVE}",
+        f"PersistentKeepalive = {awg.persistent_keepalive}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -325,7 +325,7 @@ def build_server_reverse_conf(
         f"PublicKey = {keys.server_public}",
         f"AllowedIPs = {DEFAULT_ALLOWED_IPS_TEXT}",
         f"Endpoint = {endpoint_host}:{endpoint_port}",
-        f"PersistentKeepalive = {KEEPALIVE}",
+        f"PersistentKeepalive = {awg.persistent_keepalive}",
     ]
     return "\n".join(lines) + "\n"
 
@@ -430,7 +430,7 @@ def build_exit_exit_server_conf(
             port=peer_port,
         )
         peer_lines.append(f"Endpoint = {endpoint_host}:{endpoint_port}")
-    peer_lines.append(f"PersistentKeepalive = {KEEPALIVE}")
+    peer_lines.append(f"PersistentKeepalive = {awg.persistent_keepalive}")
 
     lines = [
         "[Interface]",

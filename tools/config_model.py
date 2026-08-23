@@ -80,6 +80,16 @@ class AwgOptions:
     i3: str = ""
     i4: str = ""
     i5: str = ""
+    header_protection_key: str = ""
+    content_padding_addition: str = ""
+    rekey_after_time: str = ""
+    rekey_timeout: str = ""
+    reject_after_time: str = ""
+    keepalive_timeout: str = ""
+    max_handshake_attempts: str = ""
+    random_trailers: bool = True
+    disable_cookies: bool = False
+    persistent_keepalive: str = ""
 
 
 @dataclass(frozen=True)
@@ -197,7 +207,8 @@ class MeshLinkState:
     client_peer_section_name: str
     link: LinkParams
     keys: KeyMaterial
-    awg: AwgOptions
+    server_awg: AwgOptions
+    client_awg: AwgOptions
 
 
 @dataclass

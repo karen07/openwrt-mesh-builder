@@ -82,7 +82,9 @@ def validate_mesh_pair_confs(
         hub_parsed = existing[hub.name]
         target_parsed = existing[target_name]
         link = compute_mesh_link_params(cfg, hub, target_name)
-        awg = awg_for_infra_link(mesh_link_key(hub.name, target_name))
+        key = mesh_link_key(hub.name, target_name)
+        server_awg = awg_for_infra_direction(key, hub.name, target_name)
+        client_awg = awg_for_infra_direction(key, target_name, hub.name)
         validate_link_is_31_pair(
             link.srv_ip4, link.cli_ip4, f"mesh {hub.name}->{target_name}"
         )
@@ -119,13 +121,13 @@ def validate_mesh_pair_confs(
 
         server_public = validate_router_awg_interface_common(
             server_iface,
-            awg,
+            server_awg,
             [link.srv_ip4, link.srv_ll],
             f"mesh {hub.name}->{target_name} server iface {server_iface_name}",
         )
         client_public = validate_router_awg_interface_common(
             client_iface,
-            awg,
+            client_awg,
             [link.cli_ip4, link.cli_ll],
             f"mesh {hub.name}->{target_name} client iface {client_iface_name}",
         )
@@ -134,11 +136,13 @@ def validate_mesh_pair_confs(
             server_peer,
             client_public,
             f"mesh {hub.name}->{target_name} server peer {server_peer_type}",
+            awg=server_awg,
         )
         validate_awg_peer_common(
             client_peer,
             server_public,
             f"mesh {hub.name}->{target_name} client peer {client_peer_type}",
+            awg=client_awg,
         )
 
         client_opts = client_peer.get("options", {})
@@ -196,7 +200,9 @@ def validate_exit_pair_confs(
 
             if exit_hub_is_public(hub):
                 link = compute_exit_link_params(cfg, hub, router_name)
-                awg = awg_for_infra_link(exit_link_key(hub.name, router_name))
+                key = exit_link_key(hub.name, router_name)
+                router_awg = awg_for_infra_direction(key, router_name, hub.name)
+                server_awg = awg_for_infra_direction(key, hub.name, router_name)
                 validate_link_is_31_pair(
                     link.srv_ip4, link.cli_ip4, f"exit {hub.name}->{router_name}"
                 )
@@ -214,7 +220,7 @@ def validate_exit_pair_confs(
                 )
                 router_public = validate_router_awg_interface_common(
                     router_iface,
-                    awg,
+                    router_awg,
                     [link.cli_ip4, link.cli_ll],
                     f"exit-out {router_name}->{hub.name} iface {router_iface_name}",
                 )
@@ -233,6 +239,7 @@ def validate_exit_pair_confs(
                     router_peer,
                     server_public,
                     f"exit-out {router_name}->{hub.name} peer {router_peer_type}",
+                    awg=router_awg,
                 )
                 router_peer_opts = router_peer.get("options", {})
                 expected_host, expected_port = peer_endpoint(
@@ -260,7 +267,8 @@ def validate_exit_pair_confs(
             if router_is_public_mesh_hub(cfg, router_name):
                 link = compute_exit_reverse_link_params(cfg, hub, router_name)
                 key = exit_reverse_link_key(hub.name, router_name)
-                awg = awg_for_infra_link(key)
+                router_awg = awg_for_infra_direction(key, router_name, hub.name)
+                server_awg = awg_for_infra_direction(key, hub.name, router_name)
                 validate_link_is_31_pair(
                     link.srv_ip4,
                     link.cli_ip4,
@@ -280,7 +288,7 @@ def validate_exit_pair_confs(
                 )
                 router_public = validate_router_awg_interface_common(
                     router_iface,
-                    awg,
+                    router_awg,
                     [link.srv_ip4, link.srv_ll],
                     f"exit-in {hub.name}->{router_name} iface {router_iface_name}",
                 )
@@ -306,6 +314,7 @@ def validate_exit_pair_confs(
                     router_peer,
                     server_public,
                     f"exit-in {hub.name}->{router_name} peer {router_peer_type}",
+                    awg=router_awg,
                 )
                 if "endpoint_host" in router_peer.get("options", {}):
                     die(f"exit-in {hub.name}->{router_name}: unexpected endpoint_host")
