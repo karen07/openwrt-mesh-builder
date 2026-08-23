@@ -49,7 +49,10 @@ apt-get install -y \
 add-apt-repository -y ppa:amnezia/ppa
 
 apt-get update
-apt-get install -y amneziawg
+apt-get install -y \
+    amneziawg \
+    amneziawg-tools \
+    amneziawg-dkms
 
 if [ -f /etc/awg-server.sh ]; then
     chmod 0755 /etc/awg-server.sh
