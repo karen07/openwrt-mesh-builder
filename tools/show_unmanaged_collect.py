@@ -122,7 +122,8 @@ def expected_router_generation_state(
             if exit_hub_is_public(hub):
                 client_alias = build_exit_client_alias(cfg, hub.name, router_name)
                 link = compute_exit_link_params(cfg, hub, router_name)
-                awg = awg_for_infra_link(exit_link_key(hub.name, router_name))
+                key = exit_link_key(hub.name, router_name)
+                awg = awg_for_infra_direction(key, router_name, hub.name)
                 iface_name = exit_out_iface_name(hub.name)
                 keys = build_material_for_exit(
                     router_name=router_name,
@@ -142,7 +143,8 @@ def expected_router_generation_state(
                     cfg, hub.name, router_name
                 )
                 link = compute_exit_reverse_link_params(cfg, hub, router_name)
-                awg = awg_for_infra_link(exit_reverse_link_key(hub.name, router_name))
+                key = exit_reverse_link_key(hub.name, router_name)
+                awg = awg_for_infra_direction(key, router_name, hub.name)
                 iface_name = exit_in_iface_name(hub.name)
                 keys = build_material_for_exit_reverse(
                     hub=hub,

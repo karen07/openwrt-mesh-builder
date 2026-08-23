@@ -58,7 +58,11 @@ def build_access_peer_block(state: AccessPeerState) -> str:
                 "public_key": state.client_public,
                 "description": f"{state.user_name}.conf",
                 "route_allowed_ips": "1",
-                "persistent_keepalive": str(KEEPALIVE),
+                "persistent_keepalive": (
+                    state.awg.persistent_keepalive
+                    if state.protocol == PROTOCOL_AMNEZIAWG and state.awg is not None
+                    else str(KEEPALIVE)
+                ),
             },
             lists={"allowed_ips": [state.client_ip4]},
         )

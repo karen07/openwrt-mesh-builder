@@ -130,6 +130,46 @@ def stable_seed_u64(seed: str) -> int:
     return int.from_bytes(digest, "big")
 
 
+def stable_int(seed: str, minimum: int, maximum: int) -> int:
+    if minimum > maximum:
+        raise ValueError(f"invalid stable integer range {minimum}..{maximum}")
+    return minimum + (stable_seed_u64(seed) % (maximum - minimum + 1))
+
+
+def stable_babel_intervals(local_node: str, iface_name: str) -> tuple[int, int]:
+    # Babel timers are local interface properties, so the two directions of a
+    # tunnel intentionally get different values.
+    try:
+        from .default import (
+            BABELD_HELLO_INTERVAL_MIN,
+            BABELD_HELLO_INTERVAL_MAX,
+            BABELD_UPDATE_INTERVAL_MIN,
+            BABELD_UPDATE_INTERVAL_MAX,
+        )
+    except ImportError:
+        from default import (  # type: ignore
+            BABELD_HELLO_INTERVAL_MIN,
+            BABELD_HELLO_INTERVAL_MAX,
+            BABELD_UPDATE_INTERVAL_MIN,
+            BABELD_UPDATE_INTERVAL_MAX,
+        )
+
+    direction = f"{local_node}:{iface_name}"
+    hello = stable_int(
+        f"babel-hello:v1:{direction}",
+        BABELD_HELLO_INTERVAL_MIN,
+        BABELD_HELLO_INTERVAL_MAX,
+    )
+    # Keep update close to Babel's conventional ~4x hello cadence while
+    # still varying each local direction.
+    update_jitter = stable_int(f"babel-update-jitter:v1:{direction}", -2, 2)
+    update = max(
+        BABELD_UPDATE_INTERVAL_MIN,
+        min(BABELD_UPDATE_INTERVAL_MAX, 4 * hello + update_jitter),
+    )
+    return hello, update
+
+
 def random_free_slots(rng: random.Random, total_free: int, slots: int) -> list[int]:
     if slots <= 1:
         return [total_free]

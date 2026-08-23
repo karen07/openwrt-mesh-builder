@@ -88,13 +88,14 @@ def build_babeld_text(
     ]
 
     for iface in mesh_ifaces + exit_ifaces:
+        hello_interval, update_interval = stable_babel_intervals(router_name, iface)
         lines += [
             "config interface",
             f"    option ifname '{iface}'",
             f"    option type '{BABELD_TUNNEL_TYPE}'",
             f"    option split_horizon '{BABELD_SPLIT_HORIZON}'",
-            f"    option hello_interval '{BABELD_HELLO_INTERVAL}'",
-            f"    option update_interval '{BABELD_UPDATE_INTERVAL}'",
+            f"    option hello_interval '{hello_interval}'",
+            f"    option update_interval '{update_interval}'",
             "",
         ]
 

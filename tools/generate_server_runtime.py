@@ -17,14 +17,15 @@ def build_server_babeld_conf(
     states: list[RouterExitState],
     exit_exit_aliases: list[str],
 ) -> str:
-    _ = hub
     ifaces = sorted({st.client_alias for st in states} | set(exit_exit_aliases))
-    lines = [
-        f"interface {iface} type {BABELD_TUNNEL_TYPE} "
-        f"hello-interval {BABELD_HELLO_INTERVAL} "
-        f"update-interval {BABELD_UPDATE_INTERVAL}"
-        for iface in ifaces
-    ]
+    lines = []
+    for iface in ifaces:
+        hello_interval, update_interval = stable_babel_intervals(hub.name, iface)
+        lines.append(
+            f"interface {iface} type {BABELD_TUNNEL_TYPE} "
+            f"hello-interval {hello_interval} "
+            f"update-interval {update_interval}"
+        )
     lines += [
         "",
         "install allow",
