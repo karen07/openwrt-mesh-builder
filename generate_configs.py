@@ -63,6 +63,10 @@ def package_source_dir_from_profile(version: str, profile: DeviceProfile) -> Pat
     return PACKAGE_SOURCE_ROOT / version / profile.board / profile.arch
 
 
+def router_openwrt_version(cfg: ConfigData, router: RouterDef) -> str:
+    return router.openwrt_version or cfg.openwrt_version
+
+
 def ensure_named_release_packages_for_profile(
     version: str,
     profile: DeviceProfile,
@@ -102,18 +106,18 @@ def ensure_named_release_packages_for_profile(
 def ensure_release_packages(
     cfg: ConfigData,
     routers: list[RouterDef],
-    version: str,
     package_names: list[str],
     release_base_url: str,
     label: str,
 ) -> None:
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     for router in routers:
         profile = router_device_profile(cfg, router)
+        version = router_openwrt_version(cfg, router)
 
         board, arch, _target, _subtarget = profile_board_arch(profile)
-        key = (board, arch)
+        key = (version, board, arch)
         if key in seen:
             continue
 
@@ -265,7 +269,6 @@ def main() -> None:
         ensure_release_packages(
             cfg_data,
             routers,
-            cfg_data.openwrt_version,
             AWG_PACKAGE_NAMES,
             AWG_RELEASE_BASE_URL,
             "AWG2",
@@ -275,7 +278,6 @@ def main() -> None:
         ensure_release_packages(
             cfg_data,
             routers,
-            cfg_data.openwrt_version,
             CARES_PACKAGE_NAMES,
             CARES_RELEASE_BASE_URL,
             "c-ares",
@@ -283,7 +285,11 @@ def main() -> None:
 
     if not args.skip_package_sync:
         for router in routers:
-            sync_router_packages(cfg_data, router, cfg_data.openwrt_version)
+            sync_router_packages(
+                cfg_data,
+                router,
+                router_openwrt_version(cfg_data, router),
+            )
 
     for router in routers:
         sync_router(EXAMPLE_ROUTER_DIR, router)

@@ -38,6 +38,7 @@ from tools.default import (
 
 @dataclass(frozen=True)
 class ImageBuilderSpec:
+    version: str
     target: str
     subtarget: str
     directory_name: str
@@ -45,8 +46,8 @@ class ImageBuilderSpec:
     download_url: str
 
     @property
-    def key(self) -> tuple[str, str]:
-        return self.target, self.subtarget
+    def key(self) -> tuple[str, str, str]:
+        return self.version, self.target, self.subtarget
 
 
 def sh(args: list[str], cwd: Path | None = None) -> None:
@@ -65,10 +66,20 @@ def router_packages(cfg: ConfigData, router: RouterDef) -> list[str]:
     return managed_router_packages(cfg, router)
 
 
-def config_version(cfg_data: ConfigData, override: str | None) -> str:
+def normalize_version_override(override: str | None) -> str | None:
     if override is None:
-        return cfg_data.openwrt_version
+        return None
     return normalize_openwrt_version(override, "--version")
+
+
+def router_openwrt_version(
+    cfg_data: ConfigData,
+    router: RouterDef,
+    override: str | None,
+) -> str:
+    if override is not None:
+        return override
+    return router.openwrt_version or cfg_data.openwrt_version
 
 
 def find_router(cfg: ConfigData, name: str) -> RouterDef:
@@ -94,6 +105,7 @@ def imagebuilder_spec(profile: DeviceProfile, version: str) -> ImageBuilderSpec:
         f"/targets/{profile.target}/{profile.subtarget}/{archive_path.name}"
     )
     return ImageBuilderSpec(
+        version=version,
         target=profile.target,
         subtarget=profile.subtarget,
         directory_name=directory_name,
@@ -105,11 +117,12 @@ def imagebuilder_spec(profile: DeviceProfile, version: str) -> ImageBuilderSpec:
 def collect_imagebuilders(
     cfg: ConfigData,
     routers: list[RouterDef],
-    version: str,
-) -> dict[tuple[str, str], ImageBuilderSpec]:
-    builders: dict[tuple[str, str], ImageBuilderSpec] = {}
+    version_override: str | None,
+) -> dict[tuple[str, str, str], ImageBuilderSpec]:
+    builders: dict[tuple[str, str, str], ImageBuilderSpec] = {}
 
     for router in routers:
+        version = router_openwrt_version(cfg, router, version_override)
         spec = imagebuilder_spec(router_profile(cfg, router), version)
         builders.setdefault(spec.key, spec)
 
@@ -117,13 +130,13 @@ def collect_imagebuilders(
 
 
 def prepare_imagebuilders(
-    builders: dict[tuple[str, str], ImageBuilderSpec],
+    builders: dict[tuple[str, str, str], ImageBuilderSpec],
 ) -> None:
     print()
     print("=== Preparing OpenWrt ImageBuilders ===")
 
     for spec in builders.values():
-        print(f"{spec.target}/{spec.subtarget}:")
+        print(f"{spec.version} {spec.target}/{spec.subtarget}:")
         if spec.archive_path.exists():
             if not spec.archive_path.is_file():
                 die(f"ImageBuilder archive path is not a file: {spec.archive_path}")
@@ -156,15 +169,33 @@ def collect_router_install_images(
     device_tmp: str,
     router_tmp: str,
 ) -> list[tuple[Path, str]]:
-    prefix = f"openwrt-{openwrt_version_part}-{vendor_tmp}-{device_tmp}-{router_tmp}-"
+    # Release images are named like:
+    #   openwrt-25.12.1-mediatek-filogic-<profile>-...
+    # Snapshot images additionally contain the build revision:
+    #   openwrt-25.12-snapshot-r33187-ecbf832c08-mediatek-filogic-<profile>-...
+    #
+    # Do not assume that target/subtarget immediately follows the configured
+    # version.  Match the configured OpenWrt prefix and then locate the stable
+    # target/subtarget/profile marker in the generated filename.
+    version_prefix = f"openwrt-{openwrt_version_part.lower()}"
+    profile_marker = f"-{vendor_tmp}-{device_tmp}-{router_tmp}-"
+
     images: list[tuple[Path, str]] = []
     seen_types: set[str] = set()
 
-    for image_path in sorted(bin_dir.glob(f"{prefix}*")):
+    for image_path in sorted(bin_dir.glob("openwrt-*")):
         if not image_path.is_file():
             continue
 
-        raw_name = image_path.name[len(prefix) :]
+        image_name = image_path.name
+        if not image_name.lower().startswith(version_prefix):
+            continue
+
+        marker_pos = image_name.find(profile_marker)
+        if marker_pos < 0:
+            continue
+
+        raw_name = image_name[marker_pos + len(profile_marker) :]
         image_type = normalize_install_image_type(raw_name)
 
         if image_type is None:
@@ -221,13 +252,14 @@ def build_router(
     device_tmp = profile.subtarget
     openwrt_version_part = version
 
-    if imagebuilder.key != (vendor_tmp, device_tmp):
+    if imagebuilder.key != (version, vendor_tmp, device_tmp):
         die(f"wrong ImageBuilder selected for router: {name}")
     if not imagebuilder.archive_path.is_file():
         die(f"missing ImageBuilder archive: {imagebuilder.archive_path}")
 
     print()
     print(f"=== {name} / {router_tmp} ===")
+    print(f"OpenWrt: {version}")
     print(f"Board: {board}")
     print(f"Arch: {arch}")
     print(f"Packages: {packages_dir}")
@@ -312,9 +344,9 @@ def build_failure_text(exc: BaseException) -> str:
 def build_routers_parallel(
     cfg: ConfigData,
     routers: list[RouterDef],
-    version: str,
+    version_override: str | None,
     config_path: Path,
-    builders: dict[tuple[str, str], ImageBuilderSpec],
+    builders: dict[tuple[str, str, str], ImageBuilderSpec],
     jobs: int,
 ) -> None:
     worker_count = min(jobs, len(routers))
@@ -330,7 +362,8 @@ def build_routers_parallel(
     ) as executor:
         for router in routers:
             profile = router_profile(cfg, router)
-            imagebuilder = builders[(profile.target, profile.subtarget)]
+            version = router_openwrt_version(cfg, router, version_override)
+            imagebuilder = builders[(version, profile.target, profile.subtarget)]
             future = executor.submit(
                 build_router,
                 cfg,
@@ -388,8 +421,10 @@ def main() -> None:
         "--version",
         default=None,
         help=(
-            f"OpenWrt version, for example {MIN_OPENWRT_VERSION_TEXT}.4. "
-            f"Default: config openwrt_version; must be >= {MIN_OPENWRT_VERSION_TEXT}"
+            f"override OpenWrt version for all selected routers, for example "
+            f"{MIN_OPENWRT_VERSION_TEXT}.4 or {MIN_OPENWRT_VERSION_TEXT}-SNAPSHOT. "
+            "Default: routers[].openwrt_version when set, otherwise "
+            "config openwrt_version"
         ),
     )
     parser.add_argument(
@@ -412,7 +447,7 @@ def main() -> None:
 
     config_path = Path(args.config)
     cfg_data = load_config(config_path)
-    version = config_version(cfg_data, args.version)
+    version_override = normalize_version_override(args.version)
 
     routers = cfg_data.routers
     router_names = parse_csv_names(args.routers)
@@ -425,14 +460,14 @@ def main() -> None:
     for router in routers:
         validate_router_build_inputs(router)
 
-    builders = collect_imagebuilders(cfg_data, routers, version)
+    builders = collect_imagebuilders(cfg_data, routers, version_override)
     prepare_imagebuilders(builders)
 
     jobs = args.jobs if args.jobs is not None else default_jobs(len(routers))
     build_routers_parallel(
         cfg_data,
         routers,
-        version,
+        version_override,
         config_path,
         builders,
         jobs,

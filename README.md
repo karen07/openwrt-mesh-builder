@@ -322,7 +322,7 @@ servers/example
 Основные сущности в `config.json`:
 
 ```text
-openwrt_version    версия OpenWrt, минимум 25.12
+openwrt_version    версия OpenWrt по умолчанию, минимум 25.12; поддерживается 25.12-SNAPSHOT
 device_profiles    соответствие профиля OpenWrt target/subtarget и apk arch
 packages           дополнительные глобальные пакеты для всех роутеров
 routers            все OpenWrt роутеры проекта
@@ -339,6 +339,7 @@ access             пользовательские WG/AWG/OpenVPN входы н
 У router задаются:
 
 - `name` - имя узла
+- `openwrt_version` - необязательная версия OpenWrt только для этого роутера; перекрывает top-level `openwrt_version`
 - `device_profile` - обязательная ссылка на профиль из `device_profiles`
 - `subnet` - LAN сеть роутера, обычно canonical `/24`
 - `packages` - per-router добавление или удаление дополнительных пакетов
@@ -358,11 +359,17 @@ access             пользовательские WG/AWG/OpenVPN входы н
 ```json
 {
   "name": "Leaf01",
+  "openwrt_version": "25.12-SNAPSHOT",
   "device_profile": "asus_rt-ax53u",
   "subnet": "10.101.11.0/24",
   "allow_to_router": ["Spine01"]
 }
 ```
+
+Если `routers[].openwrt_version` не задан, используется top-level
+`openwrt_version`. Поэтому в одном deployment можно одновременно держать,
+например, большинство роутеров на `25.12.5`, а один роутер на
+`25.12-SNAPSHOT`.
 
 В этом фрагменте LAN `Leaf01` может обращаться к самому роутеру `Spine01`.
 
@@ -1349,6 +1356,10 @@ access endpoints: Spine01, Spine02, AccessOnly01, AccessOnly02
     "tcpdump"
   ],
   "device_profiles": {
+    "asus_rt-ax53u": {
+      "board": "ramips/mt7621",
+      "arch": "mipsel_24kc"
+    },
     "asus_rt-ax59u": {
       "board": "mediatek/filogic",
       "arch": "aarch64_cortex-a53"
@@ -1357,17 +1368,35 @@ access endpoints: Spine01, Spine02, AccessOnly01, AccessOnly02
       "board": "mediatek/filogic",
       "arch": "aarch64_cortex-a53"
     },
-    "asus_rt-ax53u": {
-      "board": "ramips/mt7621",
-      "arch": "mipsel_24kc"
+    "netcraze_nc-1812": {
+      "board": "mediatek/filogic",
+      "arch": "aarch64_cortex-a53"
     },
     "xiaomi_mi-router-4a-gigabit-v2": {
       "board": "ramips/mt7621",
       "arch": "mipsel_24kc"
+    },
+    "xiaomi_mi-router-ax3000t": {
+      "board": "mediatek/filogic",
+      "arch": "aarch64_cortex-a53"
     }
   }
 }
 ```
+
+В демонстрационном `config.json` `Spine02` показывает per-router override:
+
+```json
+{
+  "name": "Spine02",
+  "openwrt_version": "25.12-SNAPSHOT",
+  "device_profile": "asus_tuf-ax4200",
+  "subnet": "10.101.2.0/24"
+}
+```
+
+Остальные роутеры без `openwrt_version` используют top-level `25.12.5`.
+Так в одном deployment одновременно используются release и snapshot.
 
 Полный список роутеров, exit, access групп и Wi-Fi секретов лежит в самом `config.json`.
 
@@ -1478,7 +1507,8 @@ Profile name является безопасным ASCII identifier.
 
 Он проверяет, что:
 
-- `openwrt_version` задан и не ниже `25.12`
+- top-level `openwrt_version` задан и не ниже `25.12`; принимаются обычные release версии и `*-SNAPSHOT`, например `25.12-SNAPSHOT`
+- `routers[].openwrt_version`, если задан, проходит ту же проверку и перекрывает top-level версию только для этого роутера
 - `main_router` задан и ссылается на существующий router
 - router/access имена состоят только из `A-Za-z0-9_` и проверяются через generated Linux interface names
 - `router.name` используется как generated `In`, поэтому имя router эффективно ограничено 13 ASCII bytes
@@ -1585,6 +1615,11 @@ Profile name является безопасным ASCII identifier.
 1. запускает validation hook из `tools.validate`
 1. запускает `tools/show_unmanaged.py`
 
+Для package download/sync используется эффективная версия каждого роутера:
+`routers[].openwrt_version`, а при её отсутствии top-level `openwrt_version`.
+Если в одном config смешаны release и snapshot, пакеты скачиваются и хранятся
+раздельно по версиям.
+
 `--force` передается в `tools/generate.py` и пересоздает mesh/exit WG/AWG keys. Access secrets сохраняются.
 
 `--details` после генерации печатает не только SHA-256, но и полный отчет по unmanaged sections/files. Это основной удобный способ проверить результат генерации; отдельно запускать `tools/show_unmanaged.py` обычно не требуется.
@@ -1638,15 +1673,29 @@ Profile name является безопасным ASCII identifier.
 ./build_router_images.py
 ./build_router_images.py Spine01
 ./build_router_images.py Spine01,Leaf01 --version 25.12.5
+./build_router_images.py Spine01 --version 25.12-SNAPSHOT
 ./build_router_images.py --jobs 4
 ./build_router_images.py --jobs 1  # последовательная сборка
 ```
 
-Скрипт сначала скачивает все уникальные ImageBuilder для выбранных `target/subtarget`,
+Без `--version` каждый роутер использует свой `routers[].openwrt_version`, если он
+задан, иначе top-level `openwrt_version`. `--version` является явным override для
+всех выбранных роутеров.
+
+Для обычного deployment с локальными `.apk` (особенно `kmod`) предпочтительно менять
+версию в `config.json` и снова запускать `generate_configs.py`, а не использовать
+`build_router_images.py --version`: per-router `packages/` синхронизируются именно по
+эффективной версии из config. Build-only override не пересобирает и не перекачивает
+эти package repositories.
+
+Скрипт сначала скачивает все уникальные ImageBuilder для выбранных
+`version + target/subtarget`,
 а после завершения загрузок параллельно собирает образы роутеров. По умолчанию число
 одновременных сборок ограничено числом CPU и количеством выбранных роутеров; параметр
-`--jobs` задаёт лимит явно. Роутеры с одинаковым `target/subtarget` используют один
-заранее скачанный архив ImageBuilder, но распаковывают его в независимые каталоги.
+`--jobs` задаёт лимит явно. Роутеры с одинаковыми версией и `target/subtarget`
+используют один заранее скачанный архив ImageBuilder, но распаковывают его в
+независимые каталоги. Одинаковый target на разных версиях использует разные
+ImageBuilder.
 
 Результат складывается в:
 
@@ -1657,8 +1706,8 @@ images/
 Набор install образов зависит от OpenWrt device profile. Обычно есть `sysupgrade`, а `factory` появляется только для профилей, где его генерирует ImageBuilder.
 
 ```text
-images/<router>_<version>_<git>_<profile>_sysupgrade.bin
-images/<router>_<version>_<git>_<profile>_factory.bin
+images/<router>_<version>_<git>_<timestamp>_sysupgrade.bin
+images/<router>_<version>_<git>_<timestamp>_factory.bin
 ```
 
 Перед сборкой encrypted secrets и key material расшифровываются только во временной ImageBuilder директории.
@@ -1673,7 +1722,15 @@ images/<router>_<version>_<git>_<profile>_factory.bin
 ./upgrade_routers.py e47e68e
 ./upgrade_routers.py e47e68e Spine01 Leaf01
 ./upgrade_routers.py e47e68e --result-dir images --remote-dir /tmp
+./upgrade_routers.py Spine02 --version 25.12-SNAPSHOT
 ```
+
+По умолчанию для каждого роутера выбирается образ именно его эффективной версии:
+`routers[].openwrt_version`, а если override не задан - top-level `openwrt_version`.
+Это не дает случайно выбрать release-образ вместо snapshot (или наоборот), если в
+`images/` лежат артефакты нескольких версий с одним git hash. `--version` является
+явным override для всех выбранных роутеров и должен совпадать с версией, с которой
+они были собраны.
 
 Без positional `git_version` команда использует текущий git hash:
 

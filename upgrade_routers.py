@@ -12,6 +12,7 @@ from tools.process import die
 from tools.remote_exec import run_captured_remote, scp_path_captured
 from tools.git_utils import git_short
 from tools.router_order import RouterDef, build_router_order, router_slug
+from tools.common import build_config_data, normalize_openwrt_version
 from tools.default import (
     CONFIG_PATH,
     SCP_TIMEOUT,
@@ -23,15 +24,28 @@ from tools.default import (
 )
 
 
+def router_openwrt_version(
+    router: RouterDef,
+    default_version: str,
+    version_override: str | None,
+) -> str:
+    return version_override or router.openwrt_version or default_version
+
+
 def find_image_for_router(
-    result_dir: Path, router: RouterDef, git_version: str
+    result_dir: Path,
+    router: RouterDef,
+    git_version: str,
+    openwrt_version: str,
 ) -> Path:
     slug = router_slug(router.name)
-    sysupgrade_pattern = f"{slug}_*_{git_version}_*_{INSTALL_IMAGE_TYPE_SYSUPGRADE}.bin"
+    sysupgrade_pattern = (
+        f"{slug}_{openwrt_version}_{git_version}_*_{INSTALL_IMAGE_TYPE_SYSUPGRADE}.bin"
+    )
     matches = sorted(p for p in result_dir.glob(sysupgrade_pattern) if p.is_file())
 
     if not matches:
-        any_pattern = f"{slug}_*_{git_version}_*.bin"
+        any_pattern = f"{slug}_{openwrt_version}_{git_version}_*.bin"
         other_images = sorted(
             p.name for p in result_dir.glob(any_pattern) if p.is_file()
         )
@@ -40,7 +54,8 @@ def find_image_for_router(
             hint = "; found only non-sysupgrade images: " + ", ".join(other_images)
         raise FileNotFoundError(
             f"no sysupgrade image found for router={router.name} "
-            f"git_version={git_version} pattern={sysupgrade_pattern}{hint}"
+            f"openwrt_version={openwrt_version} git_version={git_version} "
+            f"pattern={sysupgrade_pattern}{hint}"
         )
 
     if len(matches) > 1:
@@ -58,6 +73,8 @@ def copy_images(
     result_dir: Path,
     remote_dir: str,
     scp_timeout: int,
+    default_openwrt_version: str,
+    version_override: str | None = None,
     config_path: str | Path = CONFIG_PATH,
 ) -> tuple[dict[str, Path], dict[str, str]]:
     copied: dict[str, Path] = {}
@@ -66,8 +83,20 @@ def copy_images(
     for router in routers:
         print(f"{router.name} ({router.ssh_host})")
 
+        openwrt_version = router_openwrt_version(
+            router,
+            default_openwrt_version,
+            version_override,
+        )
+
         try:
-            image_path = find_image_for_router(result_dir, router, git_version)
+            image_path = find_image_for_router(
+                result_dir,
+                router,
+                git_version,
+                openwrt_version,
+            )
+            print(f"  OpenWrt: {openwrt_version}")
             print(f"  image: {image_path.name}")
         except Exception as e:
             failed[router.name] = str(e)
@@ -215,6 +244,15 @@ def main() -> None:
         help="path to config.json (default: config.json)",
     )
     ap.add_argument(
+        "--version",
+        default=None,
+        help=(
+            "override OpenWrt version for all selected routers. "
+            "Default: routers[].openwrt_version when set, otherwise "
+            "config openwrt_version"
+        ),
+    )
+    ap.add_argument(
         "--result-dir",
         default=str(RESULT_DIR),
         help="directory with build artifacts (default: images)",
@@ -244,6 +282,12 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg = load_json_config(Path(args.config))
+    cfg_data = build_config_data(cfg)
+    version_override = (
+        normalize_openwrt_version(args.version, "--version")
+        if args.version is not None
+        else None
+    )
     routers = build_router_order(cfg)
     git_version, router_names = resolve_git_version_and_router_names(
         routers,
@@ -263,6 +307,8 @@ def main() -> None:
 
     print("=== COPYING IMAGES ===")
     print(f"git version: {git_version}")
+    if version_override is not None:
+        print(f"OpenWrt override: {version_override}")
     print(f"image dir: {result_dir}")
     print()
 
@@ -272,6 +318,8 @@ def main() -> None:
         result_dir=result_dir,
         remote_dir=args.remote_dir,
         scp_timeout=args.scp_timeout,
+        default_openwrt_version=cfg_data.openwrt_version,
+        version_override=version_override,
         config_path=args.config,
     )
 
