@@ -43,6 +43,7 @@ try:
         PPPOE_KEYS,
         ROUTER_KEYS,
         WIFI_CONFIG_KEYS,
+        normalize_openwrt_version,
         require_known_keys,
         validate_config_known_keys,
     )
@@ -89,6 +90,7 @@ except ImportError:
         PPPOE_KEYS,
         ROUTER_KEYS,
         WIFI_CONFIG_KEYS,
+        normalize_openwrt_version,
         require_known_keys,
         validate_config_known_keys,
     )
@@ -205,6 +207,14 @@ def load_routers(
                 f"{profile_name}"
             )
 
+        raw_openwrt_version = raw.get(CONFIG_KEY_OPENWRT_VERSION)
+        openwrt_version = None
+        if raw_openwrt_version is not None:
+            openwrt_version = normalize_openwrt_version(
+                raw_openwrt_version,
+                f"routers[{name}].openwrt_version",
+            )
+
         raw_packages = raw.get(CONFIG_KEY_PACKAGES, [])
         if raw_packages is None:
             raw_packages = []
@@ -237,6 +247,7 @@ def load_routers(
                 name=name,
                 subnet=subnet,
                 device_profile=profile_name,
+                openwrt_version=openwrt_version,
                 package_overrides=package_overrides,
             )
         )

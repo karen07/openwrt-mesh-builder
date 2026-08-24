@@ -12,6 +12,10 @@
         "tcpdump"
     ],
     "device_profiles": {
+        "asus_rt-ax53u": {
+            "board": "ramips/mt7621",
+            "arch": "mipsel_24kc"
+        },
         "asus_rt-ax59u": {
             "board": "mediatek/filogic",
             "arch": "aarch64_cortex-a53"
@@ -20,13 +24,17 @@
             "board": "mediatek/filogic",
             "arch": "aarch64_cortex-a53"
         },
-        "asus_rt-ax53u": {
-            "board": "ramips/mt7621",
-            "arch": "mipsel_24kc"
+        "netcraze_nc-1812": {
+            "board": "mediatek/filogic",
+            "arch": "aarch64_cortex-a53"
         },
         "xiaomi_mi-router-4a-gigabit-v2": {
             "board": "ramips/mt7621",
             "arch": "mipsel_24kc"
+        },
+        "xiaomi_mi-router-ax3000t": {
+            "board": "mediatek/filogic",
+            "arch": "aarch64_cortex-a53"
         }
     },
     "main_router": "Spine01",
@@ -83,6 +91,7 @@
         },
         {
             "name": "Spine02",
+            "openwrt_version": "25.12-SNAPSHOT",
             "device_profile": "asus_tuf-ax4200",
             "subnet": "10.101.2.0/24",
             "wifi_5g": {

@@ -41,6 +41,7 @@ DEVICE_PROFILE_KEYS = {CONFIG_KEY_BOARD, CONFIG_KEY_ARCH}
 
 ROUTER_KEYS = {
     CONFIG_KEY_NAME,
+    CONFIG_KEY_OPENWRT_VERSION,
     CONFIG_KEY_DEVICE_PROFILE,
     CONFIG_KEY_SUBNET,
     CONFIG_KEY_PACKAGES,
@@ -109,10 +110,14 @@ def normalize_openwrt_version(value: object, where: str) -> str:
         die(f"{where} must be a non-empty string")
 
     version = value.strip()
-    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version):
-        die(f"{where} must be numeric and >= {MIN_OPENWRT_VERSION_TEXT}: " f"{version}")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)*)(?:-SNAPSHOT)?", version)
+    if match is None:
+        die(
+            f"{where} must be a release version or -SNAPSHOT version "
+            f"and >= {MIN_OPENWRT_VERSION_TEXT}: {version}"
+        )
 
-    parts = version.split(".")
+    parts = match.group(1).split(".")
     major = int(parts[0])
     minor = int(parts[1]) if len(parts) > 1 else 0
     if (major, minor) < MIN_OPENWRT_VERSION:
@@ -234,6 +239,13 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
                     f"{where}.packages",
                     allow_empty=True,
                     router_override=True,
+                )
+
+            router_openwrt_version = raw.get(CONFIG_KEY_OPENWRT_VERSION)
+            if router_openwrt_version is not None:
+                normalize_openwrt_version(
+                    router_openwrt_version,
+                    f"{where}.openwrt_version",
                 )
 
             profile_name = raw.get(CONFIG_KEY_DEVICE_PROFILE)

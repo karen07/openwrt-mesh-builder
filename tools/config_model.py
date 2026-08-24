@@ -35,6 +35,7 @@ class RouterDef:
     name: str
     subnet: str
     device_profile: str
+    openwrt_version: str | None = None
     package_overrides: tuple[str, ...] = ()
 
     @property
