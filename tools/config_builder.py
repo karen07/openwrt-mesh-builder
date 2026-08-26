@@ -128,11 +128,17 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
             (CONFIG_KEY_ALLOW_TO_ROUTER, FIREWALL_ALLOW_KIND_ROUTER),
             (CONFIG_KEY_ALLOW_TO_LAN, FIREWALL_ALLOW_KIND_LAN),
         ):
+            where = f"routers[{router_name}].{key}"
             targets = load_firewall_targets(
                 raw.get(key),
-                f"routers[{router_name}].{key}",
+                where,
                 router_names,
             )
+            if router_name in targets:
+                die(
+                    f"{where} cannot target its own router {router_name}; "
+                    "local access is controlled by the local firewall zone policy"
+                )
             if targets:
                 firewall_allows.append(
                     FirewallAllow(
@@ -239,11 +245,17 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
                 (CONFIG_KEY_ALLOW_TO_ROUTER, FIREWALL_ALLOW_KIND_ROUTER),
                 (CONFIG_KEY_ALLOW_TO_LAN, FIREWALL_ALLOW_KIND_LAN),
             ):
+                target_where = f"access[{router_name}][{idx}].{key}"
                 targets = load_firewall_targets(
                     raw.get(key),
-                    f"access[{router_name}][{idx}].{key}",
+                    target_where,
                     router_names,
                 )
+                if router_name in targets:
+                    die(
+                        f"{target_where} cannot target its own router {router_name}; "
+                        "local access is controlled by the access firewall zone policy"
+                    )
                 if targets:
                     firewall_allows.append(
                         FirewallAllow(

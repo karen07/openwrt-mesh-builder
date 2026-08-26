@@ -107,10 +107,11 @@ def require_firewall_zone_policy(
         die(f"{path}: firewall zone {name}: stale mtu_fix")
 
 
-def require_firewall_mesh_source_rule(
+def require_firewall_overlay_source_rule(
     parsed_blocks: list[dict[str, object]],
     path: Path,
     name: str,
+    source_zone: str,
     source_ip: str,
     dest_zone: str | None,
 ) -> None:
@@ -119,8 +120,11 @@ def require_firewall_mesh_source_rule(
         die(f"{path}: missing firewall rule {name}")
     opts = block.get("options", {})
     lists = block.get("lists", {})
-    if opts.get("src") != ZONE_MESH:
-        die(f"{path}: firewall rule {name}: bad src")
+    if opts.get("src") != source_zone:
+        die(
+            f"{path}: firewall rule {name}: bad src; "
+            f"expected {source_zone!r}, got {opts.get('src')!r}"
+        )
     if dest_zone is None:
         if "dest" in opts:
             die(f"{path}: firewall rule {name}: unexpected dest")
@@ -153,25 +157,6 @@ def require_firewall_dns_transit_access_rule(
         die(f"{path}: firewall rule {TRANSIT_ACCESS_DNS_RULE_NAME}: bad target")
     if lists.get("proto", []) != DNS_PROTOCOLS:
         die(f"{path}: firewall rule {TRANSIT_ACCESS_DNS_RULE_NAME}: bad proto")
-
-
-def require_firewall_ssh_from_exit_rule(
-    parsed_blocks: list[dict[str, object]], path: Path
-) -> None:
-    name = "Allow-SSH-From-Exit-To-Router"
-    block = find_firewall_rule_by_name(parsed_blocks, name)
-    if block is None:
-        die(f"{path}: missing firewall rule {name}")
-
-    opts = block.get("options", {})
-    if opts.get("src") != ZONE_EXIT:
-        die(f"{path}: firewall rule {name}: bad src")
-    if opts.get("proto") != TRANSPORT_TCP:
-        die(f"{path}: firewall rule {name}: bad proto")
-    if opts.get("dest_port") != "22":
-        die(f"{path}: firewall rule {name}: bad dest_port")
-    if opts.get("target") != FIREWALL_TARGET_ACCEPT:
-        die(f"{path}: firewall rule {name}: bad target")
 
 
 def require_routing_firewall_rule(
@@ -398,9 +383,6 @@ def validate_firewall(cfg: ConfigData) -> None:
         if transit_access:
             require_firewall_dns_transit_access_rule(parsed, path)
 
-        if exit_ifaces and not config_has_allow_to_router_all(cfg):
-            require_firewall_ssh_from_exit_rule(parsed, path)
-
         if router_name in cfg.mesh_hubs_by_name:
             hub = cfg.mesh_hubs_by_name[router_name]
             for _hub_name, target_name in mesh_link_specs_for_hub(cfg, router_name):
@@ -434,19 +416,31 @@ def validate_firewall(cfg: ConfigData) -> None:
                 ),
             )
 
+        overlay_src_zones: list[str] = []
+        if mesh_ifaces:
+            overlay_src_zones.append(ZONE_MESH)
+        if exit_ifaces:
+            overlay_src_zones.append(ZONE_EXIT)
+
         for allow in cfg.firewall_allows:
             if router_name not in expand_firewall_targets(cfg, allow):
                 continue
-            rule_name = firewall_allow_rule_name(
-                allow.source_name, router_name, allow.kind
-            )
-            require_firewall_mesh_source_rule(
-                parsed,
-                path,
-                rule_name,
-                allow.source_subnet,
-                FIREWALL_ZONE_LAN if allow.kind == FIREWALL_ALLOW_KIND_LAN else None,
-            )
+            for src_zone in overlay_src_zones:
+                rule_name = firewall_allow_rule_name(
+                    allow.source_name, router_name, allow.kind, src_zone
+                )
+                require_firewall_overlay_source_rule(
+                    parsed,
+                    path,
+                    rule_name,
+                    src_zone,
+                    allow.source_subnet,
+                    (
+                        FIREWALL_ZONE_LAN
+                        if allow.kind == FIREWALL_ALLOW_KIND_LAN
+                        else None
+                    ),
+                )
 
         for rule in cfg.routing_rules_by_router.get(router_name, []):
             rule_name = routing_firewall_rule_name(rule)
