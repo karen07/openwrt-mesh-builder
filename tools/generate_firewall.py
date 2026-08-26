@@ -66,14 +66,15 @@ def build_rule_allow_port_wan(name: str, port: int, proto: str) -> str:
     )
 
 
-def build_rule_allow_mesh_src_ip(
+def build_rule_allow_overlay_src_ip(
     name: str,
+    src_zone: str,
     src_ip: str,
     dest_zone: str | None,
 ) -> str:
     options = {
         "name": name,
-        "src": ZONE_MESH,
+        "src": src_zone,
         "target": FIREWALL_TARGET_ACCEPT,
         "family": "ipv4",
         "proto": "all",
@@ -100,20 +101,6 @@ def build_rule_allow_dns_transit_access() -> str:
             "target": FIREWALL_TARGET_ACCEPT,
         },
         lists={"proto": DNS_PROTOCOLS},
-    )
-
-
-def build_rule_allow_ssh_from_exit_to_router() -> str:
-    return uci_block(
-        "rule",
-        None,
-        options={
-            "name": "Allow-SSH-From-Exit-To-Router",
-            "src": ZONE_EXIT,
-            "proto": TRANSPORT_TCP,
-            "dest_port": "22",
-            "target": FIREWALL_TARGET_ACCEPT,
-        },
     )
 
 
@@ -216,9 +203,6 @@ def build_firewall_blocks(
             ).strip()
         )
 
-    if exit_ifaces and not config_has_allow_to_router_all(cfg):
-        blocks.append(build_rule_allow_ssh_from_exit_to_router().strip())
-
     trusted_access_ifaces = sorted(
         {g.name for g in access_groups_for_router if g.policy == ACCESS_POLICY_TRUSTED}
     )
@@ -279,18 +263,32 @@ def build_firewall_blocks(
             build_rule_allow_port_wan(f"Allow-{group.name}", group.port, proto).strip()
         )
 
+    overlay_src_zones: list[str] = []
+    if mesh_ifaces:
+        overlay_src_zones.append(ZONE_MESH)
+    if exit_ifaces:
+        overlay_src_zones.append(ZONE_EXIT)
+
     for allow in cfg.firewall_allows:
         targets = expand_firewall_targets(cfg, allow)
         if router_name not in targets:
             continue
 
-        blocks.append(
-            build_rule_allow_mesh_src_ip(
-                firewall_allow_rule_name(allow.source_name, router_name, allow.kind),
-                allow.source_subnet,
-                FIREWALL_ZONE_LAN if allow.kind == FIREWALL_ALLOW_KIND_LAN else None,
-            ).strip()
-        )
+        for src_zone in overlay_src_zones:
+            blocks.append(
+                build_rule_allow_overlay_src_ip(
+                    firewall_allow_rule_name(
+                        allow.source_name, router_name, allow.kind, src_zone
+                    ),
+                    src_zone,
+                    allow.source_subnet,
+                    (
+                        FIREWALL_ZONE_LAN
+                        if allow.kind == FIREWALL_ALLOW_KIND_LAN
+                        else None
+                    ),
+                ).strip()
+            )
 
     blocks.extend(build_routing_firewall_blocks(cfg, router_name))
 
@@ -320,7 +318,27 @@ def update_firewall_part(
     )
     managed_keys = generated_uci_management_keys(blocks)
 
+    # Migration: allow rules used to omit the ingress suffix for Mesh, e.g.
+    # Allow-Devices-To-Anna-Router.  Since generated UCI ownership is keyed by
+    # option name, a plain rename would otherwise preserve that old generated
+    # section as unmanaged.  Remove only legacy names that correspond to an
+    # allow which is still present in the current config for this target.
+    legacy_allow_names: set[str] = set()
+    for allow in cfg.firewall_allows:
+        if router_name not in expand_firewall_targets(cfg, allow):
+            continue
+        legacy_allow_names.add(
+            legacy_firewall_allow_rule_name(allow.source_name, router_name, allow.kind)
+        )
+
     def keep_block(parsed: dict[str, object]) -> bool:
+        options = parsed.get("options", {})
+        if (
+            parsed.get("type") == "rule"
+            and isinstance(options, dict)
+            and str(options.get("name", "")) in legacy_allow_names
+        ):
+            return False
         return uci_management_key(parsed) not in managed_keys
 
     preserved_before = filter_preserved_before_marker(before_marker, keep_block)

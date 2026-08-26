@@ -350,9 +350,9 @@ access             пользовательские WG/AWG/OpenVPN входы н
 - `exit_order` - индивидуальный порядок выбора exit серверов
 - `routing_rules` - выбор маршрутизации для отдельного IPv4-устройства
 
-`allow_to_router` и `allow_to_lan` описывают исходящее разрешение от source сети текущего роутера или access группы к target роутерам.
+`allow_to_router` и `allow_to_lan` описывают исходящее разрешение от source сети текущего роутера или access группы к удаленным target роутерам.
 
-Это не входящая ACL на source. Генератор добавляет firewall rules на target роутере.
+Это не входящая ACL на source. Генератор добавляет firewall rules на target роутере. Поскольку Babel может выбрать путь к target как через `Mesh`, так и через `Exit`, разрешение принимается с обоих overlay ingress и не зависит от выбранного Babel next-hop. Явно указывать source router как target запрещено как для router-level, так и для access-group `allow_to_router`/`allow_to_lan`; значение `all` означает все остальные роутеры и также исключает source router. Локальный доступ определяется локальной firewall policy: для access группы - зоной `TrustedAccess`/`TransitAccess`.
 
 Пример:
 

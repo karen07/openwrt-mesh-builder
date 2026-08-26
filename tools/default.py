@@ -319,7 +319,7 @@ WIFI_RADIO_BY_KEY = {
 }
 
 WIFI_COUNTRY = "RU"
-WIFI_ENCRYPTION = "psk2"
+WIFI_ENCRYPTION = "sae-mixed"
 WIFI_CELL_DENSITY = "0"
 
 # ============================================================
