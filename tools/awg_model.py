@@ -102,6 +102,7 @@ try:
         AWG_CONTENT_PADDING_ADDITION,
         AWG_DISABLE_COOKIES,
         AWG_HEADER_PROTECTION_ENABLED,
+        AWG_HEADER_PROTECTION_MIN_PADDING,
         AWG_KEEPALIVE_TIMEOUT_MAX,
         AWG_KEEPALIVE_TIMEOUT_MIN,
         AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
@@ -124,6 +125,7 @@ except ImportError:
         AWG_CONTENT_PADDING_ADDITION,
         AWG_DISABLE_COOKIES,
         AWG_HEADER_PROTECTION_ENABLED,
+        AWG_HEADER_PROTECTION_MIN_PADDING,
         AWG_KEEPALIVE_TIMEOUT_MAX,
         AWG_KEEPALIVE_TIMEOUT_MIN,
         AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
@@ -312,8 +314,11 @@ def validate_awg_v3_options(awg: AwgOptions, where: str) -> None:
             die(f"{where}.header_protection_key must be base64")
         if len(decoded) != 32:
             die(f"{where}.header_protection_key must decode to 32 bytes")
-        if min(awg.s1, awg.s2, awg.s3, awg.s4) < 12:
-            die(f"{where}: HeaderProtectionKey requires S1-S4 >= 12")
+        if min(awg.s1, awg.s2, awg.s3, awg.s4) < AWG_HEADER_PROTECTION_MIN_PADDING:
+            die(
+                f"{where}: HeaderProtectionKey requires "
+                f"S1-S4 >= {AWG_HEADER_PROTECTION_MIN_PADDING}"
+            )
 
 
 def validate_awg_options(awg: AwgOptions, where: str) -> None:
@@ -357,14 +362,28 @@ def validate_awg_auto_ranges() -> None:
         or AWG_INFRA_AUTO_S4_MIN > AWG_INFRA_AUTO_S4_MAX
     ):
         die("bad AWG_INFRA_AUTO_S4_MIN/AWG_INFRA_AUTO_S4_MAX")
+    if (
+        AWG_HEADER_PROTECTION_ENABLED
+        and min(
+            AWG_INFRA_AUTO_S1_MIN,
+            AWG_INFRA_AUTO_S2_MIN,
+            AWG_INFRA_AUTO_S3_MIN,
+            AWG_INFRA_AUTO_S4_MIN,
+        )
+        < AWG_HEADER_PROTECTION_MIN_PADDING
+    ):
+        die(
+            "infra AWG auto S1-S4 minimums must satisfy "
+            f"HeaderProtectionKey >= {AWG_HEADER_PROTECTION_MIN_PADDING}"
+        )
 
 
 def stable_awg_shared_runtime_params(link_key: str) -> tuple[int, int, int, int]:
     """Parameters that must describe the same wire format on both ends."""
     validate_awg_auto_ranges()
-    # Preserve the S1-S4 values produced by the original builder.
-    # It used one RNG for J and S, so consume the legacy J draws before
-    # deriving S. Only J moves to a directional seed.
+    # Keep the original RNG draw order: the old builder drew J before S.
+    # Consume those legacy J draws before S even though HPK deliberately
+    # narrows the generated S1-S4 ranges to values >= the nonce size.
     rng = random.Random(stable_seed_u64(f"awg-runtime:{link_key}"))
     rng.randint(AWG_INFRA_AUTO_JC_MIN, AWG_INFRA_AUTO_JC_MAX)
     rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
@@ -373,6 +392,7 @@ def stable_awg_shared_runtime_params(link_key: str) -> tuple[int, int, int, int]
     s2 = rng.randint(AWG_INFRA_AUTO_S2_MIN, AWG_INFRA_AUTO_S2_MAX)
     s3 = rng.randint(AWG_INFRA_AUTO_S3_MIN, AWG_INFRA_AUTO_S3_MAX)
     s4 = rng.randint(AWG_INFRA_AUTO_S4_MIN, AWG_INFRA_AUTO_S4_MAX)
+
     return s1, s2, s3, s4
 
 
