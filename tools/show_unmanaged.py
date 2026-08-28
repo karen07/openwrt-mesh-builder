@@ -17,7 +17,13 @@ try:
         build_config_data,
         load_json_config,
     )
-    from .default import UNMANAGED_REPORT_HASH_LEN
+    from .default import (
+        REL_BOOTSTRAP,
+        REL_DHCP,
+        REL_FIREWALL,
+        REL_NETWORK,
+        UNMANAGED_REPORT_HASH_LEN,
+    )
     from .show_unmanaged_collect import (
         collect_unmanaged_bootstrap_above_marker,
         collect_unmanaged_firewall_above_marker,
@@ -34,7 +40,13 @@ except ImportError:
         build_config_data,
         load_json_config,
     )
-    from default import UNMANAGED_REPORT_HASH_LEN  # type: ignore
+    from default import (  # type: ignore
+        REL_BOOTSTRAP,
+        REL_DHCP,
+        REL_FIREWALL,
+        REL_NETWORK,
+        UNMANAGED_REPORT_HASH_LEN,
+    )
     from show_unmanaged_collect import (  # type: ignore
         collect_unmanaged_bootstrap_above_marker,
         collect_unmanaged_firewall_above_marker,
@@ -132,10 +144,10 @@ def print_unmanaged_report(cfg: ConfigData) -> None:
         print_router_header(router_name, first=not printed_any)
         printed_any = True
 
-        print_uci_section("network_part", unmanaged_network)
-        print_uci_section("firewall_part", unmanaged_firewall)
-        print_uci_section("dhcp_part", unmanaged_dhcp)
-        print_text_section("bootstrap.sh", unmanaged_bootstrap)
+        print_uci_section(REL_NETWORK.name, unmanaged_network)
+        print_uci_section(REL_FIREWALL.name, unmanaged_firewall)
+        print_uci_section(REL_DHCP.name, unmanaged_dhcp)
+        print_text_section(REL_BOOTSTRAP.name, unmanaged_bootstrap)
         print_file_list_section("extra files", unmanaged_files)
 
     unmanaged_server_files = collect_unmanaged_server_files(cfg)

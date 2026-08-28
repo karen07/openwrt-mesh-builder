@@ -553,7 +553,7 @@ Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, по
 
 Этот блок вставляется рядом с `name`, `protocol`, `port`, `subnet` и `users` соответствующей AmneziaWG access группы. Если новые AWG 3.x поля не указаны явно, builder детерминированно выводит их из access group key.
 
-`HeaderProtectionKey` и `ContentPaddingAddition` также поддерживаются как `header_protection_key` и `content_padding_addition`, но в текущем infra профиле не включаются: header protection по умолчанию отключен, а `ContentPaddingAddition` оставлен пустым, чтобы transport padding делал `RandomTrailers`.
+`HeaderProtectionKey` и `ContentPaddingAddition` также поддерживаются как `header_protection_key` и `content_padding_addition`. Если `header_protection_key` не задан явно, builder детерминированно выводит общий 32-byte Base64 key из access/infra link key. При включенном header protection все `S1-S4` должны быть не меньше `12`; generated infra `S1-S4` сразу детерминированно выбираются из диапазонов с нижней границей `12`. `ContentPaddingAddition` оставлен пустым, чтобы transport padding делал `RandomTrailers`.
 
 ## Быстрый старт
 
@@ -640,7 +640,7 @@ Infra AWG профиль генерируется детерминированн
 | `RandomTrailers` | включен |
 | `DisableCookies` | выключен |
 | `ContentPaddingAddition` | не задается |
-| `HeaderProtectionKey` | поддерживается моделью, но auto-generation сейчас выключен |
+| `HeaderProtectionKey` | shared per-link; детерминированный 32-byte key, auto-generation включен |
 
 Babel timers также диверсифицированы per local tunnel direction: `hello_interval` выбирается в диапазоне 2-4 seconds, а `update_interval` - 8-14 seconds с привязкой к hello interval.
 
@@ -761,7 +761,7 @@ Per-router `exit_order` может содержать только часть ex
 служебную mark перед выходом в зону `ExitIPIP`.
 
 Генератор изменяет только часть до marker. Строка marker и весь хвост после нее
-дописываются побайтно без нормализации. Хвостом владеет только `sync_rules.py`,
+дописываются побайтно без нормализации. Хвостом владеет только `tools/sync_rules.py`,
 который берет его из `routers/example`. Валидация проверяет итоговый конфиг
 каждого роутера и до, и после marker, но общий хвост не переписывает. Если
 router-specific правило `Routing-*` обнаружено после marker, генератор
@@ -877,7 +877,7 @@ routers/example/files/etc/config/firewall_part
 
 задает общую tail-часть после marker. В router-specific `firewall_part` часть
 до marker генерируется отдельно, а часть начиная с marker целиком копируется
-из `example` через `sync_rules.py`:
+из `example` через `tools/sync_rules.py`:
 
 ```text
 # Unique part up to this line
@@ -1629,7 +1629,7 @@ Profile name является безопасным ASCII identifier.
 - `tools.generate`
 - `tools.ensure_ssh_keys`
 - validation hook из `tools.validate`
-- `tools.show_unmanaged.py`
+- `tools/show_unmanaged.py`
 
 ### deploy_servers.py
 
