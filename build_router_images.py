@@ -147,7 +147,7 @@ def prepare_imagebuilders(
                 continue
 
         print(f"  Downloading: {spec.download_url}")
-        download_file(spec.download_url, spec.archive_path)
+        download_file(spec.download_url, spec.archive_path, show_progress=True)
         print(f"  Ready: {spec.archive_path}")
 
 

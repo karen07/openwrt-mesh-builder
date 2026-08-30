@@ -305,7 +305,7 @@ servers/example
 | `config.json` | Declarative topology model. |
 | `generate_configs.py` | Генерация router/server configs, keys, access groups и проверок. |
 | `build_router_images.py` | Сборка OpenWrt firmware через ImageBuilder. |
-| `deploy_servers.py` | Деплой generated server tree на exit серверы. |
+| `deploy_servers.py` | Деплой и undeploy generated server tree на exit серверах. |
 | `upgrade_routers.py` | Обновление роутеров через sysupgrade images. |
 | `run_routers.py` | Запуск команд на роутерах. |
 | `run_servers.py` | Запуск команд на exit серверах. |
@@ -923,9 +923,10 @@ files/etc/wireguard/<access>/clients/*.conf      # при WireGuard или Amnez
 
 ```text
 servers/<exit>/
+  etc/awg-server.sh
   etc/awg-server.env
   etc/amnezia/amneziawg/*.conf
-  etc/babel.conf
+  etc/babel<exit>.conf
   etc/ipsets/direct-static.txt
   etc/ipsets/direct.txt
   etc/systemd/system/*.service
@@ -1251,7 +1252,7 @@ AAD = marker name
 Когда расшифровывается:
 
 - при сборке роутерного образа `build_router_images.py` копирует `routers/<router>/files` во временную ImageBuilder директорию, расшифровывает там и проверяет `assert-no-markers`
-- при деплое серверов `deploy_servers.py` копирует `servers/` во временный staging каталог, расшифровывает там и проверяет `assert-no-markers`
+- при деплое серверов `deploy_servers.py` копирует `servers/<server>/` выбранного сервера во временный staging каталог, расшифровывает там и проверяет `assert-no-markers`
 
 В исходном дереве private keys и секреты остаются зашифрованными. Если украден только репозиторий без master key files, из него нельзя получить приватные ключи, пароли и токены.
 
@@ -1273,8 +1274,9 @@ AAD = marker name
 router_spine01
 router_leaf01
 server_egr01
-server_egr01_node
 ```
+
+`server_egr01_node` - это SSH alias в generated `config`, который использует тот же ключ `server_egr01`, а не отдельный key file.
 
 Router aliases имеют вид:
 
@@ -1641,6 +1643,8 @@ Profile name является безопасным ASCII identifier.
 ./deploy_servers.py --server-ssh-mode node REV01
 ./deploy_servers.py --replace-authorized-keys
 ./deploy_servers.py --ssh-connect-timeout 10
+./deploy_servers.py --undeploy EGR01
+./deploy_servers.py --undeploy --server-ssh-mode node REV01
 ```
 
 Деплой каждого сервера выполняется независимо: ошибка одного сервера не
@@ -1664,6 +1668,35 @@ Profile name является безопасным ASCII identifier.
 ```sh
 ./deploy_servers.py --server-ssh-mode public
 ```
+
+`--undeploy` удаляет с выбранного exit сервера persistent state, которым управляет
+этот проект, и затем перезагружает сервер. Его нужно запускать **до** удаления
+сервера из `config.json` и до удаления локального `servers/<server>/`, потому что
+текущий generated tree и `authorized_keys` используются как источник cleanup.
+
+На каждый сервер весь cleanup выполняется одним SSH вызовом в таком порядке:
+
+1. `systemctl disable awg-server-network.service`
+1. `systemctl disable exit-direct-guard.timer`
+1. `systemctl stop exit-direct-guard.timer`
+1. удаляются project-owned systemd unit files
+1. выполняется `systemctl daemon-reload`
+1. целиком удаляется `/etc/amnezia/amneziawg/`
+1. удаляются остальные файлы из текущего generated `servers/<server>/` по их
+   точным remote paths, кроме `/root/.ssh/authorized_keys`; дополнительно
+   удаляются `/etc/deploy_version` и `/root/deploy_version`
+1. из `/root/.ssh/authorized_keys` удаляются только строки из текущего
+   `servers/<server>/root/.ssh/authorized_keys`
+1. выполняется `systemctl reboot --no-block`
+
+`awg-server-network.service` намеренно не останавливается и
+`/etc/awg-server.sh network-down` не вызывается: SSH сессия сама может идти через
+AWG overlay. Уже поднятые AWG/IPIP interfaces, routes, Babel и iptables state
+остаются живыми до reboot и исчезают вместе с текущей загрузкой системы.
+
+`--undeploy` не удаляет установленные пакеты, Amnezia PPA, `iperf3` и другие
+общесистемные зависимости. Shared каталоги вроде `/etc/systemd/system`,
+`/etc/ipsets`, `/etc/amnezia` и `/root/.ssh` целиком не удаляются.
 
 ### build_router_images.py
 
