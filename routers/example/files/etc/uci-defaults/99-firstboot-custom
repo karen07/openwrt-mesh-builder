@@ -12,6 +12,59 @@ append_if_exists() {
     rm -f "$1"
 }
 
+maximize_wifi() {
+    ucode -e '
+import {readfile} from "fs";
+import {cursor} from "uci";
+
+let u = cursor();
+let b = json(readfile("/etc/board.json"));
+
+u.foreach("wireless", "wifi-device", (r) => {
+    if (r.disabled == "1" || !r.path || !r.band || !r.htmode)
+        return;
+
+    let band = r.band == "2g" ? "2G" : r.band == "5g" ? "5G" : r.band == "6g" ? "6G" : null;
+    if (!band)
+        return;
+
+    for (let name in b.wlan ?? {}) {
+        let w = b.wlan[name];
+        if (w.path != r.path && !(type(w.path) == "array" && index(w.path, r.path) >= 0))
+            continue;
+
+        let info = w.info?.bands?.[band];
+        if (!info)
+            return;
+
+        let prefix = match(r.htmode, /^(EHT|HE|VHT|HT)/)?.[1];
+        if (prefix) {
+            for (let width in [320, 160, 80, 40, 20]) {
+                let mode = prefix + width;
+                if (index(info.modes ?? [], mode) >= 0) {
+                    printf("set wireless.%s.htmode=%s\n", r[".name"], mode);
+                    break;
+                }
+            }
+        }
+
+        let channel = info.default_channel;
+        if (r.radio != null)
+            for (let radio in w.info?.radios ?? [])
+                if ("" + radio.index == "" + r.radio) {
+                    channel = radio.bands?.[band]?.default_channel ?? channel;
+                    break;
+                }
+
+        if (channel)
+            printf("set wireless.%s.channel=%d\n", r[".name"], channel);
+
+        return;
+    }
+});
+' | uci -q batch
+}
+
 update_release_from_deploy_version() {
     [ -s /etc/deploy_version ] || return 0
 
@@ -75,6 +128,9 @@ update_release_from_deploy_version
 
 # Customization commands
 customization
+
+# Maximize enabled Wi-Fi radios
+maximize_wifi
 
 # Commit uci changes
 uci commit

@@ -1037,6 +1037,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 - применяет DHCP client-id workaround для OpenWrt 25.12
 - переносит deploy/build version в OpenWrt release files
 - выполняет `customization()`
+- для включенных Wi-Fi radio выбирает максимальную поддерживаемую ширину и самый низкий доступный канал
 - делает `uci commit`
 
 ## DoH и DNS failover
