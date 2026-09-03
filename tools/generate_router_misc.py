@@ -17,11 +17,11 @@ SECRET_MARKER_RE = re.compile(
     re.S,
 )
 
-WIFI_MANAGED_COMMENT_RE = re.compile(r"^\s*#\s*Set\s+Wi-Fi(?:\s+radio[01])?\s*$")
+WIFI_MANAGED_COMMENT_RE = re.compile(r"^\s*#\s*Set\s+Wi-Fi(?:\s+radio[012])?\s*$")
 
 WIFI_MANAGED_UCI_RE = re.compile(
     r"^\s*uci\s+(?:-q\s+)?(?:set|delete|add_list)\s+"
-    r"wireless\.(?:radio[01]|default_radio[01])(?:\.|\b)"
+    r"wireless\.(?:radio[012]|default_radio[012])(?:\.|\b)"
 )
 
 PPPOE_MANAGED_COMMENT_RE = re.compile(
@@ -189,7 +189,7 @@ def build_wifi_radio_block(
             f"    uci -q set wireless.{radio}.country='{WIFI_COUNTRY}'",
             f"    uci -q set wireless.{radio}.cell_density='{WIFI_CELL_DENSITY}'",
             f"    uci -q set wireless.{iface}.ssid={shell_wifi_value(wifi.ssid)}",
-            f"    uci -q set wireless.{iface}.encryption='{WIFI_ENCRYPTION}'",
+            f"    uci -q set wireless.{iface}.encryption='{WIFI_ENCRYPTION_BY_KEY[wifi_key]}'",
             f"    uci -q set wireless.{iface}.key={shell_wifi_value(wifi.key)}",
         ]
     )
