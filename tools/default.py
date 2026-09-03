@@ -52,6 +52,7 @@ CONFIG_KEY_ALLOW_TO_ROUTER = "allow_to_router"
 CONFIG_KEY_ALLOW_TO_LAN = "allow_to_lan"
 CONFIG_KEY_WIFI_2G = "wifi_2g"
 CONFIG_KEY_WIFI_5G = "wifi_5g"
+CONFIG_KEY_WIFI_6G = "wifi_6g"
 CONFIG_KEY_PPPOE = "pppoe"
 CONFIG_KEY_SSID = "ssid"
 CONFIG_KEY_KEY = "key"
@@ -316,10 +317,15 @@ SERVER_BABELD_CONF_SUFFIX = ".conf"
 WIFI_RADIO_BY_KEY = {
     "wifi_2g": ("radio0", "default_radio0"),
     "wifi_5g": ("radio1", "default_radio1"),
+    "wifi_6g": ("radio2", "default_radio2"),
 }
 
 WIFI_COUNTRY = "RU"
-WIFI_ENCRYPTION = "sae-mixed"
+WIFI_ENCRYPTION_BY_KEY = {
+    "wifi_2g": "psk2",
+    "wifi_5g": "sae-mixed",
+    "wifi_6g": "sae",
+}
 WIFI_CELL_DENSITY = "0"
 
 # ============================================================

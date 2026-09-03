@@ -343,7 +343,7 @@ access             пользовательские WG/AWG/OpenVPN входы н
 - `device_profile` - обязательная ссылка на профиль из `device_profiles`
 - `subnet` - LAN сеть роутера, обычно canonical `/24`
 - `packages` - per-router добавление или удаление дополнительных пакетов
-- `wifi_2g`, `wifi_5g` - Wi-Fi параметры
+- `wifi_2g`, `wifi_5g`, `wifi_6g` - Wi-Fi параметры
 - `pppoe` - необязательные WAN PPPoE credentials и MTU
 - `allow_to_router` - к каким target роутерам разрешен INPUT на сам роутер
 - `allow_to_lan` - к каким target роутерам разрешен FORWARD в их LAN
@@ -1542,7 +1542,7 @@ Profile name является безопасным ASCII identifier.
 }
 ```
 
-Если Wi-Fi блок не задан, соответствующее radio/interface отключается в bootstrap customization.
+Диапазоны автоматически используют `psk2` для 2.4 ГГц, `sae-mixed` для 5 ГГц и `sae` для 6 ГГц. Ожидается стандартное соответствие `wifi_2g -> radio0`, `wifi_5g -> radio1`, `wifi_6g -> radio2`. Если Wi-Fi блок не задан, соответствующее radio/interface отключается в bootstrap customization.
 
 ### PPPoE
 
