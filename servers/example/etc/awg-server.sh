@@ -478,6 +478,39 @@ guard_rules() {
     iface="$(default_iface)"
     [ -n "$iface" ] || die "failed to determine default interface"
 
+    for subnet in $EXIT_SUBNETS; do
+        [ -n "$subnet" ] || continue
+
+        # Skip DPI for ordinary web traffic. TCP ports 80 and 443 bypass
+        # nDPI; UDP bypasses only 443 so UDP/80 remains available for P2P
+        # detection. nDPI keeps protocol state in conntrack.
+        "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
+            -s "$subnet" -o "$iface" -p tcp \
+            -m multiport ! --dports 80,443 \
+            -m ndpi --proto bittorrent \
+            -j DROP \
+            || die "failed to install TCP nDPI BitTorrent guard rule for $subnet"
+
+        "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
+            -s "$subnet" -o "$iface" -p udp ! --dport 443 \
+            -m ndpi --proto bittorrent \
+            -j DROP \
+            || die "failed to install UDP nDPI BitTorrent guard rule for $subnet"
+
+        # Feed replies into the same nDPI conntrack state before the
+        # ESTABLISHED fast-path, using the same web-port bypass policy.
+        "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
+            -d "$subnet" -i "$iface" -p tcp \
+            -m multiport ! --sports 80,443 \
+            -m ndpi --all \
+            || die "failed to install TCP nDPI reply inspection rule for $subnet"
+
+        "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
+            -d "$subnet" -i "$iface" -p udp ! --sport 443 \
+            -m ndpi --all \
+            || die "failed to install UDP nDPI reply inspection rule for $subnet"
+    done
+
     "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
         -m conntrack --ctstate ESTABLISHED,RELATED \
         -j ACCEPT \
@@ -493,7 +526,8 @@ guard_rules() {
             || die "failed to install $IPSET_NAME WAN guard rule for $subnet"
     done
 
-    echo "OK: installed $FORWARD_CHAIN rules for $IPSET_NAME on wan=$iface"
+    echo "OK: installed $FORWARD_CHAIN rules for $IPSET_NAME and nDPI BitTorrent guard \
+(TCP 80/443 and UDP 443 bypassed) on wan=$iface"
 }
 
 guard_existing() {
