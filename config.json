@@ -45,7 +45,8 @@
             "subnet": "10.101.1.0/24",
             "pppoe": {
                 "username": "Example-PPPoE-Username",
-                "password": "Example-PPPoE-Password"
+                "password": "Example-PPPoE-Password",
+                "mtu": 1492
             },
             "exit_order": [
                 "EGR02",
@@ -175,10 +176,7 @@
             "subnet": "10.101.13.0/24",
             "exit_order": [
                 "PUB01",
-                "EGR02",
-                "EGR01",
-                "REV01",
-                "REV02"
+                "EGR02"
             ],
             "wifi_5g": {
                 "ssid": "Example-Leaf03-5G",
@@ -355,7 +353,7 @@
                     "s1": 12,
                     "s2": 18,
                     "s3": 24,
-                    "s4": 8,
+                    "s4": 12,
                     "h1": "1100000000-1100065535",
                     "h2": "1200000000-1200065535",
                     "h3": "1300000000-1300065535",
@@ -364,7 +362,15 @@
                     "i2": "<r 32>",
                     "i3": "",
                     "i4": "",
-                    "i5": ""
+                    "i5": "",
+                    "rekey_after_time": "116-142",
+                    "rekey_timeout": "4-7",
+                    "reject_after_time": "190-217",
+                    "keepalive_timeout": "10-15",
+                    "max_handshake_attempts": "15-21",
+                    "random_trailers": true,
+                    "disable_cookies": false,
+                    "persistent_keepalive": "20-26"
                 }
             }
         ],
@@ -385,7 +391,7 @@
                     "s1": 16,
                     "s2": 24,
                     "s3": 32,
-                    "s4": 8,
+                    "s4": 12,
                     "h1": "2100000000-2100065535",
                     "h2": "2200000000-2200065535",
                     "h3": "2300000000-2300065535",
