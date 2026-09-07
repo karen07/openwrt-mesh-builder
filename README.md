@@ -578,20 +578,20 @@ vim config.json
 ./upgrade_routers.py
 ```
 
-Для локального просмотра структуры, без загрузки AWG/c-ares пакетов и без синхронизации `packages/`, можно запускать так:
+Для локального просмотра структуры, без загрузки AWG пакетов и без синхронизации `packages/`, можно запускать так:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-cares-download --skip-package-sync
+./generate_configs.py --skip-awg-download --skip-package-sync
 ```
 
-Такой режим удобен, если custom `.apk` и per-router package repos уже не нужны для текущей проверки.
+Такой режим удобен, если custom AWG `.apk` и per-router package repos уже не нужны для текущей проверки.
 
 Hooks при этом все равно запускаются, поэтому `tools/generate.py` все еще может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
 
 Для просмотра только синхронизированной template структуры без generator hooks добавляйте `--skip-hooks`:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-cares-download --skip-package-sync --skip-hooks
+./generate_configs.py --skip-awg-download --skip-package-sync --skip-hooks
 ```
 
 Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
@@ -599,7 +599,7 @@ Dynamic direct-list sources из `tools/default.py` должны быть дос
 Если нужен полностью локальный smoke run без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-cares-download --skip-package-sync --skip-direct-downloads
+./generate_configs.py --skip-awg-download --skip-package-sync --skip-direct-downloads
 ```
 
 В этом режиме generated `direct.txt` будет содержать только static direct entries:
@@ -1412,7 +1412,6 @@ babeld
 curl
 iperf3
 jq-full
-libcares
 luci
 luci-app-https-dns-proxy
 luci-app-watchcat
@@ -1585,7 +1584,7 @@ Profile name является безопасным ASCII identifier.
 - OpenVPN defaults
 - DoH/DNS failover defaults
 - direct-list sources
-- OpenWrt/AWG/c-ares package URLs
+- OpenWrt/AWG package URLs
 - имена managed файлов и директорий
 
 Именно там меняются правила, которые должны быть одинаковыми для всех конфигов.
@@ -1599,7 +1598,7 @@ Profile name является безопасным ASCII identifier.
 ```sh
 ./generate_configs.py
 ./generate_configs.py --config prod.json
-./generate_configs.py --skip-awg-download --skip-cares-download --skip-package-sync
+./generate_configs.py --skip-awg-download --skip-package-sync
 ./generate_configs.py --skip-hooks
 ./generate_configs.py --force
 ./generate_configs.py --details
@@ -1610,7 +1609,6 @@ Profile name является безопасным ASCII identifier.
 1. читает и валидирует `config.json`
 1. создает `routers/` из `routers/example`
 1. скачивает AmneziaWG `.apk`, если не указан `--skip-awg-download`
-1. скачивает `libcares` из `c-ares-openwrt-package`, если не указан `--skip-cares-download`
 1. синхронизирует per-router `packages/`, если не указан `--skip-package-sync`
 1. синхронизирует шаблонные файлы из `routers/example`
 1. запускает `tools/generate.py`
@@ -2057,7 +2055,7 @@ python3 -m py_compile *.py tools/*.py
 Быстрая проверка template/config flow без загрузки custom packages:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-cares-download --skip-package-sync --skip-direct-downloads
+./generate_configs.py --skip-awg-download --skip-package-sync --skip-direct-downloads
 ```
 
 Валидация generated config:
