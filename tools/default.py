@@ -375,7 +375,7 @@ PACKAGE_REPO_INDEX_FILES = (
 )
 
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com"
-URL_IPVERSE_RIR = f"{GITHUB_RAW_BASE_URL}/ipverse/country-ip-blocks/master"
+URL_IPVERSE_GEO = f"{GITHUB_RAW_BASE_URL}/ipverse/geo-ip-blocks/master"
 URL_IPVERSE_ASN = f"{GITHUB_RAW_BASE_URL}/ipverse/as-ip-blocks/master"
 LOCAL_DIRECT_IPSETS = [
     # Bootstrap / local / private / provider-local

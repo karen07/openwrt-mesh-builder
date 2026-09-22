@@ -44,7 +44,7 @@ def download_text_lines(url: str) -> list[str]:
 
 
 def direct_country_url(country: str) -> str:
-    return f"{URL_IPVERSE_RIR}/country/{country}/ipv4-aggregated.txt"
+    return f"{URL_IPVERSE_GEO}/country/{country}/{country}-ipv4.txt"
 
 
 def direct_asn_url(asn: str) -> str:
