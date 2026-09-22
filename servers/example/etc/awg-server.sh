@@ -51,7 +51,7 @@ OUT_DIRECT="$IPSETS_DIR/$OUT_DIRECT_NAME"
 TMP_DIRECT="${OUT_DIRECT}.tmp"
 TMP_SORTED="${TMP_DIRECT}.sorted"
 
-URL_IPVERSE_RIR="${URL_IPVERSE_RIR:-$URL_GH_RAW/ipverse/country-ip-blocks/master}"
+URL_IPVERSE_GEO="${URL_IPVERSE_GEO:-$URL_GH_RAW/ipverse/geo-ip-blocks/master}"
 URL_IPVERSE_ASN="${URL_IPVERSE_ASN:-$URL_GH_RAW/ipverse/as-ip-blocks/master}"
 
 DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-}"
@@ -371,7 +371,7 @@ append_country_lists() {
         esac
 
         append_url_list \
-            "$URL_IPVERSE_RIR/country/$country/ipv4-aggregated.txt" \
+            "$URL_IPVERSE_GEO/country/$country/${country}-ipv4.txt" \
             "country:$country" || return 1
     done
 }
