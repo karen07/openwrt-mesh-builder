@@ -821,7 +821,7 @@ Direct lists собираются из нескольких источников
 
 ```sh
 DIRECT_COUNTRIES='ru cn by'
-DIRECT_ASNS='32590'
+DIRECT_ASNS='32590 45102'
 ```
 
 `update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, добавляет country/ASN lists, атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился.
