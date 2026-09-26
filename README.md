@@ -594,9 +594,9 @@ Hooks при этом все равно запускаются, поэтому `
 ./generate_configs.py --skip-awg-download --skip-package-sync --skip-hooks
 ```
 
-Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены.
+Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены. При обычной генерации `tools/generate.py` один раз локально запускает настоящий `routers/example/files/etc/scripts/update-ipsets.sh` во временном `IPSETS_DIR`. Полученные `direct-static.txt` и `direct.txt` затем одинаково записываются во все generated router и server каталоги.
 
-Если нужен полностью локальный smoke run без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
+Если нужен полностью локальный smoke run без запуска `update-ipsets.sh` и без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
 
 ```sh
 ./generate_configs.py --skip-awg-download --skip-package-sync --skip-direct-downloads
@@ -815,16 +815,21 @@ Direct lists собираются из нескольких источников
 - публичные `listen_ip` и `exit_ip` из `config.json`
 - дополнительные CIDR prefixes из `EXIT_DIRECT_STATIC_IPSETS`
 
-Динамическая часть задается странами и ASN. Для каждой страны объединяются два набора ipverse: `geo-ip-blocks` (более детальные registration/sub-allocation данные) и `country-ip-blocks` (компактные RIR delegation данные).
+Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются только нужные IPv4 CIDR. ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`.
 
 На роутерах и exit серверах эти настройки лежат в runtime env:
 
 ```sh
 DIRECT_COUNTRIES='ru cn by'
-DIRECT_ASNS='32590 45102'
+DIRECT_ASNS='32590'
 ```
 
-`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, для каждой страны добавляет union `geo-ip-blocks + country-ip-blocks`, затем ASN lists, атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился.
+`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, скачивает latest `ipinfo-lite.csv.gz` во временный файл, проверяет gzip и через `grep` + `cut` выбирает готовые IPv4 CIDR для всех `DIRECT_COUNTRIES`, затем добавляет ASN lists. Распакованный CSV в `/tmp` не сохраняется, а gzip удаляется сразу после фильтрации. После этого скрипт атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился. Python или IPinfo libraries на OpenWrt не нужны.
+
+Тот же `update-ipsets.sh` запускается один раз локально во время `generate.py` с подмененным `IPSETS_DIR` и `RELOAD_FIREWALL=0`. Поэтому initial `direct-static.txt` и `direct.txt`, которые копируются во все router/server trees, строятся той же runtime реализацией, которая затем работает на OpenWrt.
+
+В проекте используется IPinfo Lite через `Alice39s/ipinfo-csv-lite` (CC BY-SA 4.0). IP address data powered by [IPinfo](https://ipinfo.io).
+URL country source не является произвольным runtime-параметром: `update-ipsets.sh` и `awg-server.sh` ожидают именно формат Alice39s/IPinfo Lite CSV (`cidr,country_code,...`). При смене источника на другой формат URL и parser должны меняться вместе.
 
 Трафик к direct destination не получает mark `10000`, поэтому не уходит через exit table.
 

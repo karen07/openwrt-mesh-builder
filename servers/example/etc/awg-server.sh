@@ -41,25 +41,28 @@ BABELD_PIDFILE="/run/${BABELD_CONF_NAME%.conf}.pid"
 BABELD_START_TIMEOUT="${BABELD_START_TIMEOUT:-10}"
 BABELD_STOP_TIMEOUT="${BABELD_STOP_TIMEOUT:-3}"
 
-URL_GH_RAW="${URL_GH_RAW:-https://raw.githubusercontent.com}"
+# Runtime path may be overridden only when staging/testing the script.
 IPSETS_DIR="${IPSETS_DIR:-/etc/ipsets}"
-STATIC_DIRECT_NAME="${STATIC_DIRECT_NAME:-direct-static.txt}"
-OUT_DIRECT_NAME="${OUT_DIRECT_NAME:-direct.txt}"
+
+# These defaults are tied to the country CSV parser and ipverse ASN layout.
+STATIC_DIRECT_NAME="direct-static.txt"
+OUT_DIRECT_NAME="direct.txt"
+IPINFO_LITE_CSV_GZ_URL="https://github.com/Alice39s/ipinfo-csv-lite/""\
+releases/latest/download/ipinfo-lite.csv.gz"
+URL_IPVERSE_ASN="https://raw.githubusercontent.com/ipverse/as-ip-blocks/master"
 
 STATIC_DIRECT="$IPSETS_DIR/$STATIC_DIRECT_NAME"
 OUT_DIRECT="$IPSETS_DIR/$OUT_DIRECT_NAME"
 TMP_DIRECT="${OUT_DIRECT}.tmp"
 TMP_SORTED="${TMP_DIRECT}.sorted"
+TMP_IPINFO="/tmp/ipinfo-lite.$$.csv.gz"
+TMP_COUNTRIES="/tmp/ipinfo-countries.$$.txt"
 
-URL_IPVERSE_GEO="${URL_IPVERSE_GEO:-$URL_GH_RAW/ipverse/geo-ip-blocks/master}"
-URL_IPVERSE_COUNTRY="${URL_IPVERSE_COUNTRY:-$URL_GH_RAW/ipverse/country-ip-blocks/master}"
-URL_IPVERSE_ASN="${URL_IPVERSE_ASN:-$URL_GH_RAW/ipverse/as-ip-blocks/master}"
-
-DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-}"
-DIRECT_ASNS="${DIRECT_ASNS:-}"
-UPDATE_IPSETS_CURL_CONNECT_TIMEOUT="${UPDATE_IPSETS_CURL_CONNECT_TIMEOUT:-10}"
-UPDATE_IPSETS_CURL_MAX_TIME="${UPDATE_IPSETS_CURL_MAX_TIME:-60}"
-UPDATE_IPSETS_CURL_RETRY="${UPDATE_IPSETS_CURL_RETRY:-3}"
+DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-ru cn by}"
+DIRECT_ASNS="${DIRECT_ASNS:-32590}"
+UPDATE_IPSETS_CURL_CONNECT_TIMEOUT=10
+UPDATE_IPSETS_CURL_MAX_TIME=180
+UPDATE_IPSETS_CURL_RETRY=3
 
 die() {
     echo "ERROR: $*" >&2
@@ -362,23 +365,58 @@ append_url_list() {
 }
 
 append_country_lists() {
+    [ -n "$DIRECT_COUNTRIES" ] || return 0
+
+    country_regex=""
     for country in $DIRECT_COUNTRIES; do
         case "$country" in
-            [a-z][a-z]) ;;
+            [A-Za-z][A-Za-z]) ;;
             *)
                 echo "ERROR: bad country code: $country" >&2
                 return 1
                 ;;
         esac
 
-        append_url_list \
-            "$URL_IPVERSE_GEO/country/$country/${country}-ipv4.txt" \
-            "geo-country:$country" || return 1
-
-        append_url_list \
-            "$URL_IPVERSE_COUNTRY/country/$country/ipv4-aggregated.txt" \
-            "rir-country:$country" || return 1
+        # shellcheck disable=SC2018 disable=SC2019
+        country="$(printf '%s' "$country" | tr 'a-z' 'A-Z')"
+        if [ -n "$country_regex" ]; then
+            country_regex="$country_regex|"
+        fi
+        country_regex="$country_regex$country"
     done
+
+    rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
+    "$CURL_BIN" -fsSL \
+        --connect-timeout "${UPDATE_IPSETS_CURL_CONNECT_TIMEOUT}" \
+        --max-time "${UPDATE_IPSETS_CURL_MAX_TIME}" \
+        --retry "${UPDATE_IPSETS_CURL_RETRY}" \
+        -o "$TMP_IPINFO" \
+        "$IPINFO_LITE_CSV_GZ_URL" || {
+        echo "ERROR: failed to fetch IPinfo Lite CSV" >&2
+        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
+        return 1
+    }
+
+    if [ ! -s "$TMP_IPINFO" ] || ! gzip -t "$TMP_IPINFO" 2>/dev/null; then
+        echo "ERROR: invalid IPinfo Lite gzip archive" >&2
+        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
+        return 1
+    fi
+
+    gzip -dc "$TMP_IPINFO" \
+        | grep -E "^[0-9.]+/[0-9]+,(${country_regex})," \
+        | cut -d, -f1 >"$TMP_COUNTRIES"
+
+    if [ ! -s "$TMP_COUNTRIES" ]; then
+        echo "ERROR: no IPinfo CIDRs for countries: $DIRECT_COUNTRIES" >&2
+        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
+        return 1
+    fi
+
+    cat "$TMP_COUNTRIES" >>"$TMP_DIRECT"
+    rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
+    echo "OK: added IPinfo countries: $DIRECT_COUNTRIES"
+    return 0
 }
 
 append_asn_lists() {
@@ -399,35 +437,35 @@ append_asn_lists() {
 
 build_direct_list() {
     mkdir -p "$IPSETS_DIR" || die "failed to create $IPSETS_DIR"
-    rm -f "$TMP_DIRECT" "$TMP_SORTED"
+    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
 
     if ! append_static_direct; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         exit 1
     fi
 
     if ! append_country_lists; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         exit 1
     fi
 
     if ! append_asn_lists; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         exit 1
     fi
 
     if [ ! -s "$TMP_DIRECT" ]; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         die "generated direct list is empty"
     fi
 
-    sort -u "$TMP_DIRECT" >"$TMP_SORTED" || {
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+    LC_ALL=C sort -u "$TMP_DIRECT" >"$TMP_SORTED" || {
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         die "failed to sort $TMP_DIRECT"
     }
 
     mv -f "$TMP_SORTED" "$TMP_DIRECT" || {
-        rm -f "$TMP_DIRECT" "$TMP_SORTED"
+        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
         die "failed to replace sorted tmp list"
     }
 

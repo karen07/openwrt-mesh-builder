@@ -374,10 +374,15 @@ PACKAGE_REPO_INDEX_FILES = (
     "Packages.manifest",
 )
 
+# Country source and parser are intentionally coupled to the Alice39s
+# IPinfo Lite CSV release format: cidr,country_code,continent_code,asn,name.
 GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com"
-URL_IPVERSE_GEO = f"{GITHUB_RAW_BASE_URL}/ipverse/geo-ip-blocks/master"
-URL_IPVERSE_COUNTRY = f"{GITHUB_RAW_BASE_URL}/ipverse/country-ip-blocks/master"
+URL_IPINFO_LITE_CSV_GZ = (
+    "https://github.com/Alice39s/ipinfo-csv-lite/releases/latest/download/"
+    "ipinfo-lite.csv.gz"
+)
 URL_IPVERSE_ASN = f"{GITHUB_RAW_BASE_URL}/ipverse/as-ip-blocks/master"
+
 LOCAL_DIRECT_IPSETS = [
     # Bootstrap / local / private / provider-local
     "0.0.0.0/8",
@@ -403,7 +408,6 @@ EXIT_DIRECT_STATIC_IPSETS = []
 EXIT_DIRECT_COUNTRIES = ["ru", "cn", "by"]
 EXIT_DIRECT_ASNS = [
     32590,  # Valve Corporation / Steam
-    45102,  # Alibaba / AliExpress
 ]
 
 # ============================================================
@@ -433,8 +437,9 @@ RUNTIME_IPSETS_DIR = "/etc/ipsets"
 RUNTIME_DIRECT_STATIC_NAME = REL_DIRECT_STATIC_IPSET.name
 RUNTIME_DIRECT_OUT_NAME = REL_DIRECT_IPSET.name
 UPDATE_IPSETS_CURL_CONNECT_TIMEOUT = 10
-UPDATE_IPSETS_CURL_MAX_TIME = 60
+UPDATE_IPSETS_CURL_MAX_TIME = 180
 UPDATE_IPSETS_CURL_RETRY = 3
+
 
 # ============================================================
 # AWG PARAMETER DEFAULTS

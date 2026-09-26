@@ -2,17 +2,18 @@
 import sys
 
 sys.dont_write_bytecode = True
+import tempfile
 from pathlib import Path
 
 try:
     from .common import *
-    from .downloads import download_text_lines as curl_download_text_lines
     from .generate_server_runtime import shell_quote
+    from .process import run_checked
     from .tunnel_model import exit_route_env_key
 except ImportError:
     from common import *  # type: ignore
-    from downloads import download_text_lines as curl_download_text_lines  # type: ignore
     from generate_server_runtime import shell_quote  # type: ignore
+    from process import run_checked  # type: ignore
     from tunnel_model import exit_route_env_key  # type: ignore
 
 
@@ -35,25 +36,6 @@ def normalize_ipset_lines(lines: list[str]) -> list[str]:
     return out
 
 
-def download_text_lines(url: str) -> list[str]:
-    return [
-        line
-        for line in curl_download_text_lines(url)
-        if line and not line.startswith("#")
-    ]
-
-
-def direct_country_urls(country: str) -> tuple[str, str]:
-    return (
-        f"{URL_IPVERSE_GEO}/country/{country}/{country}-ipv4.txt",
-        f"{URL_IPVERSE_COUNTRY}/country/{country}/ipv4-aggregated.txt",
-    )
-
-
-def direct_asn_url(asn: str) -> str:
-    return f"{URL_IPVERSE_ASN}/as/{asn}/ipv4-aggregated.txt"
-
-
 def direct_static_lines(cfg: ConfigData) -> list[str]:
     lines: list[str] = []
 
@@ -72,17 +54,32 @@ def direct_static_lines(cfg: ConfigData) -> list[str]:
     return normalize_ipset_lines(lines)
 
 
-def direct_dynamic_lines(cfg: ConfigData) -> list[str]:
-    lines: list[str] = []
+def _read_generated_ipset(path: Path, label: str) -> list[str]:
+    if not path.is_file():
+        die(f"update-ipsets.sh did not create {label}: {path}")
 
-    for country in cfg.exit_direct.countries:
-        for url in direct_country_urls(country):
-            lines.extend(download_text_lines(url))
+    lines = normalize_ipset_lines(path.read_text(encoding="utf-8").splitlines())
+    if not lines:
+        die(f"update-ipsets.sh created empty {label}: {path}")
+    return lines
 
-    for asn in cfg.exit_direct.asns:
-        lines.extend(download_text_lines(direct_asn_url(asn)))
 
-    return normalize_ipset_lines(lines)
+def _run_update_ipsets(cfg: ConfigData, ipsets_dir: Path) -> None:
+    script = ROUTER_EXAMPLE_DIR / "files/etc/scripts/update-ipsets.sh"
+    if not script.is_file():
+        die(f"missing update-ipsets.sh: {script}")
+
+    need("env", "sh", "curl", "gzip", "grep", "cut", "sed", "sort", "cmp", "tr")
+
+    env_args = [
+        "ENV_FILE=/dev/null",
+        f"IPSETS_DIR={ipsets_dir}",
+        "RELOAD_FIREWALL=0",
+        f"DIRECT_COUNTRIES={' '.join(cfg.exit_direct.countries)}",
+        f"DIRECT_ASNS={' '.join(cfg.exit_direct.asns)}",
+    ]
+
+    run_checked(["env", *env_args, "sh", str(script)])
 
 
 def build_direct_ipset_lines(
@@ -91,8 +88,29 @@ def build_direct_ipset_lines(
     skip_dynamic_downloads: bool = False,
 ) -> tuple[list[str], list[str]]:
     static_lines = direct_static_lines(cfg)
-    dynamic_lines = [] if skip_dynamic_downloads else direct_dynamic_lines(cfg)
-    direct_lines = normalize_ipset_lines(static_lines + dynamic_lines)
+    if skip_dynamic_downloads:
+        return static_lines, static_lines.copy()
+
+    with tempfile.TemporaryDirectory(prefix="owmb-ipsets-") as tmp_dir:
+        ipsets_dir = Path(tmp_dir)
+        static_path = ipsets_dir / RUNTIME_DIRECT_STATIC_NAME
+        direct_path = ipsets_dir / RUNTIME_DIRECT_OUT_NAME
+        static_path.write_text("\n".join(static_lines) + "\n", encoding="utf-8")
+
+        _run_update_ipsets(cfg, ipsets_dir)
+
+        generated_static = _read_generated_ipset(
+            static_path, RUNTIME_DIRECT_STATIC_NAME
+        )
+        direct_lines = _read_generated_ipset(direct_path, RUNTIME_DIRECT_OUT_NAME)
+
+    if generated_static != static_lines:
+        die("update-ipsets.sh unexpectedly changed direct-static.txt")
+
+    print(
+        "OK: update-ipsets.sh generated "
+        f"{len(static_lines)} static and {len(direct_lines)} total direct entries"
+    )
     return static_lines, direct_lines
 
 
@@ -116,9 +134,6 @@ def build_runtime_env(cfg: ConfigData, router_name: str | None = None) -> str:
         target_names.append(hub.name)
 
     values = {
-        "IPSETS_DIR": RUNTIME_IPSETS_DIR,
-        "STATIC_DIRECT_NAME": RUNTIME_DIRECT_STATIC_NAME,
-        "OUT_DIRECT_NAME": RUNTIME_DIRECT_OUT_NAME,
         "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
         "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
         "CHECK_DOH_DOMAIN": CHECK_DOH_DOMAIN,
@@ -128,9 +143,6 @@ def build_runtime_env(cfg: ConfigData, router_name: str | None = None) -> str:
         "CHECK_DOH_PROVIDER_DOMAINS": " ".join(CHECK_DOH_PROVIDER_DOMAINS),
         "EXIT_ROUTE_TABLE": str(EXIT_POLICY_BASE),
         "EXIT_ROUTE_INTERVAL": str(EXIT_ROUTE_INTERVAL),
-        "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
-        "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
-        "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
         "EXIT_ROUTE_TARGETS": " ".join(target_names),
     }
 

@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
         "--skip-direct-downloads",
         action="store_true",
         help=(
-            "do not download dynamic direct-list country/ASN IP sets; "
+            "do not run update-ipsets.sh or download dynamic country/ASN IP sets; "
             "generated direct.txt will contain only static direct entries"
         ),
     )

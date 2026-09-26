@@ -337,16 +337,8 @@ def validate_server_env(cfg: ConfigData) -> None:
             ),
             "EXIT_SUBNETS": server_exit_subnets(cfg),
             "IPSET_NAME": SERVER_ENV_IPSET_NAME,
-            "IPSETS_DIR": RUNTIME_IPSETS_DIR,
-            "STATIC_DIRECT_NAME": RUNTIME_DIRECT_STATIC_NAME,
-            "OUT_DIRECT_NAME": RUNTIME_DIRECT_OUT_NAME,
             "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
             "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
-            "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(
-                UPDATE_IPSETS_CURL_CONNECT_TIMEOUT
-            ),
-            "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
-            "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
             "AWG_SERVICES": awg_services,
             "BABELD_CONF": server_babeld_conf_remote_path(hub.name),
         }
@@ -374,9 +366,6 @@ def expected_runtime_env_values(
             )
         target_names.append(hub.name)
     expected = {
-        "IPSETS_DIR": RUNTIME_IPSETS_DIR,
-        "STATIC_DIRECT_NAME": RUNTIME_DIRECT_STATIC_NAME,
-        "OUT_DIRECT_NAME": RUNTIME_DIRECT_OUT_NAME,
         "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
         "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
         "CHECK_DOH_DOMAIN": CHECK_DOH_DOMAIN,
@@ -386,9 +375,6 @@ def expected_runtime_env_values(
         "CHECK_DOH_PROVIDER_DOMAINS": " ".join(CHECK_DOH_PROVIDER_DOMAINS),
         "EXIT_ROUTE_TABLE": str(EXIT_POLICY_BASE),
         "EXIT_ROUTE_INTERVAL": str(EXIT_ROUTE_INTERVAL),
-        "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
-        "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
-        "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
         "EXIT_ROUTE_TARGETS": " ".join(target_names),
     }
 
