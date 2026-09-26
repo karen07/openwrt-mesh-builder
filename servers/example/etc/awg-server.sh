@@ -404,7 +404,7 @@ append_country_lists() {
     fi
 
     gzip -dc "$TMP_IPINFO" \
-        | grep -E "^[0-9.]+/[0-9]+,(${country_regex})," \
+        | grep -E "^[0-9.]+(/[0-9]+)?,(${country_regex})," \
         | cut -d, -f1 >"$TMP_COUNTRIES"
 
     if [ ! -s "$TMP_COUNTRIES" ]; then
@@ -459,9 +459,10 @@ build_direct_list() {
         die "generated direct list is empty"
     fi
 
-    LC_ALL=C sort -u "$TMP_DIRECT" >"$TMP_SORTED" || {
+    "$SED_BIN" '/\//! s#$#/32#' "$TMP_DIRECT" \
+        | LC_ALL=C sort -u >"$TMP_SORTED" || {
         rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        die "failed to sort $TMP_DIRECT"
+        die "failed to normalize/sort $TMP_DIRECT"
     }
 
     mv -f "$TMP_SORTED" "$TMP_DIRECT" || {
