@@ -815,7 +815,7 @@ Direct lists собираются из нескольких источников
 - публичные `listen_ip` и `exit_ip` из `config.json`
 - дополнительные CIDR prefixes из `EXIT_DIRECT_STATIC_IPSETS`
 
-Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются только нужные IPv4 CIDR. ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`.
+Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются нужные IPv4 prefixes; одиночные IPv4 записи источника нормализуются в `/32`. ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`. Итоговый `direct.txt` всегда хранит IPv4 в явной CIDR-нотации.
 
 На роутерах и exit серверах эти настройки лежат в runtime env:
 
@@ -824,7 +824,7 @@ DIRECT_COUNTRIES='ru cn by'
 DIRECT_ASNS='32590'
 ```
 
-`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, скачивает latest `ipinfo-lite.csv.gz` во временный файл, проверяет gzip и через `grep` + `cut` выбирает готовые IPv4 CIDR для всех `DIRECT_COUNTRIES`, затем добавляет ASN lists. Распакованный CSV в `/tmp` не сохраняется, а gzip удаляется сразу после фильтрации. После этого скрипт атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился. Python или IPinfo libraries на OpenWrt не нужны.
+`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, скачивает latest `ipinfo-lite.csv.gz` во временный файл, проверяет gzip и через `grep` + `cut` выбирает IPv4 prefixes для всех `DIRECT_COUNTRIES` (включая одиночные адреса без `/32`), затем добавляет ASN lists. Перед записью `direct.txt` все одиночные IPv4 адреса нормализуются в явный `/32`. Распакованный CSV в `/tmp` не сохраняется, а gzip удаляется сразу после фильтрации. После этого скрипт атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился. Python или IPinfo libraries на OpenWrt не нужны.
 
 Тот же `update-ipsets.sh` запускается один раз локально во время `generate.py` с подмененным `IPSETS_DIR` и `RELOAD_FIREWALL=0`. Поэтому initial `direct-static.txt` и `direct.txt`, которые копируются во все router/server trees, строятся той же runtime реализацией, которая затем работает на OpenWrt.
 
@@ -961,7 +961,6 @@ etc/awg-server.env
 - init scripts
 - cron
 - DoH
-- watchcat
 - network/firewall tails
 - bootstrap
 
@@ -1044,6 +1043,29 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 - выполняет `customization()`
 - для включенных Wi-Fi radio выбирает максимальную поддерживаемую ширину и самый низкий доступный канал
 - делает `uci commit`
+
+## Connectivity watchdog
+
+Вместо `watchcat` проект использует простой `/etc/scripts/ping-reboot.sh` с procd-службой `/etc/init.d/ping-reboot`.
+
+После загрузки роутера watchdog дает системе до 5 минут (`300` секунд uptime) на поднятие сети. Если службу перезапустить позже вручную, новая 5-минутная пауза не начинается: grace считается именно от uptime роутера.
+
+Параметры watchdog генерируются в `/etc/router-autoinstall.env`: адреса для ping, startup grace, интервал проверки, число неудач и timeout ping.
+
+После startup grace скрипт раз в 10 секунд проверяет:
+
+```text
+195.208.4.1
+77.88.8.8
+```
+
+Достаточно ответа хотя бы от одного адреса. Если три последовательных 10-секундных периода заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счетчик ошибок.
+
+Для ручной проверки без reboot loop:
+
+```sh
+/etc/scripts/ping-reboot.sh once
+```
 
 ## DoH и DNS failover
 
@@ -1419,7 +1441,6 @@ iperf3
 jq-full
 luci
 luci-app-https-dns-proxy
-luci-app-watchcat
 luci-proto-amneziawg
 luci-proto-ipip
 ```

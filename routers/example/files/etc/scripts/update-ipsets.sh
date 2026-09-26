@@ -115,7 +115,7 @@ append_country_lists() {
     fi
 
     gzip -dc "$TMP_IPINFO" \
-        | grep -E "^[0-9.]+/[0-9]+,(${country_regex})," \
+        | grep -E "^[0-9.]+(/[0-9]+)?,(${country_regex})," \
         | cut -d, -f1 >"$TMP_COUNTRIES"
 
     if [ ! -s "$TMP_COUNTRIES" ]; then
@@ -183,9 +183,10 @@ if [ ! -s "$TMP_DIRECT" ]; then
     exit 1
 fi
 
-LC_ALL=C sort -u "$TMP_DIRECT" >"$TMP_SORTED" || {
+sed '/\//! s#$#/32#' "$TMP_DIRECT" \
+    | LC_ALL=C sort -u >"$TMP_SORTED" || {
     rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-    logger -t "$TAG" "ERROR: failed to sort direct list"
+    logger -t "$TAG" "ERROR: failed to normalize/sort direct list"
     exit 1
 }
 

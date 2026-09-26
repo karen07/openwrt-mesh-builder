@@ -163,7 +163,6 @@ SYNC_COPY_DIRS = {
 
 SYNC_COPY_FILES = {
     Path("files/etc/config/https-dns-proxy"),
-    Path("files/etc/config/watchcat"),
 }
 
 SYNC_MERGE_FILES = {
@@ -355,7 +354,6 @@ ROUTER_REQUIRED_PACKAGES = [
     "iperf3",
     "jq-full",
     "luci-app-https-dns-proxy",
-    "luci-app-watchcat",
     "luci-proto-amneziawg",
     "luci-proto-ipip",
     "luci",
@@ -419,6 +417,12 @@ CHECK_DOH_INTERVAL = 5
 CHECK_DOH_RESOLV = "/tmp/resolv.conf.d/resolv.conf.auto"
 CHECK_DOH_RESOLV_WAIT_MAX = 300
 CHECK_DOH_PROVIDER_DOMAINS = ["ru", "xn--p1ai"]
+
+PING_REBOOT_HOSTS = ["195.208.4.1", "77.88.8.8"]
+PING_REBOOT_BOOT_GRACE = 300
+PING_REBOOT_INTERVAL = 10
+PING_REBOOT_MAX_FAILURES = 5
+PING_REBOOT_TIMEOUT = 2
 
 ROUTING_MODE_WAN = "wan"
 ROUTING_MODE_SPLIT = "split"
