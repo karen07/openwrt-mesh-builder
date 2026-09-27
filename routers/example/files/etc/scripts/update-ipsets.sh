@@ -10,31 +10,53 @@ fi
 SCRIPT_NAME="${0##*/}"
 TAG="${SCRIPT_NAME%.sh}"
 
-# Runtime path/apply knobs may be overridden by the local generator.
-IPSETS_DIR="${IPSETS_DIR:-/etc/ipsets}"
+# Runtime settings come from default.py through the generated ENV_FILE.
+# IPSETS_DIR and RELOAD_FIREWALL remain explicit generator/server/test overrides.
+RUNTIME_IPSETS_DIR="${RUNTIME_IPSETS_DIR:-/etc/ipsets}"
+IPSETS_DIR="${IPSETS_DIR:-$RUNTIME_IPSETS_DIR}"
 RELOAD_FIREWALL="${RELOAD_FIREWALL:-1}"
 
-# These defaults are tied to this script's parsers/layouts. A different
-# source format requires changing the parser together with the URL.
-STATIC_DIRECT_NAME="direct-static.txt"
-OUT_DIRECT_NAME="direct.txt"
-IPINFO_LITE_CSV_GZ_URL="https://github.com/Alice39s/ipinfo-csv-lite/""\
-releases/latest/download/ipinfo-lite.csv.gz"
-URL_IPVERSE_ASN="https://raw.githubusercontent.com/ipverse/as-ip-blocks/master"
+RUNTIME_DIRECT_STATIC_NAME="${RUNTIME_DIRECT_STATIC_NAME:-direct-static.txt}"
+RUNTIME_DIRECT_OUT_NAME="${RUNTIME_DIRECT_OUT_NAME:-direct.txt}"
+STATIC_DIRECT_NAME="$RUNTIME_DIRECT_STATIC_NAME"
+OUT_DIRECT_NAME="$RUNTIME_DIRECT_OUT_NAME"
+URL_IPINFO_LITE_CSV_GZ="${URL_IPINFO_LITE_CSV_GZ:-https://github.com/Alice39s/"\
+"ipinfo-csv-lite/releases/latest/download/ipinfo-lite.csv.gz}"
+URL_IPVERSE_ASN="${URL_IPVERSE_ASN:-https://raw.githubusercontent.com/ipverse/as-ip-blocks/master}"
+DIRECT_CIDR_OVER_COVERAGE="${DIRECT_CIDR_OVER_COVERAGE-}"
 
 STATIC_DIRECT="$IPSETS_DIR/$STATIC_DIRECT_NAME"
 OUT_DIRECT="$IPSETS_DIR/$OUT_DIRECT_NAME"
 TMP_DIRECT="${OUT_DIRECT}.tmp"
-TMP_SORTED="${TMP_DIRECT}.sorted"
+TMP_OPTIMIZED="${TMP_DIRECT}.optimized"
 TMP_IPINFO="/tmp/ipinfo-lite.$$.csv.gz"
 TMP_COUNTRIES="/tmp/ipinfo-countries.$$.txt"
 
-DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-ru cn by}"
-DIRECT_ASNS="${DIRECT_ASNS:-32590}"
+if [ "${DIRECT_COUNTRIES+x}" != "x" ]; then
+    echo "ERROR: DIRECT_COUNTRIES is not set in $ENV_FILE" >&2
+    exit 1
+fi
+if [ "${DIRECT_ASNS+x}" != "x" ]; then
+    echo "ERROR: DIRECT_ASNS is not set in $ENV_FILE" >&2
+    exit 1
+fi
+DIRECT_COUNTRIES="${DIRECT_COUNTRIES-}"
+DIRECT_ASNS="${DIRECT_ASNS-}"
 
-UPDATE_IPSETS_CURL_CONNECT_TIMEOUT=10
-UPDATE_IPSETS_CURL_MAX_TIME=180
-UPDATE_IPSETS_CURL_RETRY=3
+if [ -z "$DIRECT_CIDR_OVER_COVERAGE" ]; then
+    echo "ERROR: DIRECT_CIDR_OVER_COVERAGE is empty in $ENV_FILE" >&2
+    exit 1
+fi
+
+UPDATE_IPSETS_CURL_CONNECT_TIMEOUT="${UPDATE_IPSETS_CURL_CONNECT_TIMEOUT:-10}"
+UPDATE_IPSETS_CURL_MAX_TIME="${UPDATE_IPSETS_CURL_MAX_TIME:-180}"
+UPDATE_IPSETS_CURL_RETRY="${UPDATE_IPSETS_CURL_RETRY:-3}"
+
+cleanup_tmp() {
+    rm -f \
+        "$TMP_DIRECT" "$TMP_OPTIMIZED" \
+        "$TMP_IPINFO" "$TMP_COUNTRIES"
+}
 
 append_static_direct() {
     if [ ! -s "$STATIC_DIRECT" ]; then
@@ -102,7 +124,7 @@ append_country_lists() {
         --max-time "$UPDATE_IPSETS_CURL_MAX_TIME" \
         --retry "$UPDATE_IPSETS_CURL_RETRY" \
         -o "$TMP_IPINFO" \
-        "$IPINFO_LITE_CSV_GZ_URL" || {
+        "$URL_IPINFO_LITE_CSV_GZ" || {
         logger -t "$TAG" "ERROR: failed to fetch IPinfo Lite CSV"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
@@ -147,6 +169,32 @@ append_asn_lists() {
     done
 }
 
+optimize_direct() {
+    if ! command -v cidr-squash >/dev/null 2>&1; then
+        logger -t "$TAG" "ERROR: cidr-squash is not installed"
+        return 1
+    fi
+
+    before="$(wc -l <"$TMP_DIRECT")"
+    cidr-squash \
+        -q \
+        -p "$DIRECT_CIDR_OVER_COVERAGE" \
+        "$TMP_DIRECT" >"$TMP_OPTIMIZED" || {
+        logger -t "$TAG" "ERROR: cidr-squash optimization failed"
+        return 1
+    }
+
+    if [ ! -s "$TMP_OPTIMIZED" ]; then
+        logger -t "$TAG" "ERROR: cidr-squash generated an empty direct list"
+        return 1
+    fi
+
+    after="$(wc -l <"$TMP_OPTIMIZED")"
+    mv -f "$TMP_OPTIMIZED" "$TMP_DIRECT" || return 1
+    logger -t "$TAG" \
+        "OK: cidr-squash optimized direct list: $before -> $after entries"
+}
+
 reload_firewall_if_needed() {
     [ "$1" -eq 1 ] || return 0
     [ "$RELOAD_FIREWALL" = "1" ] || return 0
@@ -158,55 +206,49 @@ reload_firewall_if_needed() {
 }
 
 mkdir -p "$IPSETS_DIR" || exit 1
-rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+cleanup_tmp
 
 append_static_direct || {
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+    cleanup_tmp
     exit 1
 }
 
 append_country_lists || {
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+    cleanup_tmp
     logger -t "$TAG" "ERROR: failed to build direct ipset"
     exit 1
 }
 
 append_asn_lists || {
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+    cleanup_tmp
     logger -t "$TAG" "ERROR: failed to build direct ipset"
     exit 1
 }
 
 if [ ! -s "$TMP_DIRECT" ]; then
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+    cleanup_tmp
     logger -t "$TAG" "ERROR: generated direct ipset is empty"
     exit 1
 fi
 
-sed '/\//! s#$#/32#' "$TMP_DIRECT" \
-    | LC_ALL=C sort -u >"$TMP_SORTED" || {
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-    logger -t "$TAG" "ERROR: failed to normalize/sort direct list"
-    exit 1
-}
-
-mv -f "$TMP_SORTED" "$TMP_DIRECT" || {
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-    logger -t "$TAG" "ERROR: failed to replace sorted tmp direct list"
+optimize_direct || {
+    cleanup_tmp
+    logger -t "$TAG" "ERROR: failed to optimize direct list"
     exit 1
 }
 
 changed=0
 if [ ! -f "$OUT_DIRECT" ] || ! cmp -s "$TMP_DIRECT" "$OUT_DIRECT"; then
     mv -f "$TMP_DIRECT" "$OUT_DIRECT" || {
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+        cleanup_tmp
         logger -t "$TAG" "ERROR: failed to replace $OUT_DIRECT"
         exit 1
     }
     changed=1
 else
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
+    rm -f "$TMP_DIRECT"
 fi
 
+cleanup_tmp
 reload_firewall_if_needed "$changed"
 logger -t "$TAG" "OK: direct ipset updated, changed=$changed"

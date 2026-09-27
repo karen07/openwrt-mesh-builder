@@ -133,9 +133,19 @@ REL_OPENVPN_ROOT = Path("files/etc/openvpn")
 REL_OPENVPN_UCI = Path("files/etc/config/openvpn")
 REL_WIREGUARD_ROOT = Path("files/etc/wireguard")
 REL_DROPBEAR_AUTHORIZED_KEYS = Path("files/etc/dropbear/authorized_keys")
-REL_IPSETS_ROOT = Path("files/etc/ipsets")
-REL_DIRECT_IPSET = REL_IPSETS_ROOT / "direct.txt"
-REL_DIRECT_STATIC_IPSET = REL_IPSETS_ROOT / "direct-static.txt"
+
+# Runtime ipset layout. Keep these here so changing default.py updates both
+# generated file locations and the values exported to runtime shell scripts.
+RUNTIME_IPSETS_DIR = "/etc/ipsets"
+RUNTIME_DIRECT_STATIC_NAME = "direct-static.txt"
+RUNTIME_DIRECT_OUT_NAME = "direct.txt"
+
+_RUNTIME_IPSETS_PATH = Path(RUNTIME_IPSETS_DIR)
+if not _RUNTIME_IPSETS_PATH.is_absolute():
+    raise ValueError("RUNTIME_IPSETS_DIR must be an absolute path")
+REL_IPSETS_ROOT = Path("files") / _RUNTIME_IPSETS_PATH.relative_to("/")
+REL_DIRECT_IPSET = REL_IPSETS_ROOT / RUNTIME_DIRECT_OUT_NAME
+REL_DIRECT_STATIC_IPSET = REL_IPSETS_ROOT / RUNTIME_DIRECT_STATIC_NAME
 REL_RUNTIME_ENV = Path("files/etc/router-autoinstall.env")
 RUNTIME_ENV_REMOTE_PATH = f"/{REL_RUNTIME_ENV.relative_to('files').as_posix()}"
 RUNTIME_ENV_FILENAME = REL_RUNTIME_ENV.name
@@ -182,6 +192,7 @@ EXPECTED_MANAGED_ROUTER_DIRS = {
 
 AWG_SERVER_NETWORK_SERVICE_NAME = "awg-server-network.service"
 SERVER_ENV_IPSET_NAME = "exit_direct"
+SERVER_ROUTE_PROBE_IP = "1.1.1.1"
 
 IPIP_SERVER_IFACE = "ipip-exit"
 NODE_SERVER_IFACE = "awg-node"
@@ -345,11 +356,18 @@ AWG_PACKAGE_NAMES = [
     "amneziawg-tools",
     "luci-proto-amneziawg",
 ]
+CIDR_SQUASH_RELEASE_BASE_URL = (
+    "https://github.com/karen07/cidr-squash-openwrt-package/releases/download"
+)
+CIDR_SQUASH_PACKAGE_NAMES = [
+    "cidr-squash",
+]
 
 # OpenWrt image packages required by generated router configs and
 # router example files. User-facing config.packages is for extra packages.
 ROUTER_REQUIRED_PACKAGES = [
     "babeld",
+    "cidr-squash",
     "curl",
     "iperf3",
     "jq-full",
@@ -424,6 +442,7 @@ PING_REBOOT_INTERVAL = 10
 PING_REBOOT_MAX_FAILURES = 5
 PING_REBOOT_TIMEOUT = 2
 
+
 ROUTING_MODE_WAN = "wan"
 ROUTING_MODE_SPLIT = "split"
 ROUTING_MODE_EXIT = "exit"
@@ -437,9 +456,7 @@ ROUTING_WAN_MARK_TEXT = "9999"
 ROUTING_FIREWALL_RULE_PREFIX = "Routing-"
 EXIT_ROUTE_INTERVAL = 5
 
-RUNTIME_IPSETS_DIR = "/etc/ipsets"
-RUNTIME_DIRECT_STATIC_NAME = REL_DIRECT_STATIC_IPSET.name
-RUNTIME_DIRECT_OUT_NAME = REL_DIRECT_IPSET.name
+DIRECT_CIDR_OVER_COVERAGE = "0.01"
 UPDATE_IPSETS_CURL_CONNECT_TIMEOUT = 10
 UPDATE_IPSETS_CURL_MAX_TIME = 180
 UPDATE_IPSETS_CURL_RETRY = 3

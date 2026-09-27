@@ -5,5 +5,8 @@ After=awg-server-network.service
 
 [Service]
 Type=oneshot
+Environment=ENV_FILE=/etc/awg-server.env
+Environment=RELOAD_FIREWALL=0
+ExecStart=/etc/scripts/update-ipsets.sh
 ExecStart=/etc/awg-server.sh guard
 TimeoutStartSec=300

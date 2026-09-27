@@ -16,6 +16,9 @@ try:
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
+        RUNTIME_DIRECT_OUT_NAME,
+        RUNTIME_DIRECT_STATIC_NAME,
+        RUNTIME_IPSETS_DIR,
         SERVER_TEMPLATE_DIR,
     )
     from .layout import (
@@ -54,6 +57,9 @@ except ImportError:
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
+        RUNTIME_DIRECT_OUT_NAME,
+        RUNTIME_DIRECT_STATIC_NAME,
+        RUNTIME_IPSETS_DIR,
         SERVER_TEMPLATE_DIR,
     )
     from layout import (  # type: ignore
@@ -189,8 +195,9 @@ def expected_server_exact_paths(cfg: ConfigData) -> set[Path]:
         expected |= {
             server_babeld_conf_path(hub.name),
             exit_root / "etc/awg-server.env",
-            exit_root / "etc/ipsets/direct-static.txt",
-            exit_root / "etc/ipsets/direct.txt",
+            exit_root / "etc/scripts/update-ipsets.sh",
+            exit_root / RUNTIME_IPSETS_DIR.lstrip("/") / RUNTIME_DIRECT_STATIC_NAME,
+            exit_root / RUNTIME_IPSETS_DIR.lstrip("/") / RUNTIME_DIRECT_OUT_NAME,
             exit_root / "root/.ssh/authorized_keys",
         }
 
@@ -293,8 +300,12 @@ def validate_generated_files_exist(cfg: ConfigData) -> None:
         for path in (
             server_babeld_conf_path(hub.name),
             server_path(hub.name, "etc", "awg-server.env"),
-            server_path(hub.name, "etc", "ipsets", "direct-static.txt"),
-            server_path(hub.name, "etc", "ipsets", "direct.txt"),
+            server_exit_dir(hub.name)
+            / RUNTIME_IPSETS_DIR.lstrip("/")
+            / RUNTIME_DIRECT_STATIC_NAME,
+            server_exit_dir(hub.name)
+            / RUNTIME_IPSETS_DIR.lstrip("/")
+            / RUNTIME_DIRECT_OUT_NAME,
             server_path(
                 hub.name,
                 "etc",

@@ -1,18 +1,21 @@
 #!/bin/sh
 
-if [ ! -r /etc/router-autoinstall.env ]; then
-    echo "runtime env not readable: /etc/router-autoinstall.env"
-    exit 1
+if [ -r /etc/router-autoinstall.env ]; then
+    # Generated file, loaded once at startup. Restart to apply changes.
+    # shellcheck disable=SC1091
+    . /etc/router-autoinstall.env
 fi
 
-# Generated file, loaded once at startup. Restart to apply changes.
-# shellcheck disable=SC1091
-. /etc/router-autoinstall.env
-
-TABLE="${EXIT_ROUTE_TABLE:-10000}"
+TABLE="${EXIT_ROUTE_TABLE-}"
 INTERVAL="${EXIT_ROUTE_INTERVAL:-5}"
+
+if [ -z "$TABLE" ]; then
+    echo "EXIT_ROUTE_TABLE is empty in /etc/router-autoinstall.env"
+    exit 1
+fi
 ROUTE_SECTION="exit${TABLE}"
 
+EXIT_ROUTE_TARGETS="${EXIT_ROUTE_TARGETS-}"
 if [ -z "$EXIT_ROUTE_TARGETS" ]; then
     echo "EXIT_ROUTE_TARGETS is empty in /etc/router-autoinstall.env"
     exit 1
@@ -38,6 +41,26 @@ target_prefix() {
     valid_target_name "$name" || return 1
     eval "printf '%s\n' \"\${EXIT_ROUTE_${name}_PREFIX}\""
 }
+
+validate_targets() {
+    name=""
+    prefix=""
+
+    for name in $EXIT_ROUTE_TARGETS; do
+        if ! valid_target_name "$name"; then
+            echo "bad exit target name: $name" >&2
+            exit 1
+        fi
+
+        prefix="$(target_prefix "$name")"
+        if [ -z "$prefix" ]; then
+            echo "EXIT_ROUTE_${name}_PREFIX is empty in /etc/router-autoinstall.env" >&2
+            exit 1
+        fi
+    done
+}
+
+validate_targets
 
 has_babel_target() {
     name="$1"

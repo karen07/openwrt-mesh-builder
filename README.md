@@ -578,28 +578,28 @@ vim config.json
 ./upgrade_routers.py
 ```
 
-Для локального просмотра структуры, без загрузки AWG пакетов и без синхронизации `packages/`, можно запускать так:
+Для локального просмотра структуры, без загрузки AWG/CIDR-squash пакетов и без синхронизации `packages/`, можно запускать так:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-package-sync
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync
 ```
 
-Такой режим удобен, если custom AWG `.apk` и per-router package repos уже не нужны для текущей проверки.
+Такой режим удобен, если custom AWG/CIDR-squash `.apk` и per-router package repos уже не нужны для текущей проверки.
 
 Hooks при этом все равно запускаются, поэтому `tools/generate.py` все еще может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
 
 Для просмотра только синхронизированной template структуры без generator hooks добавляйте `--skip-hooks`:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-package-sync --skip-hooks
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-hooks
 ```
 
-Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены. При обычной генерации `tools/generate.py` один раз локально запускает настоящий `routers/example/files/etc/scripts/update-ipsets.sh` во временном `IPSETS_DIR`. Полученные `direct-static.txt` и `direct.txt` затем одинаково записываются во все generated router и server каталоги.
+Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены. При обычной генерации `tools/generate.py` один раз локально запускает настоящий `routers/example/files/etc/scripts/update-ipsets.sh` во временном `IPSETS_DIR`. Для этого на машине генерации должен быть доступен `cidr-squash`. Полученные `direct-static.txt` и оптимизированный `direct.txt` затем одинаково записываются во все generated router и server каталоги.
 
 Если нужен полностью локальный smoke run без запуска `update-ipsets.sh` и без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-package-sync --skip-direct-downloads
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-direct-downloads
 ```
 
 В этом режиме generated `direct.txt` будет содержать только static direct entries:
@@ -815,21 +815,30 @@ Direct lists собираются из нескольких источников
 - публичные `listen_ip` и `exit_ip` из `config.json`
 - дополнительные CIDR prefixes из `EXIT_DIRECT_STATIC_IPSETS`
 
-Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются нужные IPv4 prefixes; одиночные IPv4 записи источника нормализуются в `/32`. ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`. Итоговый `direct.txt` всегда хранит IPv4 в явной CIDR-нотации.
+Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются нужные IPv4 prefixes; ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`. Перед записью итоговый список передается напрямую в `cidr-squash`: он объединяет дубликаты/пересечения, сортирует результат и сам выводит одиночные IPv4 адреса как `/32`, сохраняя явную IPv4 CIDR-нотацию.
 
-На роутерах и exit серверах эти настройки лежат в runtime env:
+Runtime-параметры direct-list, которые задаются в `tools/default.py`, генерируются в `/etc/router-autoinstall.env`. В том числе туда попадают country/ASN settings, runtime paths/names, source URLs и curl timeout/retry:
 
 ```sh
 DIRECT_COUNTRIES='ru cn by'
 DIRECT_ASNS='32590'
+RUNTIME_IPSETS_DIR='/etc/ipsets'
+RUNTIME_DIRECT_STATIC_NAME='direct-static.txt'
+RUNTIME_DIRECT_OUT_NAME='direct.txt'
+URL_IPINFO_LITE_CSV_GZ='https://github.com/Alice39s/ipinfo-csv-lite/releases/latest/download/ipinfo-lite.csv.gz'
+URL_IPVERSE_ASN='https://raw.githubusercontent.com/ipverse/as-ip-blocks/master'
+UPDATE_IPSETS_CURL_CONNECT_TIMEOUT='10'
+UPDATE_IPSETS_CURL_MAX_TIME='180'
+UPDATE_IPSETS_CURL_RETRY='3'
 ```
 
-`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, скачивает latest `ipinfo-lite.csv.gz` во временный файл, проверяет gzip и через `grep` + `cut` выбирает IPv4 prefixes для всех `DIRECT_COUNTRIES` (включая одиночные адреса без `/32`), затем добавляет ASN lists. Перед записью `direct.txt` все одиночные IPv4 адреса нормализуются в явный `/32`. Распакованный CSV в `/tmp` не сохраняется, а gzip удаляется сразу после фильтрации. После этого скрипт атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился. Python или IPinfo libraries на OpenWrt не нужны.
+`update-ipsets.sh` читает runtime env, скачивает latest `ipinfo-lite.csv.gz` во временный файл, проверяет gzip и через `grep` + `cut` выбирает IPv4 prefixes для всех `DIRECT_COUNTRIES` (включая одиночные адреса без `/32`), затем добавляет ASN lists. Собранный список без предварительной `/32`-нормализации и сортировки передается в `cidr-squash`, который канонизирует IPv4/CIDR input и пишет отсортированный CIDR output согласно `DIRECT_CIDR_OVER_COVERAGE`. Распакованный CSV в `/tmp` не сохраняется, а gzip удаляется сразу после фильтрации. После этого скрипт атомарно обновляет итоговый direct-list и перезагружает firewall только если оптимизированный список изменился. Python или IPinfo libraries на OpenWrt не нужны.
 
-Тот же `update-ipsets.sh` запускается один раз локально во время `generate.py` с подмененным `IPSETS_DIR` и `RELOAD_FIREWALL=0`. Поэтому initial `direct-static.txt` и `direct.txt`, которые копируются во все router/server trees, строятся той же runtime реализацией, которая затем работает на OpenWrt.
+Тот же `update-ipsets.sh` запускается один раз локально во время `generate.py` с подмененными только staging-параметрами `IPSETS_DIR` и `RELOAD_FIREWALL=0`; остальные runtime-настройки берутся из тех же значений `tools/default.py`. Поэтому initial direct lists и последующие обновления используют одинаковые source URLs, timeout/retry и один `DIRECT_CIDR_OVER_COVERAGE` из `tools/default.py`.
 
-В проекте используется IPinfo Lite через `Alice39s/ipinfo-csv-lite` (CC BY-SA 4.0). IP address data powered by [IPinfo](https://ipinfo.io).
-URL country source не является произвольным runtime-параметром: `update-ipsets.sh` и `awg-server.sh` ожидают именно формат Alice39s/IPinfo Lite CSV (`cidr,country_code,...`). При смене источника на другой формат URL и parser должны меняться вместе.
+На exit server генератор копирует тот же файл `routers/example/files/etc/scripts/update-ipsets.sh` как `/etc/scripts/update-ipsets.sh`. `exit-direct-guard.service` сначала запускает его с `ENV_FILE=/etc/awg-server.env` и `RELOAD_FIREWALL=0`, а затем просит `awg-server.sh` только перечитать готовый `direct.txt` в `ipset` и обновить guard rules. Поэтому deploy, роутеры и серверы используют один и тот же shell-код построения direct-list.
+
+В проекте используется IPinfo Lite через `Alice39s/ipinfo-csv-lite` (CC BY-SA 4.0). IP address data powered by [IPinfo](https://ipinfo.io). Единственный parser dynamic direct-list теперь находится в `update-ipsets.sh` и ожидает формат Alice39s/IPinfo Lite CSV (`cidr,country_code,...`), поэтому при смене источника на другой формат нужно менять только этот общий скрипт.
 
 Трафик к direct destination не получает mark `10000`, поэтому не уходит через exit table.
 
@@ -852,7 +861,7 @@ router direct rule  -> не отправлять direct destination на exit
 server guard rule   -> если direct destination все же пришел на exit, drop
 ```
 
-`exit-direct-guard.timer` обновляет guard ежедневно, а `awg-server-network.service` ставит guard из уже существующего списка при network-up.
+`exit-direct-guard.timer` ежедневно запускает `exit-direct-guard.service`: сначала общий `/etc/scripts/update-ipsets.sh` обновляет `direct.txt`, затем `awg-server.sh guard` перезагружает `ipset` и guard rules. `awg-server-network.service` при network-up ставит guard из уже существующего списка.
 
 ## Firewall model на OpenWrt
 
@@ -930,6 +939,7 @@ files/etc/wireguard/<access>/clients/*.conf      # при WireGuard или Amnez
 servers/<exit>/
   etc/awg-server.sh
   etc/awg-server.env
+  etc/scripts/update-ipsets.sh
   etc/amnezia/amneziawg/*.conf
   etc/babel<exit>.conf
   etc/ipsets/direct-static.txt
@@ -1059,7 +1069,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 77.88.8.8
 ```
 
-Достаточно ответа хотя бы от одного адреса. Если три последовательных 10-секундных периода заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счетчик ошибок.
+Достаточно ответа хотя бы от одного адреса. Если пять последовательных 10-секундных проверок заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счетчик ошибок.
 
 Для ручной проверки без reboot loop:
 
@@ -1610,7 +1620,7 @@ Profile name является безопасным ASCII identifier.
 - OpenVPN defaults
 - DoH/DNS failover defaults
 - direct-list sources
-- OpenWrt/AWG package URLs
+- OpenWrt/AWG/CIDR-squash package URLs
 - имена managed файлов и директорий
 
 Именно там меняются правила, которые должны быть одинаковыми для всех конфигов.
@@ -1624,7 +1634,7 @@ Profile name является безопасным ASCII identifier.
 ```sh
 ./generate_configs.py
 ./generate_configs.py --config prod.json
-./generate_configs.py --skip-awg-download --skip-package-sync
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync
 ./generate_configs.py --skip-hooks
 ./generate_configs.py --force
 ./generate_configs.py --details
@@ -1635,6 +1645,7 @@ Profile name является безопасным ASCII identifier.
 1. читает и валидирует `config.json`
 1. создает `routers/` из `routers/example`
 1. скачивает AmneziaWG `.apk`, если не указан `--skip-awg-download`
+1. скачивает CIDR-squash `.apk`, если не указан `--skip-cidr-squash-download`
 1. синхронизирует per-router `packages/`, если не указан `--skip-package-sync`
 1. синхронизирует шаблонные файлы из `routers/example`
 1. запускает `tools/generate.py`
@@ -1997,11 +2008,30 @@ openssl
 apk-tools 3.x
 tar с поддержкой zst
 make
+cmake
+C compiler (gcc или clang)
 ```
 
 Для `apk-tools 3.x` нужен `apk`. Также используется `apk adbdump` или `apk manifest`.
 
 Python module `cryptography` нужен для OWMB secret/material markers.
+
+На build/deploy машине также должен быть собран и установлен `cidr-squash`, потому что
+`generate_configs.py` использует его для локальной оптимизации dynamic direct-list:
+
+```sh
+git clone https://github.com/karen07/cidr-squash.git
+cd cidr-squash
+cmake --preset release
+cmake --build --preset release
+sudo cmake --install build/release
+```
+
+После установки команда `cidr-squash` должна быть доступна через `PATH`.
+
+На exit серверах `root/deploy.sh` также автоматически собирает и устанавливает `cidr-squash`
+из `https://github.com/karen07/cidr-squash`, потому что ежедневный server-side
+`update-ipsets.sh` использует тот же оптимизатор, что и роутеры.
 
 В Debian/Ubuntu это обычно пакет:
 
@@ -2081,7 +2111,7 @@ python3 -m py_compile *.py tools/*.py
 Быстрая проверка template/config flow без загрузки custom packages:
 
 ```sh
-./generate_configs.py --skip-awg-download --skip-package-sync --skip-direct-downloads
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-direct-downloads
 ```
 
 Валидация generated config:

@@ -337,8 +337,20 @@ def validate_server_env(cfg: ConfigData) -> None:
             ),
             "EXIT_SUBNETS": server_exit_subnets(cfg),
             "IPSET_NAME": SERVER_ENV_IPSET_NAME,
+            "ROUTE_PROBE_IP": SERVER_ROUTE_PROBE_IP,
             "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
             "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
+            "RUNTIME_IPSETS_DIR": RUNTIME_IPSETS_DIR,
+            "RUNTIME_DIRECT_STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
+            "RUNTIME_DIRECT_OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
+            "URL_IPINFO_LITE_CSV_GZ": URL_IPINFO_LITE_CSV_GZ,
+            "URL_IPVERSE_ASN": URL_IPVERSE_ASN,
+            "DIRECT_CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
+            "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(
+                UPDATE_IPSETS_CURL_CONNECT_TIMEOUT
+            ),
+            "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
+            "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
             "AWG_SERVICES": awg_services,
             "BABELD_CONF": server_babeld_conf_remote_path(hub.name),
         }
@@ -368,6 +380,15 @@ def expected_runtime_env_values(
     expected = {
         "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
         "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
+        "RUNTIME_IPSETS_DIR": RUNTIME_IPSETS_DIR,
+        "RUNTIME_DIRECT_STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
+        "RUNTIME_DIRECT_OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
+        "URL_IPINFO_LITE_CSV_GZ": URL_IPINFO_LITE_CSV_GZ,
+        "URL_IPVERSE_ASN": URL_IPVERSE_ASN,
+        "DIRECT_CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
+        "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
+        "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
+        "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
         "CHECK_DOH_DOMAIN": CHECK_DOH_DOMAIN,
         "CHECK_DOH_INTERVAL": str(CHECK_DOH_INTERVAL),
         "CHECK_DOH_RESOLV": CHECK_DOH_RESOLV,
@@ -436,12 +457,12 @@ def validate_ipset_files(cfg: ConfigData) -> None:
 
     server_paths: list[Path] = []
     for hub in cfg.exit_hubs:
-        server_ipsets = server_path(hub.name, "etc", "ipsets")
+        server_ipsets = server_exit_dir(hub.name) / RUNTIME_IPSETS_DIR.lstrip("/")
         validate_exact_file_set(server_ipsets, ipset_filenames)
         server_paths.extend(
             [
-                server_path(hub.name, "etc", "ipsets", "direct-static.txt"),
-                server_path(hub.name, "etc", "ipsets", "direct.txt"),
+                server_ipsets / RUNTIME_DIRECT_STATIC_NAME,
+                server_ipsets / RUNTIME_DIRECT_OUT_NAME,
             ]
         )
 

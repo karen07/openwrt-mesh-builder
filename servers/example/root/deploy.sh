@@ -37,6 +37,10 @@ AWG_TOOLS_REPO="${AWG_TOOLS_REPO:-amnezia-vpn/amneziawg-tools}"
 AWG_KERNEL_SRC="${AWG_KERNEL_SRC:-/usr/local/src/amneziawg-linux-kernel-module}"
 AWG_TOOLS_SRC="${AWG_TOOLS_SRC:-/usr/local/src/amneziawg-tools}"
 
+CIDR_SQUASH_REPO="${CIDR_SQUASH_REPO:-https://github.com/karen07/cidr-squash.git}"
+CIDR_SQUASH_REF="${CIDR_SQUASH_REF:-main}"
+CIDR_SQUASH_SRC="${CIDR_SQUASH_SRC:-/usr/local/src/cidr-squash}"
+
 fail() {
     echo "ERROR: $*" >&2
     exit 1
@@ -443,6 +447,33 @@ install_ndpi_netfilter() {
     echo "OK: installed xt_ndpi commit=$NDPI_COMMIT (DHT cache disabled)"
 }
 
+install_cidr_squash() {
+    echo "Installing cidr-squash from ${CIDR_SQUASH_REPO} ref=${CIDR_SQUASH_REF}..."
+
+    rm -rf "$CIDR_SQUASH_SRC"
+    git clone \
+        --depth 1 \
+        --branch "$CIDR_SQUASH_REF" \
+        "$CIDR_SQUASH_REPO" \
+        "$CIDR_SQUASH_SRC" \
+        || fail "failed to clone cidr-squash ref=$CIDR_SQUASH_REF"
+
+    cmake \
+        -S "$CIDR_SQUASH_SRC" \
+        -B "$CIDR_SQUASH_SRC/build/release" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        || fail "failed to configure cidr-squash"
+    cmake --build "$CIDR_SQUASH_SRC/build/release" -j"$(nproc)" \
+        || fail "failed to build cidr-squash"
+    cmake --install "$CIDR_SQUASH_SRC/build/release" \
+        || fail "failed to install cidr-squash"
+
+    command -v cidr-squash >/dev/null 2>&1 \
+        || fail "cidr-squash was not installed into PATH"
+    echo "OK: installed cidr-squash"
+}
+
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
@@ -465,6 +496,7 @@ apt-get install -y \
     jq \
     iptables \
     build-essential \
+    cmake \
     dkms \
     bc \
     libelf-dev \
@@ -490,9 +522,14 @@ purge_packaged_amneziawg
 
 install_ndpi_netfilter
 install_amneziawg
+install_cidr_squash
 
 if [ -f /etc/awg-server.sh ]; then
     chmod 0755 /etc/awg-server.sh
+fi
+
+if [ -f /etc/scripts/update-ipsets.sh ]; then
+    chmod 0755 /etc/scripts/update-ipsets.sh
 fi
 
 systemctl daemon-reload

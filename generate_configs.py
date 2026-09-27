@@ -13,6 +13,8 @@ from tools.default import (
     CONFIG_PATH,
     AWG_PACKAGE_NAMES,
     AWG_RELEASE_BASE_URL,
+    CIDR_SQUASH_PACKAGE_NAMES,
+    CIDR_SQUASH_RELEASE_BASE_URL,
     MIN_OPENWRT_VERSION_TEXT,
     PACKAGE_EXTENSION,
     PACKAGE_SOURCE_ROOT,
@@ -209,6 +211,11 @@ def main() -> None:
         help="do not download AWG packages from GitHub releases",
     )
     ap.add_argument(
+        "--skip-cidr-squash-download",
+        action="store_true",
+        help="do not download CIDR-squash package from GitHub releases",
+    )
+    ap.add_argument(
         "--skip-package-sync",
         action="store_true",
         help="do not copy per-router apk package repositories",
@@ -265,6 +272,15 @@ def main() -> None:
             AWG_PACKAGE_NAMES,
             AWG_RELEASE_BASE_URL,
             "AWG2",
+        )
+
+    if not args.skip_cidr_squash_download:
+        ensure_release_packages(
+            cfg_data,
+            routers,
+            CIDR_SQUASH_PACKAGE_NAMES,
+            CIDR_SQUASH_RELEASE_BASE_URL,
+            "CIDR-squash",
         )
 
     if not args.skip_package_sync:

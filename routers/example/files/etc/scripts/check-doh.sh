@@ -6,12 +6,21 @@ if [ -r /etc/router-autoinstall.env ]; then
     . /etc/router-autoinstall.env
 fi
 
-DOMAIN="${CHECK_DOH_DOMAIN:-google.com}"
+DOMAIN="${CHECK_DOH_DOMAIN-}"
 INTERVAL="${CHECK_DOH_INTERVAL:-5}"
 
 RESOLV="${CHECK_DOH_RESOLV:-/tmp/resolv.conf.d/resolv.conf.auto}"
 RESOLV_WAIT_MAX="${CHECK_DOH_RESOLV_WAIT_MAX:-300}"
-PROVIDER_DOMAINS="${CHECK_DOH_PROVIDER_DOMAINS:-ru xn--p1ai}"
+if [ "${CHECK_DOH_PROVIDER_DOMAINS+x}" != "x" ]; then
+    echo "CHECK_DOH_PROVIDER_DOMAINS is not set in /etc/router-autoinstall.env" >&2
+    exit 1
+fi
+PROVIDER_DOMAINS="${CHECK_DOH_PROVIDER_DOMAINS-}"
+
+if [ -z "$DOMAIN" ]; then
+    echo "CHECK_DOH_DOMAIN is empty in /etc/router-autoinstall.env" >&2
+    exit 1
+fi
 
 get_doh_endpoints_from_uci() {
     i=0

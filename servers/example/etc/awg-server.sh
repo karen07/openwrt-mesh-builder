@@ -11,28 +11,26 @@ IPTABLES_BIN="${IPTABLES_BIN:-/usr/sbin/iptables}"
 IPSET_BIN="${IPSET_BIN:-/usr/sbin/ipset}"
 SYSCTL_BIN="${SYSCTL_BIN:-/usr/sbin/sysctl}"
 MODPROBE_BIN="${MODPROBE_BIN:-/usr/sbin/modprobe}"
-CURL_BIN="${CURL_BIN:-/usr/bin/curl}"
 AWK_BIN="${AWK_BIN:-/usr/bin/awk}"
-SED_BIN="${SED_BIN:-/usr/bin/sed}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-/usr/bin/systemctl}"
 
-SERVER_NAME="${SERVER_NAME:-unknown}"
+SERVER_NAME="${SERVER_NAME-}"
 NODE_ADDR4="${NODE_ADDR4:-}"
 NODE_IP="${NODE_ADDR4%%/*}"
-NODE_IFACE="${NODE_IFACE:-awg-node}"
+NODE_IFACE="${NODE_IFACE-}"
 LISTEN_IP="${LISTEN_IP:-}"
 EXIT_IP="${EXIT_IP:-}"
-IPIP_IFACE="${IPIP_IFACE:-ipip-exit}"
-IPIP_ADDR4="${IPIP_ADDR4:-10.254.0.1/31}"
+IPIP_IFACE="${IPIP_IFACE-}"
+IPIP_ADDR4="${IPIP_ADDR4-}"
 IPIP_LOCAL="${IPIP_LOCAL:-${IPIP_ADDR4%%/*}}"
 IPIP_TTL="${IPIP_TTL:-64}"
 IPIP_MTU="${IPIP_MTU:-}"
 EXIT_SUBNET="${EXIT_SUBNET:-}"
 EXIT_SUBNETS="${EXIT_SUBNETS:-$EXIT_SUBNET}"
-IPSET_NAME="${IPSET_NAME:-exit_direct}"
+IPSET_NAME="${IPSET_NAME-}"
 NAT_CHAIN="${NAT_CHAIN:-AWG_SERVER_NAT}"
 FORWARD_CHAIN="${FORWARD_CHAIN:-AWG_SERVER_FORWARD}"
-ROUTE_PROBE_IP="${ROUTE_PROBE_IP:-1.1.1.1}"
+ROUTE_PROBE_IP="${ROUTE_PROBE_IP-}"
 AWG_SERVICES="${AWG_SERVICES:-}"
 
 BABELD_CONF="${BABELD_CONF:-}"
@@ -41,32 +39,25 @@ BABELD_PIDFILE="/run/${BABELD_CONF_NAME%.conf}.pid"
 BABELD_START_TIMEOUT="${BABELD_START_TIMEOUT:-10}"
 BABELD_STOP_TIMEOUT="${BABELD_STOP_TIMEOUT:-3}"
 
-# Runtime path may be overridden only when staging/testing the script.
-IPSETS_DIR="${IPSETS_DIR:-/etc/ipsets}"
-
-# These defaults are tied to the country CSV parser and ipverse ASN layout.
-STATIC_DIRECT_NAME="direct-static.txt"
-OUT_DIRECT_NAME="direct.txt"
-IPINFO_LITE_CSV_GZ_URL="https://github.com/Alice39s/ipinfo-csv-lite/""\
-releases/latest/download/ipinfo-lite.csv.gz"
-URL_IPVERSE_ASN="https://raw.githubusercontent.com/ipverse/as-ip-blocks/master"
-
-STATIC_DIRECT="$IPSETS_DIR/$STATIC_DIRECT_NAME"
-OUT_DIRECT="$IPSETS_DIR/$OUT_DIRECT_NAME"
-TMP_DIRECT="${OUT_DIRECT}.tmp"
-TMP_SORTED="${TMP_DIRECT}.sorted"
-TMP_IPINFO="/tmp/ipinfo-lite.$$.csv.gz"
-TMP_COUNTRIES="/tmp/ipinfo-countries.$$.txt"
-
-DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-ru cn by}"
-DIRECT_ASNS="${DIRECT_ASNS:-32590}"
-UPDATE_IPSETS_CURL_CONNECT_TIMEOUT=10
-UPDATE_IPSETS_CURL_MAX_TIME=180
-UPDATE_IPSETS_CURL_RETRY=3
+# Runtime direct-list path comes from default.py -> awg-server.env.
+# The shared /etc/scripts/update-ipsets.sh owns downloads and optimization.
+RUNTIME_IPSETS_DIR="${RUNTIME_IPSETS_DIR:-/etc/ipsets}"
+IPSETS_DIR="${IPSETS_DIR:-$RUNTIME_IPSETS_DIR}"
+RUNTIME_DIRECT_OUT_NAME="${RUNTIME_DIRECT_OUT_NAME:-direct.txt}"
+OUT_DIRECT="$IPSETS_DIR/$RUNTIME_DIRECT_OUT_NAME"
 
 die() {
     echo "ERROR: $*" >&2
     exit 1
+}
+
+validate_runtime_config() {
+    [ -n "$SERVER_NAME" ] || die "SERVER_NAME is not set in $ENV_FILE"
+    [ -n "$NODE_IFACE" ] || die "NODE_IFACE is not set in $ENV_FILE"
+    [ -n "$IPIP_IFACE" ] || die "IPIP_IFACE is not set in $ENV_FILE"
+    [ -n "$IPIP_ADDR4" ] || die "IPIP_ADDR4 is not set in $ENV_FILE"
+    [ -n "$IPSET_NAME" ] || die "IPSET_NAME is not set in $ENV_FILE"
+    [ -n "$ROUTE_PROBE_IP" ] || die "ROUTE_PROBE_IP is not set in $ENV_FILE"
 }
 
 usage() {
@@ -326,154 +317,6 @@ network_down() {
     echo "OK: ${SERVER_NAME} network down"
 }
 
-append_static_direct() {
-    if [ ! -s "$STATIC_DIRECT" ]; then
-        echo "ERROR: missing or empty static direct list: $STATIC_DIRECT" >&2
-        return 1
-    fi
-
-    "$SED_BIN" '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
-        "$STATIC_DIRECT" >>"$TMP_DIRECT"
-}
-
-append_url_list() {
-    url="$1"
-    label="$2"
-
-    data="$("$CURL_BIN" -fsSL \
-        --connect-timeout "$UPDATE_IPSETS_CURL_CONNECT_TIMEOUT" \
-        --max-time "$UPDATE_IPSETS_CURL_MAX_TIME" \
-        --retry "$UPDATE_IPSETS_CURL_RETRY" \
-        "$url")" || {
-        echo "ERROR: failed to fetch $label from $url" >&2
-        return 1
-    }
-
-    lines="$(
-        printf '%s\n' "$data" \
-            | "$SED_BIN" '/^[[:space:]]*#/d; /^[[:space:]]*$/d'
-    )"
-
-    if [ -z "$lines" ]; then
-        echo "ERROR: empty $label list from $url" >&2
-        return 1
-    fi
-
-    printf '%s\n' "$lines" >>"$TMP_DIRECT"
-    echo "OK: fetched $label from $url"
-    return 0
-}
-
-append_country_lists() {
-    [ -n "$DIRECT_COUNTRIES" ] || return 0
-
-    country_regex=""
-    for country in $DIRECT_COUNTRIES; do
-        case "$country" in
-            [A-Za-z][A-Za-z]) ;;
-            *)
-                echo "ERROR: bad country code: $country" >&2
-                return 1
-                ;;
-        esac
-
-        # shellcheck disable=SC2018 disable=SC2019
-        country="$(printf '%s' "$country" | tr 'a-z' 'A-Z')"
-        if [ -n "$country_regex" ]; then
-            country_regex="$country_regex|"
-        fi
-        country_regex="$country_regex$country"
-    done
-
-    rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-    "$CURL_BIN" -fsSL \
-        --connect-timeout "${UPDATE_IPSETS_CURL_CONNECT_TIMEOUT}" \
-        --max-time "${UPDATE_IPSETS_CURL_MAX_TIME}" \
-        --retry "${UPDATE_IPSETS_CURL_RETRY}" \
-        -o "$TMP_IPINFO" \
-        "$IPINFO_LITE_CSV_GZ_URL" || {
-        echo "ERROR: failed to fetch IPinfo Lite CSV" >&2
-        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-        return 1
-    }
-
-    if [ ! -s "$TMP_IPINFO" ] || ! gzip -t "$TMP_IPINFO" 2>/dev/null; then
-        echo "ERROR: invalid IPinfo Lite gzip archive" >&2
-        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-        return 1
-    fi
-
-    gzip -dc "$TMP_IPINFO" \
-        | grep -E "^[0-9.]+(/[0-9]+)?,(${country_regex})," \
-        | cut -d, -f1 >"$TMP_COUNTRIES"
-
-    if [ ! -s "$TMP_COUNTRIES" ]; then
-        echo "ERROR: no IPinfo CIDRs for countries: $DIRECT_COUNTRIES" >&2
-        rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-        return 1
-    fi
-
-    cat "$TMP_COUNTRIES" >>"$TMP_DIRECT"
-    rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-    echo "OK: added IPinfo countries: $DIRECT_COUNTRIES"
-    return 0
-}
-
-append_asn_lists() {
-    for asn in $DIRECT_ASNS; do
-        case "$asn" in
-            '' | *[!0-9]*)
-                echo "ERROR: bad ASN: $asn" >&2
-                return 1
-                ;;
-            *) ;;
-        esac
-
-        append_url_list \
-            "$URL_IPVERSE_ASN/as/$asn/ipv4-aggregated.txt" \
-            "as:$asn" || return 1
-    done
-}
-
-build_direct_list() {
-    mkdir -p "$IPSETS_DIR" || die "failed to create $IPSETS_DIR"
-    rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-
-    if ! append_static_direct; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        exit 1
-    fi
-
-    if ! append_country_lists; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        exit 1
-    fi
-
-    if ! append_asn_lists; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        exit 1
-    fi
-
-    if [ ! -s "$TMP_DIRECT" ]; then
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        die "generated direct list is empty"
-    fi
-
-    "$SED_BIN" '/\//! s#$#/32#' "$TMP_DIRECT" \
-        | LC_ALL=C sort -u >"$TMP_SORTED" || {
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        die "failed to normalize/sort $TMP_DIRECT"
-    }
-
-    mv -f "$TMP_SORTED" "$TMP_DIRECT" || {
-        rm -f "$TMP_DIRECT" "$TMP_SORTED" "$TMP_IPINFO" "$TMP_COUNTRIES"
-        die "failed to replace sorted tmp list"
-    }
-
-    mv -f "$TMP_DIRECT" "$OUT_DIRECT" \
-        || die "failed to update $OUT_DIRECT"
-}
-
 restore_ipset() {
     [ -s "$OUT_DIRECT" ] || die "missing or empty direct list: $OUT_DIRECT"
 
@@ -485,13 +328,6 @@ restore_ipset() {
             '{ print "add " set " " $0 " -exist" }' \
             "$OUT_DIRECT"
     } | "$IPSET_BIN" restore || die "ipset restore failed"
-}
-
-ipset_update() {
-    build_direct_list
-    restore_ipset
-
-    echo "OK: refreshed $IPSET_NAME ipset from $OUT_DIRECT"
 }
 
 ensure_forward_chain() {
@@ -581,11 +417,13 @@ guard_existing() {
 }
 
 guard_refresh() {
-    ipset_update
+    restore_ipset
     guard_rules
+    echo "OK: refreshed $IPSET_NAME guard from $OUT_DIRECT"
 }
 
 mode="${1:-}"
+validate_runtime_config
 case "$mode" in
     network-up) network_up ;;
     network-down) network_down ;;

@@ -295,6 +295,40 @@ def build_firewall_blocks(
     return blocks
 
 
+def sync_direct_ipset_loadfile(text: str, path: Path) -> str:
+    desired = f"{RUNTIME_IPSETS_DIR.rstrip('/')}/{RUNTIME_DIRECT_OUT_NAME}"
+    lines = text.splitlines(keepends=True)
+
+    starts = [i for i, line in enumerate(lines) if line.startswith("config ")]
+    starts.append(len(lines))
+
+    found = False
+    for idx in range(len(starts) - 1):
+        start = starts[idx]
+        end = starts[idx + 1]
+        block = lines[start:end]
+        if not block or block[0].strip() != "config ipset":
+            continue
+        if not any(line.strip() == "option name 'direct'" for line in block):
+            continue
+
+        for line_idx in range(start, end):
+            stripped = lines[line_idx].strip()
+            if not stripped.startswith("option loadfile "):
+                continue
+            indent_len = len(lines[line_idx]) - len(lines[line_idx].lstrip())
+            indent = lines[line_idx][:indent_len]
+            newline = "\n" if lines[line_idx].endswith("\n") else ""
+            lines[line_idx] = f"{indent}option loadfile '{desired}'{newline}"
+            found = True
+            break
+
+    if not found:
+        die(f"missing direct ipset loadfile option in {path}")
+
+    return "".join(lines)
+
+
 def update_firewall_part(
     cfg: ConfigData,
     router_name: str,
@@ -304,7 +338,7 @@ def update_firewall_part(
     access_groups_for_router: list[AccessGroup],
 ) -> None:
     path = router_path(cfg, router_name, "firewall")
-    original = read(path)
+    original = sync_direct_ipset_loadfile(read(path), path)
 
     before_marker, marker_and_tail = split_text_by_marker(original, path)
     validate_firewall_shared_tail(marker_and_tail, path)

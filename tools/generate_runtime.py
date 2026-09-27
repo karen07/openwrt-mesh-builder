@@ -69,7 +69,19 @@ def _run_update_ipsets(cfg: ConfigData, ipsets_dir: Path) -> None:
     if not script.is_file():
         die(f"missing update-ipsets.sh: {script}")
 
-    need("env", "sh", "curl", "gzip", "grep", "cut", "sed", "sort", "cmp", "tr")
+    need(
+        "env",
+        "sh",
+        "curl",
+        "gzip",
+        "grep",
+        "cut",
+        "sed",
+        "cmp",
+        "tr",
+        "wc",
+        "cidr-squash",
+    )
 
     env_args = [
         "ENV_FILE=/dev/null",
@@ -77,6 +89,15 @@ def _run_update_ipsets(cfg: ConfigData, ipsets_dir: Path) -> None:
         "RELOAD_FIREWALL=0",
         f"DIRECT_COUNTRIES={' '.join(cfg.exit_direct.countries)}",
         f"DIRECT_ASNS={' '.join(cfg.exit_direct.asns)}",
+        f"RUNTIME_IPSETS_DIR={RUNTIME_IPSETS_DIR}",
+        f"RUNTIME_DIRECT_STATIC_NAME={RUNTIME_DIRECT_STATIC_NAME}",
+        f"RUNTIME_DIRECT_OUT_NAME={RUNTIME_DIRECT_OUT_NAME}",
+        f"URL_IPINFO_LITE_CSV_GZ={URL_IPINFO_LITE_CSV_GZ}",
+        f"URL_IPVERSE_ASN={URL_IPVERSE_ASN}",
+        f"DIRECT_CIDR_OVER_COVERAGE={DIRECT_CIDR_OVER_COVERAGE}",
+        f"UPDATE_IPSETS_CURL_CONNECT_TIMEOUT={UPDATE_IPSETS_CURL_CONNECT_TIMEOUT}",
+        f"UPDATE_IPSETS_CURL_MAX_TIME={UPDATE_IPSETS_CURL_MAX_TIME}",
+        f"UPDATE_IPSETS_CURL_RETRY={UPDATE_IPSETS_CURL_RETRY}",
     ]
 
     run_checked(["env", *env_args, "sh", str(script)])
@@ -105,7 +126,7 @@ def build_direct_ipset_lines(
         direct_lines = _read_generated_ipset(direct_path, RUNTIME_DIRECT_OUT_NAME)
 
     if generated_static != static_lines:
-        die("update-ipsets.sh unexpectedly changed direct-static.txt")
+        die(f"update-ipsets.sh unexpectedly changed {RUNTIME_DIRECT_STATIC_NAME}")
 
     print(
         "OK: update-ipsets.sh generated "
@@ -136,6 +157,15 @@ def build_runtime_env(cfg: ConfigData, router_name: str | None = None) -> str:
     values = {
         "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
         "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
+        "RUNTIME_IPSETS_DIR": RUNTIME_IPSETS_DIR,
+        "RUNTIME_DIRECT_STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
+        "RUNTIME_DIRECT_OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
+        "URL_IPINFO_LITE_CSV_GZ": URL_IPINFO_LITE_CSV_GZ,
+        "URL_IPVERSE_ASN": URL_IPVERSE_ASN,
+        "DIRECT_CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
+        "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
+        "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
+        "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
         "CHECK_DOH_DOMAIN": CHECK_DOH_DOMAIN,
         "CHECK_DOH_INTERVAL": str(CHECK_DOH_INTERVAL),
         "CHECK_DOH_RESOLV": CHECK_DOH_RESOLV,
@@ -209,11 +239,12 @@ def write_server_ipsets(
     if static_lines is None or direct_lines is None:
         static_lines, direct_lines = build_direct_ipset_lines(cfg)
 
+    server_ipsets = server_exit_dir(exit_name) / RUNTIME_IPSETS_DIR.lstrip("/")
     write(
-        server_path(exit_name, "etc", "ipsets", "direct-static.txt"),
+        server_ipsets / RUNTIME_DIRECT_STATIC_NAME,
         "\n".join(static_lines) + "\n",
     )
     write(
-        server_path(exit_name, "etc", "ipsets", "direct.txt"),
+        server_ipsets / RUNTIME_DIRECT_OUT_NAME,
         "\n".join(direct_lines) + "\n",
     )
