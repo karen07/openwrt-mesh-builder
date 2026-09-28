@@ -2,41 +2,27 @@
 
 ![Static topology](./topology/topology-2d.svg)
 
-OpenWrt Spine-Leaf Mesh Builder собирает из OpenWrt роутеров и Linux серверов небольшой routed fabric.
+OpenWrt Spine-Leaf Mesh Builder generates configuration, builds firmware, and deploys a small routed fabric of OpenWrt routers and Linux servers.
 
-Spine здесь - это роутеры с публичным IP. Leaf - роутеры за NAT или с серым IP. Exit - управляемые точки выхода в интернет.
+The topology distinguishes public-IP spine nodes, NATed/private leaf nodes, and managed exit nodes. From a single `config.json`, the project generates overlay links, Babel routing, firewall policy, server-side files, access-client configuration, SSH aliases, and the IPIP-based exit data plane.
 
-В результате получается не один VPN туннель до одного сервера, а routed mesh сеть:
+The result is not a single VPN tunnel to one gateway but a routed overlay in which routers can reach each other, private leaf networks remain addressable through the fabric, and user traffic can fail over between multiple managed Internet exit paths. Firmware images can also be built from the same configuration with `build_router_images.py`.
 
-- роутеры видят друг друга через overlay
-- leaf без входящего public endpoint становится достижимым из других LAN и access сетей
-- reverse exit без белого IP может участвовать в egress
-- пользовательский трафик получает несколько отказоустойчивых путей к интернету
+The current implementation targets OpenWrt 25.12+ with the apk-based ImageBuilder and AmneziaWG 3.1 packages. The repository is opinionated about addressing, generated configuration, and deployment order so that a multi-router setup can be reproduced rather than assembled manually node by node.
 
-Топология описывается в `config.json`.
+## Описание
 
-Из нее генерируются:
+OpenWrt Spine-Leaf Mesh Builder генерирует конфигурацию, собирает прошивки и разворачивает небольшую маршрутизируемую spine-leaf сеть из роутеров OpenWrt и Linux серверов.
 
-- OpenWrt overlay files
-- server configs
-- access клиенты
-- SSH aliases
-- firewall rules
-- Babel routing
-- IPIP exit data-plane
+Топология различает spine узлы с публичными IP, leaf узлы за NAT или с приватными адресами и управляемые exit узлы. Из одного `config.json` проект генерирует оверлейные соединения, маршрутизацию Babel, правила межсетевого экрана, серверные файлы, конфигурацию клиентов доступа, псевдонимы SSH и плоскость выхода на основе IPIP.
 
-OpenWrt firmware образы собираются отдельной командой:
+Результат - не один VPN туннель до одного шлюза, а маршрутизируемый оверлей, в котором роутеры доступны друг другу, приватные leaf сети остаются адресуемыми через общую сеть, а пользовательский трафик может переключаться между несколькими управляемыми путями выхода в Интернет. Из той же конфигурации можно собирать образы прошивки через `build_router_images.py`.
 
-```sh
-./build_router_images.py
-```
-
-Проект рассчитан на OpenWrt 25.12+ с `apk` based ImageBuilder и AmneziaWG 3.1 пакетами.
-
-> Текущий `config.json` - демонстрационный пример. Адреса из `203.0.113.0/24` и `198.51.100.0/24` нужно заменить на реальные адреса своей сети перед деплоем.
+Текущая реализация рассчитана на OpenWrt 25.12+ с ImageBuilder на основе apk и пакетами AmneziaWG 3.1. Проект намеренно задает строгие правила адресации, генерации конфигурации и порядка развертывания, чтобы сеть из нескольких роутеров можно было воспроизводить, а не собирать вручную по одному узлу.
 
 ## Содержание
 
+- [Описание](#%D0%BE%D0%BF%D0%B8%D1%81%D0%B0%D0%BD%D0%B8%D0%B5)
 - [Что это дает](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D0%B5%D1%82)
 - [Идея сети](#%D0%B8%D0%B4%D0%B5%D1%8F-%D1%81%D0%B5%D1%82%D0%B8)
 - [Отказоустойчивость](#%D0%BE%D1%82%D0%BA%D0%B0%D0%B7%D0%BE%D1%83%D1%81%D1%82%D0%BE%D0%B9%D1%87%D0%B8%D0%B2%D0%BE%D1%81%D1%82%D1%8C)
