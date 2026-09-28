@@ -19,6 +19,7 @@ TMP_DIRECT="${OUT_DIRECT}.tmp"
 TMP_SORTED="${TMP_DIRECT}.sorted"
 
 URL_IPVERSE_GEO="${URL_IPVERSE_GEO:-$URL_GH_RAW/ipverse/geo-ip-blocks/master}"
+URL_IPVERSE_COUNTRY="${URL_IPVERSE_COUNTRY:-$URL_GH_RAW/ipverse/country-ip-blocks/master}"
 URL_IPVERSE_ASN="${URL_IPVERSE_ASN:-$URL_GH_RAW/ipverse/as-ip-blocks/master}"
 
 DIRECT_COUNTRIES="${DIRECT_COUNTRIES:-}"
@@ -79,7 +80,11 @@ append_country_lists() {
 
         append_url_list \
             "$URL_IPVERSE_GEO/country/$country/${country}-ipv4.txt" \
-            "country:$country" || return 1
+            "geo-country:$country" || return 1
+
+        append_url_list \
+            "$URL_IPVERSE_COUNTRY/country/$country/ipv4-aggregated.txt" \
+            "rir-country:$country" || return 1
     done
 }
 

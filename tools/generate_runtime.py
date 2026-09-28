@@ -43,8 +43,11 @@ def download_text_lines(url: str) -> list[str]:
     ]
 
 
-def direct_country_url(country: str) -> str:
-    return f"{URL_IPVERSE_GEO}/country/{country}/{country}-ipv4.txt"
+def direct_country_urls(country: str) -> tuple[str, str]:
+    return (
+        f"{URL_IPVERSE_GEO}/country/{country}/{country}-ipv4.txt",
+        f"{URL_IPVERSE_COUNTRY}/country/{country}/ipv4-aggregated.txt",
+    )
 
 
 def direct_asn_url(asn: str) -> str:
@@ -73,7 +76,8 @@ def direct_dynamic_lines(cfg: ConfigData) -> list[str]:
     lines: list[str] = []
 
     for country in cfg.exit_direct.countries:
-        lines.extend(download_text_lines(direct_country_url(country)))
+        for url in direct_country_urls(country):
+            lines.extend(download_text_lines(url))
 
     for asn in cfg.exit_direct.asns:
         lines.extend(download_text_lines(direct_asn_url(asn)))

@@ -815,7 +815,7 @@ Direct lists собираются из нескольких источников
 - публичные `listen_ip` и `exit_ip` из `config.json`
 - дополнительные CIDR prefixes из `EXIT_DIRECT_STATIC_IPSETS`
 
-Динамическая часть задается странами и ASN.
+Динамическая часть задается странами и ASN. Для каждой страны объединяются два набора ipverse: `geo-ip-blocks` (более детальные registration/sub-allocation данные) и `country-ip-blocks` (компактные RIR delegation данные).
 
 На роутерах и exit серверах эти настройки лежат в runtime env:
 
@@ -824,7 +824,7 @@ DIRECT_COUNTRIES='ru cn by'
 DIRECT_ASNS='32590 45102'
 ```
 
-`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, добавляет country/ASN lists, атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился.
+`update-ipsets.sh` читает `/etc/ipsets/direct-static.txt`, для каждой страны добавляет union `geo-ip-blocks + country-ip-blocks`, затем ASN lists, атомарно обновляет `/etc/ipsets/direct.txt` и перезагружает firewall только если итоговый список изменился.
 
 Трафик к direct destination не получает mark `10000`, поэтому не уходит через exit table.
 
