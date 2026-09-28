@@ -28,7 +28,7 @@ def download_file(
     url: str,
     dst: Path,
     *,
-    max_time: int = 300,
+    max_time: int = 900,
     show_progress: bool = False,
 ) -> None:
     tmp = dst.with_suffix(dst.suffix + ".tmp")
@@ -54,7 +54,7 @@ def download_file(
     tmp.replace(dst)
 
 
-def try_download_file(url: str, dst: Path, *, max_time: int = 300) -> bool:
+def try_download_file(url: str, dst: Path, *, max_time: int = 900) -> bool:
     tmp = dst.with_suffix(dst.suffix + ".tmp")
     tmp.unlink(missing_ok=True)
     dst.parent.mkdir(parents=True, exist_ok=True)
