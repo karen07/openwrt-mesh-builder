@@ -401,7 +401,8 @@ LOCAL_DIRECT_IPSETS = [
 EXIT_DIRECT_STATIC_IPSETS = []
 EXIT_DIRECT_COUNTRIES = ["ru", "cn", "by"]
 EXIT_DIRECT_ASNS = [
-    32590,
+    32590,  # Valve Corporation / Steam
+    45102,  # Alibaba / AliExpress
 ]
 
 # ============================================================
