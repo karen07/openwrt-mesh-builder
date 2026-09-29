@@ -12,72 +12,6 @@ append_if_exists() {
     rm -f "$1"
 }
 
-maximize_wifi() {
-    ucode -e '
-import {readfile} from "fs";
-import {cursor} from "uci";
-
-let u = cursor();
-let b = json(readfile("/etc/board.json"));
-
-u.foreach("wireless", "wifi-device", (r) => {
-    if (r.disabled == "1" || !r.path || !r.band || !r.htmode)
-        return;
-
-    let band = r.band == "2g" ? "2G" : r.band == "5g" ? "5G" : r.band == "6g" ? "6G" : null;
-    if (!band)
-        return;
-
-    for (let name in b.wlan ?? {}) {
-        let w = b.wlan[name];
-        if (w.path != r.path && !(type(w.path) == "array" && index(w.path, r.path) >= 0))
-            continue;
-
-        let info = w.info?.bands?.[band];
-        if (!info)
-            return;
-
-        let prefix = match(r.htmode, /^(EHT|HE|VHT|HT)/)?.[1];
-        if (prefix) {
-            for (let width in [320, 160, 80, 40, 20]) {
-                let mode = prefix + width;
-                if (index(info.modes ?? [], mode) >= 0) {
-                    printf("set wireless.%s.htmode=%s\n", r[".name"], mode);
-                    break;
-                }
-            }
-        }
-
-        let channel = info.default_channel;
-        if (r.radio != null)
-            for (let radio in w.info?.radios ?? [])
-                if ("" + radio.index == "" + r.radio) {
-                    channel = radio.bands?.[band]?.default_channel ?? channel;
-                    break;
-                }
-
-        if (channel)
-            printf("set wireless.%s.channel=%d\n", r[".name"], channel);
-
-        return;
-    }
-});
-' | uci -q batch
-}
-
-update_release_from_deploy_version() {
-    [ -s /etc/deploy_version ] || return 0
-
-    deploy_version="$(tr -d '\r\n' </etc/deploy_version)"
-
-    sed -i "s|^DISTRIB_DESCRIPTION=.*|DISTRIB_DESCRIPTION='${deploy_version}'|" /etc/openwrt_release
-    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /etc/os-release
-    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /usr/lib/os-release
-    sed -i "s|OpenWrt .*$|${deploy_version}|" /etc/banner
-
-    rm -f /etc/deploy_version
-}
-
 setup_doh() {
     echo 'doh:x:4453:' >>/etc/group
     echo 'doh:x:4453:4453:doh:/var/run/doh:/bin/false' >>/etc/passwd
@@ -91,6 +25,19 @@ setup_doh() {
     uci -q set https-dns-proxy.config.group='doh'
 }
 
+setup_release() {
+    [ -s /etc/deploy_version ] || return 0
+
+    deploy_version="$(tr -d '\r\n' </etc/deploy_version)"
+
+    sed -i "s|^DISTRIB_DESCRIPTION=.*|DISTRIB_DESCRIPTION='${deploy_version}'|" /etc/openwrt_release
+    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /etc/os-release
+    sed -i "s|^OPENWRT_RELEASE=.*|OPENWRT_RELEASE=\"${deploy_version}\"|" /usr/lib/os-release
+    sed -i "s|OpenWrt .*$|${deploy_version}|" /etc/banner
+
+    rm -f /etc/deploy_version
+}
+
 # Append network
 append_if_exists /etc/config/network_part /etc/config/network
 
@@ -100,11 +47,14 @@ append_if_exists /etc/config/dhcp_part /etc/config/dhcp
 # Append firewall
 append_if_exists /etc/config/firewall_part /etc/config/firewall
 
+# Setup DOH
+setup_doh
+
+# Setup release
+setup_release
+
 # Log size
 uci -q set system.@system[0].log_size='10240'
-
-# Set DOH
-setup_doh
 
 # Add timezone
 uci -q set system.@system[0].timezone='MSK-3'
@@ -123,14 +73,11 @@ uci -q set network.wan.sendclientid='none'
 sed -i 's/procd_set_param respawn$/procd_set_param respawn 3600 30 0/' \
     /etc/init.d/https-dns-proxy
 
-# Update release from deploy version
-update_release_from_deploy_version
+# Maximize Wi-Fi radios
+ucode /etc/scripts/firstboot-maximize-wifi.uc | uci -q batch
 
 # Customization commands
 customization
-
-# Maximize enabled Wi-Fi radios
-maximize_wifi
 
 # Commit uci changes
 uci commit
