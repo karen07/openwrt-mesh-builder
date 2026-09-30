@@ -7,7 +7,8 @@ if [ -r /etc/router-autoinstall.env ]; then
 fi
 
 HOSTS="${PING_REBOOT_HOSTS:-}"
-BOOT_GRACE="${PING_REBOOT_BOOT_GRACE:-300}"
+ARM_SUCCESSES="${PING_REBOOT_ARM_SUCCESSES:-5}"
+UNARMED_REBOOT="${PING_REBOOT_UNARMED_REBOOT:-3600}"
 INTERVAL="${PING_REBOOT_INTERVAL:-10}"
 MAX_FAILURES="${PING_REBOOT_MAX_FAILURES:-5}"
 TIMEOUT="${PING_REBOOT_TIMEOUT:-2}"
@@ -16,30 +17,6 @@ if [ -z "$HOSTS" ]; then
     echo "PING_REBOOT_HOSTS is empty in /etc/router-autoinstall.env"
     exit 1
 fi
-
-router_uptime_seconds() {
-    awk '{ print int($1) }' /proc/uptime 2>/dev/null
-}
-
-wait_for_boot_grace() {
-    uptime_s="$(router_uptime_seconds)"
-
-    case "$uptime_s" in
-        '' | *[!0-9]*)
-            echo "cannot read router uptime; waiting full ${BOOT_GRACE}s startup grace"
-            sleep "$BOOT_GRACE"
-            return 0
-            ;;
-        *)
-            ;;
-    esac
-
-    if [ "$uptime_s" -lt "$BOOT_GRACE" ]; then
-        remaining=$((BOOT_GRACE - uptime_s))
-        echo "startup grace: router uptime=${uptime_s}s, waiting ${remaining}s"
-        sleep "$remaining"
-    fi
-}
 
 any_host_reachable() {
     host=""
@@ -61,6 +38,10 @@ apply_once() {
     return 1
 }
 
+monotonic_seconds() {
+    cut -d. -f1 /proc/uptime
+}
+
 case "${1:-run}" in
     once)
         if apply_once; then
@@ -73,32 +54,65 @@ case "${1:-run}" in
         ;;
 
     run)
-        wait_for_boot_grace
+        armed=0
+        successes=0
         failures=0
+        unarmed_started="$(monotonic_seconds)"
 
         echo "started: hosts=[$HOSTS] interval=${INTERVAL}s"
+        echo "arm_successes=$ARM_SUCCESSES unarmed_reboot=${UNARMED_REBOOT}s"
         echo "max_failures=$MAX_FAILURES timeout=${TIMEOUT}s"
 
         while true; do
-            sleep "$INTERVAL"
-
             if apply_once; then
-                if [ "$failures" -gt 0 ]; then
-                    echo "connectivity restored after ${failures} failed check(s)"
+                if [ "$armed" -eq 0 ]; then
+                    successes=$((successes + 1))
+                    echo "connectivity warmup: ${successes}/${ARM_SUCCESSES} successful check(s)"
+
+                    if [ "$successes" -ge "$ARM_SUCCESSES" ]; then
+                        armed=1
+                        failures=0
+                        echo "connectivity stable; reboot watchdog armed"
+                    fi
+                else
+                    if [ "$failures" -gt 0 ]; then
+                        echo "connectivity restored after ${failures} failed check(s)"
+                    fi
+                    failures=0
                 fi
-                failures=0
-                continue
+            else
+                if [ "$armed" -eq 0 ]; then
+                    if [ "$successes" -gt 0 ]; then
+                        echo "connectivity warmup interrupted; successful check counter reset"
+                    fi
+                    successes=0
+                    echo "connectivity not ready; reboot watchdog not armed"
+                else
+                    failures=$((failures + 1))
+                    echo "all ping hosts unreachable: ${failures}/${MAX_FAILURES}"
+
+                    if [ "$failures" -ge "$MAX_FAILURES" ]; then
+                        echo "connectivity lost; rebooting router"
+                        sync
+                        reboot
+                        exit 0
+                    fi
+                fi
             fi
 
-            failures=$((failures + 1))
-            echo "all ping hosts unreachable: ${failures}/${MAX_FAILURES}"
+            if [ "$armed" -eq 0 ] && [ "$UNARMED_REBOOT" -gt 0 ]; then
+                now="$(monotonic_seconds)"
+                unarmed_elapsed=$((now - unarmed_started))
 
-            if [ "$failures" -ge "$MAX_FAILURES" ]; then
-                echo "connectivity lost; rebooting router"
-                sync
-                reboot
-                exit 0
+                if [ "$unarmed_elapsed" -ge "$UNARMED_REBOOT" ]; then
+                    echo "watchdog remained unarmed for ${unarmed_elapsed}s; hard recovery reboot"
+                    sync
+                    reboot
+                    exit 0
+                fi
             fi
+
+            sleep "$INTERVAL"
         done
         ;;
 
