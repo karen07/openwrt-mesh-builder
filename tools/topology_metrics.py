@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from json import JSONDecodeError
 from dataclasses import dataclass
 from datetime import datetime
+from json import JSONDecodeError
 from pathlib import Path
 
 try:
@@ -134,7 +134,10 @@ def node_id(kind: str, name: str) -> str:
     return f"{kind}:{name}"
 
 
-def parse_float(value: Any) -> float:
+def parse_float(value: object) -> float:
+    if not isinstance(value, (int, float, str)):
+        return 0.0
+
     try:
         return float(value)
     except (TypeError, ValueError):

@@ -36,8 +36,8 @@ try:
         material_file_for_tool,
         material_plaintext,
         stored_key_material,
+        write_material_file,
     )
-    from .materials import write_material_file
     from .process import die
     from .uci import render_uci_block
 except ImportError:
@@ -70,8 +70,8 @@ except ImportError:
         material_file_for_tool,
         material_plaintext,
         stored_key_material,
+        write_material_file,  # type: ignore
     )
-    from materials import write_material_file  # type: ignore
     from process import die  # type: ignore
     from uci import render_uci_block  # type: ignore
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 try:
-    from .default import FIREWALL_TARGET_ALL, ZONE_MESH
     from .config_model import ConfigData, FirewallAllow
     from .config_schema import FIREWALL_ALLOW_KIND_ROUTER
+    from .default import FIREWALL_TARGET_ALL, ZONE_MESH
 except ImportError:
-    from default import FIREWALL_TARGET_ALL, ZONE_MESH  # type: ignore
     from config_model import ConfigData, FirewallAllow  # type: ignore
     from config_schema import FIREWALL_ALLOW_KIND_ROUTER  # type: ignore
+    from default import FIREWALL_TARGET_ALL, ZONE_MESH  # type: ignore
 
 
 def expand_firewall_targets(cfg: ConfigData, allow: FirewallAllow) -> list[str]:

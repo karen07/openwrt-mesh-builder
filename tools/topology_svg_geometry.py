@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from .default import TOPOLOGY_NODE_R as NODE_R
-from .topology_data import DirectedMetric, SpeedIndex, format_metric, node_id
+from .topology_metrics import DirectedMetric, SpeedIndex, format_metric, node_id
 from .topology_svg_theme import (
     esc,
     marker_id_for_color,

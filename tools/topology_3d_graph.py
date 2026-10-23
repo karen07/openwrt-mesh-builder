@@ -6,18 +6,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .topology_data import (
-    SpeedIndex,
-    SpeedRow,
-    config_roles,
-    infer_roles_from_rows,
-    load_speed_rows,
-    node_id,
-    topology_rows_from_config,
-    topology_rows_from_generated,
-)
-from .config_io import load_json_config
-from .process import die
 from .common import (
     ConfigData,
     build_config_data,
@@ -25,7 +13,21 @@ from .common import (
     public_exit_hub_names,
     ring_link_pairs,
 )
-from .topology_metrics import display_link_text
+from .config_io import load_json_config
+from .process import die
+from .topology_data import (
+    config_roles,
+    infer_roles_from_rows,
+    topology_rows_from_config,
+    topology_rows_from_generated,
+)
+from .topology_metrics import (
+    SpeedIndex,
+    SpeedRow,
+    display_link_text,
+    load_speed_rows,
+    node_id,
+)
 
 LINK_GROUPS = (
     ("spine-spine", "spine <-> spine"),

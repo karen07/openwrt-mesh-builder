@@ -10,10 +10,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.config_io import load_json_config
-from tools.process import die, eprint
-from tools.remote_exec import CapturedRemoteResult, ssh_config_args
 from tools.common import ConfigData, build_config_data
+from tools.config_io import load_json_config
 from tools.default import (
     CONFIG_PATH,
     IPERF_BITRATE,
@@ -36,6 +34,8 @@ from tools.link_speed_model import (
     speed_rows_payload,
     targets_for_source,
 )
+from tools.process import die, eprint
+from tools.remote_exec import CapturedRemoteResult, ssh_config_args
 from tools.topology_index import GeneratedTopologyIndex, load_generated_topology_index
 
 NodeKey = tuple[str, str]

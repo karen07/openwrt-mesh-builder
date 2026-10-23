@@ -5,20 +5,20 @@ sys.dont_write_bytecode = True
 
 try:
     from .common import *
-    from .validate_context import vprint
     from .tunnel_model import (
         exit_hub_is_public,
         router_exit_listen_port,
         router_is_public_mesh_hub,
     )
+    from .validate_context import vprint
 except ImportError:
     from common import *  # type: ignore
-    from validate_context import vprint  # type: ignore
     from tunnel_model import (  # type: ignore
         exit_hub_is_public,
         router_exit_listen_port,
         router_is_public_mesh_hub,
     )
+    from validate_context import vprint  # type: ignore
 
 
 def add_port(used: dict[int, str], port: int, desc: str, scope: str) -> None:

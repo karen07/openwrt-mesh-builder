@@ -31,9 +31,13 @@ try:
         PRIVATE_SSH_DIR_MODE,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         ROUTERS_ROOT,
-        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
-        SERVER_KEY_PREFIX as SERVER_PREFIX,
         SSH_KNOWN_HOSTS_FILENAME,
+    )
+    from .default import (
+        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
+    )
+    from .default import (
+        SERVER_KEY_PREFIX as SERVER_PREFIX,
     )
 except ImportError:
     from default import (
@@ -42,9 +46,13 @@ except ImportError:
         PRIVATE_SSH_DIR_MODE,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         ROUTERS_ROOT,
-        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
-        SERVER_KEY_PREFIX as SERVER_PREFIX,
         SSH_KNOWN_HOSTS_FILENAME,
+    )
+    from default import (
+        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
+    )
+    from default import (
+        SERVER_KEY_PREFIX as SERVER_PREFIX,
     )
 
 try:

@@ -2,13 +2,14 @@
 from pathlib import Path
 
 try:
-    from .process import die
+    from .config_builder import router_exit_ipip_iface_name
+    from .config_model import ConfigData
     from .default import (
         FIREWALL_MARKER,
         PROTOCOL_AMNEZIAWG,
         PROTOCOL_WIREGUARD,
     )
-    from .config_model import ConfigData
+    from .file_ops import read
     from .layout import router_path
     from .link_model import (
         exit_in_iface_name,
@@ -20,17 +21,17 @@ try:
         stored_key_material,
         wireguard_private_key_plaintext,
     )
-    from .file_ops import read
+    from .process import die
     from .uci import parse_uci_block, render_uci_block, split_uci_blocks
-    from .config_builder import router_exit_ipip_iface_name
 except ImportError:
-    from process import die  # type: ignore
+    from config_builder import router_exit_ipip_iface_name  # type: ignore
+    from config_model import ConfigData  # type: ignore
     from default import (  # type: ignore
         FIREWALL_MARKER,
         PROTOCOL_AMNEZIAWG,
         PROTOCOL_WIREGUARD,
     )  # type: ignore
-    from config_model import ConfigData  # type: ignore
+    from file_ops import read  # type: ignore
     from layout import router_path  # type: ignore
     from link_model import (  # type: ignore
         exit_in_iface_name,
@@ -38,13 +39,11 @@ except ImportError:
         mesh_iface_names_for_router,
     )
     from materials import (  # type: ignore
-        material_plaintext,
         stored_key_material,
         wireguard_private_key_plaintext,
     )
-    from file_ops import read  # type: ignore
+    from process import die  # type: ignore
     from uci import parse_uci_block, render_uci_block, split_uci_blocks  # type: ignore
-    from config_builder import router_exit_ipip_iface_name  # type: ignore
 
 
 def uci_block(

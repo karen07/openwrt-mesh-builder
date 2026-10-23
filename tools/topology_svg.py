@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-from .default import TOPOLOGY_NODE_R as NODE_R
-from .topology_data import SpeedIndex, TopologyRoles, node_id
+from .topology_metrics import SpeedIndex, TopologyRoles, node_id
 
 
 def resolve_link_positions(
@@ -45,7 +44,6 @@ from .topology_svg_geometry import (
     overview_directed_metric,
 )
 from .topology_svg_theme import (
-    SvgFile,
     add_node,
     add_speed_legend,
     add_topology_link_legend,

@@ -4,8 +4,6 @@ import sys
 sys.dont_write_bytecode = True
 
 try:
-    from .config_firewall_model import expand_firewall_targets
-    from .config_schema import FIREWALL_ALLOW_KIND_ROUTER
     from .common import (
         ConfigData,
         parse_uci_block,
@@ -16,9 +14,9 @@ try:
         split_uci_blocks,
         write,
     )
+    from .config_firewall_model import expand_firewall_targets
+    from .config_schema import FIREWALL_ALLOW_KIND_ROUTER
 except ImportError:
-    from config_firewall_model import expand_firewall_targets  # type: ignore
-    from config_schema import FIREWALL_ALLOW_KIND_ROUTER  # type: ignore
     from common import (  # type: ignore
         ConfigData,
         parse_uci_block,
@@ -29,6 +27,8 @@ except ImportError:
         split_uci_blocks,
         write,
     )
+    from config_firewall_model import expand_firewall_targets  # type: ignore
+    from config_schema import FIREWALL_ALLOW_KIND_ROUTER  # type: ignore
 
 
 MESH_DNS_SUFFIX = ".mesh"

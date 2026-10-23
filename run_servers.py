@@ -7,15 +7,15 @@ from pathlib import Path
 
 from tools.cli_common import clear_screen, command_from_argv
 from tools.config_io import load_json_config
-from tools.process import die
-from tools.remote_hosts import server_ssh_hosts
-from tools.remote_exec import run_and_print_captured_remote
-from tools.targets import selected_servers
 from tools.default import (
     CONFIG_PATH,
-    SSH_TIMEOUT,
     SERVER_VERSION_COMMAND,
+    SSH_TIMEOUT,
 )
+from tools.process import die
+from tools.remote_exec import run_and_print_captured_remote
+from tools.remote_hosts import server_ssh_hosts
+from tools.targets import selected_servers
 
 
 def run_on_server(

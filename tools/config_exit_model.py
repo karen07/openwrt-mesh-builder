@@ -3,24 +3,22 @@ import ipaddress
 import re
 
 try:
-    from .process import die
-    from .default import *
     from .config_model import (
         ConfigData,
         ExitDirectConfig,
         ExitHub,
-        RoutingRule,
         RouterDef,
+        RoutingRule,
     )
+    from .config_schema import validate_exit_order_shape
+    from .default import *
     from .net_model import (
         exit_announce_network,
         generated_exit_announce_network,
         generated_exit_node_ip,
     )
-    from .config_schema import validate_exit_order_shape
+    from .process import die
 except ImportError:
-    from process import die  # type: ignore
-    from default import *  # type: ignore
     from config_model import (  # type: ignore
         ConfigData,
         ExitDirectConfig,
@@ -28,12 +26,14 @@ except ImportError:
         RouterDef,
         RoutingRule,
     )
+    from config_schema import validate_exit_order_shape  # type: ignore
+    from default import *  # type: ignore
     from net_model import (  # type: ignore
         exit_announce_network,
         generated_exit_announce_network,
         generated_exit_node_ip,
     )
-    from config_schema import validate_exit_order_shape  # type: ignore
+    from process import die  # type: ignore
 
 
 def router_exit_ipip_iface_name(hub_name: str) -> str:

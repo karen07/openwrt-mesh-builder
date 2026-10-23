@@ -15,28 +15,28 @@ from pathlib import Path
 
 try:
     from .config_io import load_json_config
-    from .process import die, run_command, run_interactive
     from .default import (
-        CONFIG_PATH,
         CONFIG_KEY_SSH_KEY_DIR,
+        CONFIG_PATH,
         SCP_COMMAND_TIMEOUT_GRACE_SEC,
         SCP_TIMEOUT,
         SSH_COMMAND_TIMEOUT_GRACE_SEC,
         SSH_CONFIG_FILENAME,
         SSH_TIMEOUT,
     )
+    from .process import die, run_command, run_interactive
 except ImportError:
     from config_io import load_json_config  # type: ignore
-    from process import die, run_command, run_interactive  # type: ignore
     from default import (  # type: ignore
-        CONFIG_PATH,
         CONFIG_KEY_SSH_KEY_DIR,
+        CONFIG_PATH,
         SCP_COMMAND_TIMEOUT_GRACE_SEC,
         SCP_TIMEOUT,
         SSH_COMMAND_TIMEOUT_GRACE_SEC,
         SSH_CONFIG_FILENAME,
         SSH_TIMEOUT,
     )
+    from process import die, run_command, run_interactive  # type: ignore
 
 
 def expand_user_path(value: str) -> Path:

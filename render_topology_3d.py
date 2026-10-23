@@ -5,14 +5,14 @@ sys.dont_write_bytecode = True
 import argparse
 
 from tools.layout import topology_3d_html_path
+from tools.topology_3d_graph import load_graph_data
+from tools.topology_3d_page import html_page
 from tools.topology_cli import (
     add_output_arg,
     add_topology_input_args,
     resolved_output_path,
     write_topology_output,
 )
-from tools.topology_3d_graph import load_graph_data
-from tools.topology_3d_page import html_page
 
 DEFAULT_THREE_URL = "https://unpkg.com/three@0.160.0/build/three.module.js"
 DEFAULT_ORBIT_URL = (

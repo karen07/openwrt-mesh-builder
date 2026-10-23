@@ -11,8 +11,6 @@ from datetime import datetime
 from pathlib import Path
 
 from tools.cli_common import parse_csv_names
-from tools.config_io import load_json_config
-from tools.process import die, run_checked, run_no_capture
 from tools.common import (
     ConfigData,
     DeviceProfile,
@@ -20,10 +18,7 @@ from tools.common import (
     build_config_data,
     normalize_openwrt_version,
 )
-from tools.package_model import managed_router_packages
-from tools.secrets import assert_no_markers, decrypt_tree
-from tools.downloads import download_file
-from tools.git_utils import git_short
+from tools.config_io import load_json_config
 from tools.default import (
     CONFIG_PATH,
     IMAGES_DIR,
@@ -31,9 +26,14 @@ from tools.default import (
     MIN_OPENWRT_VERSION_TEXT,
     OPENWRT_RELEASE_BASE_URL,
     ROUTER_FILES_DIRNAME,
-    ROUTERS_ROOT,
     ROUTER_PACKAGES_DIRNAME,
+    ROUTERS_ROOT,
 )
+from tools.downloads import download_file
+from tools.git_utils import git_short
+from tools.package_model import managed_router_packages
+from tools.process import die, run_checked, run_no_capture
+from tools.secrets import assert_no_markers, decrypt_tree
 
 
 @dataclass(frozen=True)

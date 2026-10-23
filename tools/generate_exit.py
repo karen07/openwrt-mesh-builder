@@ -18,7 +18,6 @@ except ImportError:
     from tunnel_model import (  # type: ignore
         exit_hub_is_public,
         ipip_mtu_uci_options,
-        ipip_mtu_value,
         maybe_mtu_conf_line,
         mtu_uci_options,
     )

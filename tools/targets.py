@@ -4,11 +4,11 @@ import sys
 sys.dont_write_bytecode = True
 
 try:
-    from .process import die
     from .common import build_config_data
+    from .process import die
 except ImportError:
-    from process import die
     from common import build_config_data
+    from process import die
 
 
 def config_exit_names(cfg: dict[str, object]) -> list[str]:

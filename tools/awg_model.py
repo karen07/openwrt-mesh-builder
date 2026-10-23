@@ -121,6 +121,8 @@ try:
     )
     from .secrets import master_key
 except ImportError:
+    from secrets import master_key  # type: ignore
+
     from default import (  # type: ignore
         AWG_CONTENT_PADDING_ADDITION,
         AWG_DISABLE_COOKIES,
@@ -142,7 +144,6 @@ except ImportError:
         CONFIG_KEY_MATERIALS_KEY_PATH,
         CONFIG_PATH,
     )
-    from secrets import master_key  # type: ignore
 
 
 AWG_KEYS = {

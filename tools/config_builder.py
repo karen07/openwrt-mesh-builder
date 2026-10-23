@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 try:
-    from .process import die
-    from .default import *
+    from .awg_model import infra_awg_port_range, load_awg_options
+    from .config_exit_model import *
+    from .config_firewall_model import *
+    from .config_loaders import *
     from .config_model import (
         AccessGroup,
         ConfigData,
@@ -10,19 +12,19 @@ try:
         WifiConfig,
     )
     from .config_schema import *
-    from .config_exit_model import *
-    from .config_firewall_model import *
-    from .config_loaders import *
+    from .default import *
     from .identifiers import require_file_identifier, require_linux_iface_name
-    from .package_model import validate_router_package_policy
-    from .awg_model import infra_awg_port_range, load_awg_options
     from .net_model import (
         normalize_ipv4_subnet_24_prefix,
         validate_config_networks_do_not_overlap,
     )
+    from .package_model import validate_router_package_policy
+    from .process import die
 except ImportError:
-    from process import die  # type: ignore
-    from default import *  # type: ignore
+    from awg_model import infra_awg_port_range, load_awg_options  # type: ignore
+    from config_exit_model import *  # type: ignore
+    from config_firewall_model import *  # type: ignore
+    from config_loaders import *  # type: ignore
     from config_model import (  # type: ignore
         AccessGroup,
         ConfigData,
@@ -31,16 +33,14 @@ except ImportError:
         WifiConfig,
     )
     from config_schema import *  # type: ignore
-    from config_exit_model import *  # type: ignore
-    from config_firewall_model import *  # type: ignore
-    from config_loaders import *  # type: ignore
+    from default import *  # type: ignore
     from identifiers import require_file_identifier, require_linux_iface_name  # type: ignore
-    from package_model import validate_router_package_policy  # type: ignore
-    from awg_model import infra_awg_port_range, load_awg_options  # type: ignore
     from net_model import (  # type: ignore
         normalize_ipv4_subnet_24_prefix,
         validate_config_networks_do_not_overlap,
     )
+    from package_model import validate_router_package_policy  # type: ignore
+    from process import die  # type: ignore
 
 
 def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:

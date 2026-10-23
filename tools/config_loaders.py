@@ -2,8 +2,8 @@
 import re
 
 try:
-    from .process import die
-    from .default import *
+    from .awg_model import infra_awg_port_range, load_awg_options
+    from .config_exit_model import router_exit_ipip_iface_name
     from .config_model import (
         AccessGroup,
         AwgOptions,
@@ -13,26 +13,6 @@ try:
         PppoeConfig,
         RouterDef,
         WifiConfig,
-    )
-    from .identifiers import (
-        require_device_profile_arch,
-        require_device_profile_board,
-        require_exit_hub_name,
-        require_file_identifier,
-        require_generated_linux_iface_name,
-        require_linux_iface_name,
-    )
-    from .package_model import normalize_config_package_list
-    from .awg_model import infra_awg_port_range, load_awg_options
-    from .net_model import (
-        normalize_ipv4_subnet_24_prefix,
-        normalize_listen_ip,
-        normalize_optional_exit_ip,
-    )
-    from .link_model import (
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_server_iface_name_for_target,
     )
     from .config_schema import (
         ACCESS_POLICIES,
@@ -47,21 +27,8 @@ try:
         require_known_keys,
         validate_config_known_keys,
     )
-    from .config_exit_model import router_exit_ipip_iface_name
-except ImportError:
-    from process import die  # type: ignore
-    from default import *  # type: ignore
-    from config_model import (  # type: ignore
-        AccessGroup,
-        AwgOptions,
-        DeviceProfile,
-        ExitHub,
-        MeshHub,
-        PppoeConfig,
-        RouterDef,
-        WifiConfig,
-    )
-    from identifiers import (  # type: ignore
+    from .default import *
+    from .identifiers import (
         require_device_profile_arch,
         require_device_profile_board,
         require_exit_hub_name,
@@ -69,17 +36,28 @@ except ImportError:
         require_generated_linux_iface_name,
         require_linux_iface_name,
     )
-    from package_model import normalize_config_package_list  # type: ignore
-    from awg_model import infra_awg_port_range, load_awg_options  # type: ignore
-    from net_model import (  # type: ignore
+    from .link_model import (
+        exit_in_iface_name,
+        exit_out_iface_name,
+        mesh_server_iface_name_for_target,
+    )
+    from .net_model import (
         normalize_ipv4_subnet_24_prefix,
         normalize_listen_ip,
         normalize_optional_exit_ip,
     )
-    from link_model import (  # type: ignore
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_server_iface_name_for_target,
+    from .package_model import normalize_config_package_list
+    from .process import die
+except ImportError:
+    from awg_model import infra_awg_port_range  # type: ignore
+    from config_exit_model import router_exit_ipip_iface_name  # type: ignore
+    from config_model import (  # type: ignore
+        DeviceProfile,
+        ExitHub,
+        MeshHub,
+        PppoeConfig,
+        RouterDef,
+        WifiConfig,
     )
     from config_schema import (  # type: ignore
         ACCESS_POLICIES,
@@ -88,13 +66,32 @@ except ImportError:
         EXIT_HUB_KEYS,
         MESH_HUB_KEYS,
         PPPOE_KEYS,
-        ROUTER_KEYS,
         WIFI_CONFIG_KEYS,
         normalize_openwrt_version,
         require_known_keys,
         validate_config_known_keys,
     )
-    from config_exit_model import router_exit_ipip_iface_name  # type: ignore
+    from default import *  # type: ignore
+    from identifiers import (  # type: ignore
+        require_device_profile_arch,
+        require_device_profile_board,
+        require_exit_hub_name,
+        require_file_identifier,
+        require_generated_linux_iface_name,
+        require_linux_iface_name,
+    )
+    from link_model import (  # type: ignore
+        exit_in_iface_name,
+        exit_out_iface_name,
+        mesh_server_iface_name_for_target,
+    )
+    from net_model import (  # type: ignore
+        normalize_ipv4_subnet_24_prefix,
+        normalize_listen_ip,
+        normalize_optional_exit_ip,
+    )
+    from package_model import normalize_config_package_list  # type: ignore
+    from process import die  # type: ignore
 
 MAC_RE = re.compile(r"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 

@@ -12,8 +12,8 @@ from pathlib import Path
 try:
     from .common import (
         CONFIG_PATH,
-        ConfigData,
         SERVER_ROOT,
+        ConfigData,
         build_config_data,
         load_json_config,
     )
@@ -26,8 +26,8 @@ try:
     )
     from .show_unmanaged_collect import (
         collect_unmanaged_bootstrap_above_marker,
-        collect_unmanaged_firewall_above_marker,
         collect_unmanaged_dhcp,
+        collect_unmanaged_firewall_above_marker,
         collect_unmanaged_network_above_marker,
         collect_unmanaged_router_files,
         collect_unmanaged_server_files,
@@ -35,8 +35,8 @@ try:
 except ImportError:
     from common import (  # type: ignore
         CONFIG_PATH,
-        ConfigData,
         SERVER_ROOT,
+        ConfigData,
         build_config_data,
         load_json_config,
     )
@@ -49,8 +49,8 @@ except ImportError:
     )
     from show_unmanaged_collect import (  # type: ignore
         collect_unmanaged_bootstrap_above_marker,
-        collect_unmanaged_firewall_above_marker,
         collect_unmanaged_dhcp,
+        collect_unmanaged_firewall_above_marker,
         collect_unmanaged_network_above_marker,
         collect_unmanaged_router_files,
         collect_unmanaged_server_files,
