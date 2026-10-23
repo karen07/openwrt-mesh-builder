@@ -15,7 +15,6 @@ except Exception as e:  # pragma: no cover - import-time dependency error
     sys.exit(1)
 
 try:
-    from .process import die
     from .default import (
         CONFIG_KEY_MATERIALS_KEY_PATH,
         CONFIG_KEY_SECRET_KEY,
@@ -29,8 +28,8 @@ try:
         OWMB_SECRETS_KEY_MARKER,
         ROUTER_SECRET_MARKER,
     )
+    from .process import die
 except ImportError:
-    from process import die
     from default import (
         CONFIG_KEY_MATERIALS_KEY_PATH,
         CONFIG_KEY_SECRET_KEY,
@@ -44,6 +43,7 @@ except ImportError:
         OWMB_SECRETS_KEY_MARKER,
         ROUTER_SECRET_MARKER,
     )
+    from process import die
 
 KEY_SIZE = 32
 NONCE_SIZE = 12

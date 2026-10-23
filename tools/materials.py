@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 
 try:
-    from .process import die
     from .default import OWMB_ENC_MATERIAL_MARKER
     from .file_ops import has_any_owmb_marker, read, write
+    from .process import die
     from .secrets import decrypt_value as decrypt_owmb_value
     from .secrets import encrypt_material_value
     from .wg_keys import (
@@ -19,9 +19,9 @@ try:
 except ImportError:
     import importlib.util
 
-    from process import die
     from default import OWMB_ENC_MATERIAL_MARKER
     from file_ops import has_any_owmb_marker, read, write
+    from process import die
     from wg_keys import (
         derive_public_key,
         generate_private_key,

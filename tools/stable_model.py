@@ -141,17 +141,17 @@ def stable_babel_intervals(local_node: str, iface_name: str) -> tuple[int, int]:
     # tunnel intentionally get different values.
     try:
         from .default import (
-            BABELD_HELLO_INTERVAL_MIN,
             BABELD_HELLO_INTERVAL_MAX,
-            BABELD_UPDATE_INTERVAL_MIN,
+            BABELD_HELLO_INTERVAL_MIN,
             BABELD_UPDATE_INTERVAL_MAX,
+            BABELD_UPDATE_INTERVAL_MIN,
         )
     except ImportError:
         from default import (  # type: ignore
-            BABELD_HELLO_INTERVAL_MIN,
             BABELD_HELLO_INTERVAL_MAX,
-            BABELD_UPDATE_INTERVAL_MIN,
+            BABELD_HELLO_INTERVAL_MIN,
             BABELD_UPDATE_INTERVAL_MAX,
+            BABELD_UPDATE_INTERVAL_MIN,
         )
 
     direction = f"{local_node}:{iface_name}"

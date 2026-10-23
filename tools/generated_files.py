@@ -11,8 +11,8 @@ try:
         PROTOCOL_AMNEZIAWG,
         PROTOCOL_OPENVPN,
         PROTOCOL_WIREGUARD,
-        REL_DIRECT_IPSET,
         REL_DHCP,
+        REL_DIRECT_IPSET,
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
@@ -43,8 +43,8 @@ try:
     )
     from .link_model import exit_exit_peer_names_for_hub
     from .process import die
-    from .tunnel_model import exit_hub_is_public
     from .sync_rules import SYNC_COPY_DIRS, SYNC_COPY_FILES, SYNC_MERGE_FILES
+    from .tunnel_model import exit_hub_is_public
 except ImportError:
     from config_model import ConfigData, ExitHub  # type: ignore
     from default import (  # type: ignore
@@ -52,8 +52,8 @@ except ImportError:
         PROTOCOL_AMNEZIAWG,
         PROTOCOL_OPENVPN,
         PROTOCOL_WIREGUARD,
-        REL_DIRECT_IPSET,
         REL_DHCP,
+        REL_DIRECT_IPSET,
         REL_DIRECT_STATIC_IPSET,
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_RUNTIME_ENV,
@@ -84,8 +84,8 @@ except ImportError:
     )
     from link_model import exit_exit_peer_names_for_hub  # type: ignore
     from process import die  # type: ignore
-    from tunnel_model import exit_hub_is_public  # type: ignore
     from sync_rules import SYNC_COPY_DIRS, SYNC_COPY_FILES, SYNC_MERGE_FILES  # type: ignore
+    from tunnel_model import exit_hub_is_public  # type: ignore
 
 
 def exit_exit_aliases_for_hub(cfg: ConfigData, hub: ExitHub) -> list[str]:

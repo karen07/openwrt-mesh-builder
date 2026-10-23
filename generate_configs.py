@@ -6,29 +6,31 @@ import argparse
 from pathlib import Path
 
 from tools.cli_common import clear_screen
-from tools.config_io import load_json_config
-from tools.process import die, run_checked, run_no_capture
 from tools.common import ConfigData, DeviceProfile, RouterDef, build_config_data
+from tools.config_io import load_json_config
 from tools.default import (
-    CONFIG_PATH,
     AWG_PACKAGE_NAMES,
     AWG_RELEASE_BASE_URL,
     CIDR_SQUASH_PACKAGE_NAMES,
     CIDR_SQUASH_RELEASE_BASE_URL,
+    CONFIG_PATH,
     MIN_OPENWRT_VERSION_TEXT,
     PACKAGE_EXTENSION,
     PACKAGE_SOURCE_ROOT,
-    ROUTER_EXAMPLE_DIR as EXAMPLE_ROUTER_DIR,
     ROUTER_PACKAGES_DIRNAME,
 )
-from tools.sync_rules import ensure_router_from_example, sync_router
-from tools.ensure_ssh_keys import main as ensure_ssh_keys_main
-from tools.generate import main as generate_main
-from tools.show_unmanaged import main as show_unmanaged_main
-from tools.validate import main as validate_main
+from tools.default import (
+    ROUTER_EXAMPLE_DIR as EXAMPLE_ROUTER_DIR,
+)
 from tools.downloads import try_download_file
+from tools.ensure_ssh_keys import main as ensure_ssh_keys_main
 from tools.file_ops import copy_file_if_changed, remove_path
+from tools.generate import main as generate_main
 from tools.packages import apk_canonical_name, remove_package_indexes
+from tools.process import die, run_checked, run_no_capture
+from tools.show_unmanaged import main as show_unmanaged_main
+from tools.sync_rules import ensure_router_from_example, sync_router
+from tools.validate import main as validate_main
 
 
 def run(

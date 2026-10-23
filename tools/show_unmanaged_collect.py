@@ -6,18 +6,9 @@ import re
 
 try:
     from .common import *
-    from .managed_blocks import (
-        collect_unmanaged_uci_blocks,
-        strip_exact_text_blocks,
-        strip_outer_blank_lines,
-        uci_counter_from_text,
-    )
-    from .generated_files import (
-        expected_router_generated_exact_paths,
-        expected_server_exact_paths,
-        expected_sync_router_paths,
-    )
+    from .default import EXPECTED_MANAGED_ROUTER_DIRS
     from .generate_access import build_access_state
+    from .generate_dhcp import build_mesh_dns_text
     from .generate_exit import (
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
@@ -27,7 +18,6 @@ try:
         build_material_for_exit_reverse,
     )
     from .generate_firewall import build_firewall_blocks
-    from .generate_dhcp import build_mesh_dns_text
     from .generate_mesh import build_mesh_state
     from .generate_router_misc import (
         build_doh_source_addr_block,
@@ -37,22 +27,23 @@ try:
         build_wifi_block,
         router_has_openvpn_access,
     )
-    from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
-    from .default import EXPECTED_MANAGED_ROUTER_DIRS
-except ImportError:
-    from common import *  # type: ignore
-    from managed_blocks import (  # type: ignore
+    from .generated_files import (
+        expected_router_generated_exact_paths,
+        expected_server_exact_paths,
+        expected_sync_router_paths,
+    )
+    from .managed_blocks import (
         collect_unmanaged_uci_blocks,
         strip_exact_text_blocks,
         strip_outer_blank_lines,
         uci_counter_from_text,
     )
-    from generated_files import (  # type: ignore
-        expected_router_generated_exact_paths,
-        expected_server_exact_paths,
-        expected_sync_router_paths,
-    )
+    from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
+except ImportError:
+    from common import *  # type: ignore
+    from default import EXPECTED_MANAGED_ROUTER_DIRS  # type: ignore
     from generate_access import build_access_state  # type: ignore
+    from generate_dhcp import build_mesh_dns_text  # type: ignore
     from generate_exit import (  # type: ignore
         build_exit_in_network_interface_block,
         build_exit_ipip_interface_block,
@@ -62,7 +53,6 @@ except ImportError:
         build_material_for_exit_reverse,
     )
     from generate_firewall import build_firewall_blocks  # type: ignore
-    from generate_dhcp import build_mesh_dns_text  # type: ignore
     from generate_mesh import build_mesh_state  # type: ignore
     from generate_router_misc import (  # type: ignore
         build_doh_source_addr_block,
@@ -72,8 +62,18 @@ except ImportError:
         build_wifi_block,
         router_has_openvpn_access,
     )
+    from generated_files import (  # type: ignore
+        expected_router_generated_exact_paths,
+        expected_server_exact_paths,
+        expected_sync_router_paths,
+    )
+    from managed_blocks import (  # type: ignore
+        collect_unmanaged_uci_blocks,
+        strip_exact_text_blocks,
+        strip_outer_blank_lines,
+        uci_counter_from_text,
+    )
     from tunnel_model import exit_hub_is_public, router_is_public_mesh_hub  # type: ignore
-    from default import EXPECTED_MANAGED_ROUTER_DIRS  # type: ignore
 
 EXPECTED_UNMANAGED_ROUTER_EXACT = {}
 EXPECTED_GENERATION_STATE_CACHE: dict[int, dict[str, dict[str, object]]] = {}

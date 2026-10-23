@@ -7,21 +7,23 @@ import shlex
 from pathlib import Path
 
 from tools.cli_common import ask_yes_no, clear_screen, parse_csv_names
-from tools.config_io import load_json_config
-from tools.process import die
-from tools.remote_exec import run_captured_remote, scp_path_captured
-from tools.git_utils import git_short
-from tools.router_order import RouterDef, build_router_order, router_slug
 from tools.common import build_config_data, normalize_openwrt_version
+from tools.config_io import load_json_config
 from tools.default import (
+    ASYNC_SYSUPGRADE_DELAY_SEC,
     CONFIG_PATH,
+    INSTALL_IMAGE_TYPE_SYSUPGRADE,
+    REMOTE_UPLOAD_DIR,
     SCP_TIMEOUT,
     SSH_TIMEOUT,
-    ASYNC_SYSUPGRADE_DELAY_SEC,
-    INSTALL_IMAGE_TYPE_SYSUPGRADE,
-    IMAGES_DIR as RESULT_DIR,
-    REMOTE_UPLOAD_DIR,
 )
+from tools.default import (
+    IMAGES_DIR as RESULT_DIR,
+)
+from tools.git_utils import git_short
+from tools.process import die
+from tools.remote_exec import run_captured_remote, scp_path_captured
+from tools.router_order import RouterDef, build_router_order, router_slug
 
 
 def router_openwrt_version(

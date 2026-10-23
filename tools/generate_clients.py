@@ -4,8 +4,8 @@ import sys
 sys.dont_write_bytecode = True
 
 try:
-    from .common import *
     from .access_model import router_public_host_for_access
+    from .common import *
     from .openvpn_model import (
         build_openvpn_client_conf,
         ensure_openvpn_client_material,
@@ -15,8 +15,8 @@ try:
         render_openvpn_uci_text,
     )
 except ImportError:
-    from common import *  # type: ignore
     from access_model import router_public_host_for_access  # type: ignore
+    from common import *  # type: ignore
     from openvpn_model import (  # type: ignore
         build_openvpn_client_conf,
         ensure_openvpn_client_material,

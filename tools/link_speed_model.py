@@ -5,8 +5,6 @@ sys.dont_write_bytecode = True
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from tools.process import die
-from tools.remote_hosts import server_ssh_hosts
 from tools.common import (
     ConfigData,
     ExitHub,
@@ -25,6 +23,8 @@ from tools.common import (
     mesh_link_specs_for_router,
     mesh_server_iface_name_for_target,
 )
+from tools.process import die
+from tools.remote_hosts import server_ssh_hosts
 from tools.topology_index import GeneratedTopologyIndex
 from tools.tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
 

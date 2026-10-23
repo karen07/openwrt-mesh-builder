@@ -10,11 +10,11 @@ try:
         render_marked_uci_text,
         uci_management_key,
     )
-    from .uci import parse_uci_block, split_uci_blocks
     from .tunnel_model import (
         exit_reverse_firewall_rule_name,
         router_exit_listen_port,
     )
+    from .uci import parse_uci_block, split_uci_blocks
 except ImportError:
     from common import *  # type: ignore
     from managed_blocks import (  # type: ignore
@@ -22,11 +22,11 @@ except ImportError:
         render_marked_uci_text,
         uci_management_key,
     )
-    from uci import parse_uci_block, split_uci_blocks  # type: ignore
     from tunnel_model import (  # type: ignore
         exit_reverse_firewall_rule_name,
         router_exit_listen_port,
     )
+    from uci import parse_uci_block, split_uci_blocks  # type: ignore
 
 
 def build_zone(

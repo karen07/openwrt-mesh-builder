@@ -2,7 +2,7 @@
 import re
 
 try:
-    from .process import die
+    from .awg_model import AWG_KEYS
     from .default import *
     from .identifiers import (
         require_device_profile_arch,
@@ -10,9 +10,9 @@ try:
         require_file_identifier,
     )
     from .package_model import validate_config_package_list
-    from .awg_model import AWG_KEYS
+    from .process import die
 except ImportError:
-    from process import die  # type: ignore
+    from awg_model import AWG_KEYS  # type: ignore
     from default import *  # type: ignore
     from identifiers import (  # type: ignore
         require_device_profile_arch,
@@ -20,7 +20,7 @@ except ImportError:
         require_file_identifier,
     )
     from package_model import validate_config_package_list  # type: ignore
-    from awg_model import AWG_KEYS  # type: ignore
+    from process import die  # type: ignore
 
 CONFIG_KEYS = {
     CONFIG_KEY_SSH_KEY_DIR,

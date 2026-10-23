@@ -7,9 +7,6 @@ from pathlib import Path
 
 try:
     from .common import *
-    from .generate_firewall import update_firewall_part
-    from .generate_dhcp import update_dhcp_part
-    from .generate_router_misc import update_bootstrap
     from .generate_access import build_access_state
     from .generate_clients import (
         generate_openvpn_access,
@@ -17,6 +14,7 @@ try:
         generate_wireguard_client_files,
         update_openvpn_uci,
     )
+    from .generate_dhcp import update_dhcp_part
     from .generate_exit import (
         build_exit_exit_server_conf,
         build_exit_in_network_interface_block,
@@ -29,8 +27,10 @@ try:
         build_server_direct_conf,
         build_server_reverse_conf,
     )
+    from .generate_firewall import update_firewall_part
     from .generate_mesh import build_mesh_state
     from .generate_network import update_babeld, update_network_part
+    from .generate_router_misc import update_bootstrap
     from .generate_runtime import (
         build_direct_ipset_lines,
         write_router_ipsets,
@@ -49,9 +49,6 @@ try:
     )
 except ImportError:
     from common import *
-    from generate_firewall import update_firewall_part
-    from generate_dhcp import update_dhcp_part
-    from generate_router_misc import update_bootstrap
     from generate_access import build_access_state
     from generate_clients import (
         generate_openvpn_access,
@@ -59,6 +56,7 @@ except ImportError:
         generate_wireguard_client_files,
         update_openvpn_uci,
     )
+    from generate_dhcp import update_dhcp_part
     from generate_exit import (
         build_exit_exit_server_conf,
         build_exit_in_network_interface_block,
@@ -71,8 +69,10 @@ except ImportError:
         build_server_direct_conf,
         build_server_reverse_conf,
     )
+    from generate_firewall import update_firewall_part
     from generate_mesh import build_mesh_state
     from generate_network import update_babeld, update_network_part
+    from generate_router_misc import update_bootstrap
     from generate_runtime import (
         build_direct_ipset_lines,
         write_router_ipsets,

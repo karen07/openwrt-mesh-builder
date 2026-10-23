@@ -19,17 +19,19 @@ from tools.topology_cli import (
     write_topology_output,
 )
 from tools.topology_data import (
-    SpeedIndex,
-    SpeedRow,
-    TopologyRoles,
     config_roles,
-    format_ts,
     infer_roles_from_rows,
     load_config_roles,
-    load_speed_rows,
     node_names_from_rows,
     topology_rows_from_config,
     topology_rows_from_generated,
+)
+from tools.topology_metrics import (
+    SpeedIndex,
+    SpeedRow,
+    TopologyRoles,
+    format_ts,
+    load_speed_rows,
 )
 from tools.topology_svg import render_topology_overview_svg
 

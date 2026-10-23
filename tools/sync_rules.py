@@ -8,9 +8,7 @@ import tempfile
 from pathlib import Path
 
 try:
-    from .process import die
     from .common import RouterDef
-    from .file_ops import copy_file_if_changed, remove_path
     from .default import (
         FILE_MODE_MASK,
         FIREWALL_MARKER,
@@ -18,10 +16,10 @@ try:
         SYNC_COPY_FILES,
         SYNC_MERGE_FILES,
     )
+    from .file_ops import copy_file_if_changed, remove_path
+    from .process import die
 except ImportError:
-    from process import die
     from common import RouterDef
-    from file_ops import copy_file_if_changed, remove_path  # type: ignore
     from default import (
         FILE_MODE_MASK,
         FIREWALL_MARKER,
@@ -29,6 +27,8 @@ except ImportError:
         SYNC_COPY_FILES,
         SYNC_MERGE_FILES,
     )
+    from file_ops import copy_file_if_changed, remove_path  # type: ignore
+    from process import die
 
 MARKER_RE = re.compile(rf"^{re.escape(FIREWALL_MARKER)}\s*$")
 

@@ -7,11 +7,11 @@ import tempfile
 from pathlib import Path
 
 try:
-    from .process import die, need, run_checked
     from .default import LOCAL_TEMP_ROOT
+    from .process import die, need, run_checked
 except ImportError:
-    from process import die, need, run_checked
     from default import LOCAL_TEMP_ROOT
+    from process import die, need, run_checked
 
 
 def _run(args: list[str]) -> None:

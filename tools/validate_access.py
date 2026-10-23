@@ -4,8 +4,8 @@ import sys
 sys.dont_write_bytecode = True
 
 try:
-    from .common import *
     from .access_model import router_public_host_for_access
+    from .common import *
     from .default import OPENVPN_CLIENT_PROTO, OPENVPN_SERVER_PROTO
     from .network_config import find_access_peer_block
     from .validate_awg_helpers import (
@@ -18,8 +18,8 @@ try:
     from .validate_keys import parse_tunnel_conf, require_tunnel_sections
     from .validate_uci import parse_uci_file
 except ImportError:
-    from common import *  # type: ignore
     from access_model import router_public_host_for_access  # type: ignore
+    from common import *  # type: ignore
     from default import OPENVPN_CLIENT_PROTO, OPENVPN_SERVER_PROTO  # type: ignore
     from network_config import find_access_peer_block  # type: ignore
     from validate_awg_helpers import (  # type: ignore

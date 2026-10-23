@@ -6,11 +6,11 @@ import sys
 sys.dont_write_bytecode = True
 
 try:
-    from .process import die
     from .default import SERVER_SSH_PREFIX
+    from .process import die
 except ImportError:
-    from process import die  # type: ignore
     from default import SERVER_SSH_PREFIX  # type: ignore
+    from process import die  # type: ignore
 
 
 SERVER_SSH_MODE_CHOICES = ("auto", "node", "public")

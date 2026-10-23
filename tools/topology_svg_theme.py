@@ -4,9 +4,9 @@ import math
 import textwrap
 from dataclasses import dataclass
 
-from .default import SPEED_MAX_MBPS, SPEED_MIN_MBPS, TOPOLOGY_NODE_R as NODE_R
-from .topology_data import DirectedMetric, PairMetric
-
+from .default import SPEED_MAX_MBPS, SPEED_MIN_MBPS
+from .default import TOPOLOGY_NODE_R as NODE_R
+from .topology_metrics import DirectedMetric, PairMetric
 from .topology_svg_colors import (
     LINK_GROUP_COLORS,
     MAGMA_COLORMAP,

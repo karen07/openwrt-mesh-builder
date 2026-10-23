@@ -7,9 +7,9 @@ from pathlib import Path
 
 from tools.cli_common import clear_screen, command_from_argv
 from tools.config_io import load_json_config
+from tools.default import CONFIG_PATH, ROUTER_VERSION_COMMAND, SSH_TIMEOUT
 from tools.process import die
 from tools.remote_exec import run_and_print_captured_remote
-from tools.default import CONFIG_PATH, SSH_TIMEOUT, ROUTER_VERSION_COMMAND
 from tools.router_order import RouterDef, build_router_order
 
 

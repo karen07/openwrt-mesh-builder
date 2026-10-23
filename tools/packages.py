@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 try:
-    from .process import die, need, run_captured
     from .default import PACKAGE_REPO_INDEX_FILES
+    from .process import die, need, run_captured
 except ImportError:
-    from process import die, need, run_captured
     from default import PACKAGE_REPO_INDEX_FILES
+    from process import die, need, run_captured
 
 
 @dataclass(frozen=True)

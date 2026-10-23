@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 try:
-    from .process import die
     from .default import TUNNEL_MTU
+    from .process import die
     from .tunnel_model import ipip_mtu_value
 except ImportError:
-    from process import die  # type: ignore
     from default import TUNNEL_MTU  # type: ignore
+    from process import die  # type: ignore
     from tunnel_model import ipip_mtu_value  # type: ignore
 
 VERBOSE = False

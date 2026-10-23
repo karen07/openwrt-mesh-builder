@@ -3,22 +3,8 @@ from pathlib import Path
 
 try:
     from .common import *
-    from .wg_keys import derive_public_key
+    from .default import OPENVPN_SERVER_CN
     from .generated_files import exit_server_aliases_for_hub
-    from .validate_awg_helpers import (
-        find_block_by_type_and_name,
-        require_interface_block,
-        require_option,
-        require_peer_block,
-        validate_awg_conf_options,
-        validate_awg_peer_common,
-        validate_router_awg_interface_common,
-    )
-    from .validate_network import (
-        validate_link_is_31_pair,
-        validate_link_local_matches_ipv4,
-    )
-    from .validate_uci import parse_uci_file
     from .openvpn_model import (
         check_cert_cn,
         openvpn_client_cn,
@@ -32,18 +18,7 @@ try:
         ipip_mtu_value,
         router_is_public_mesh_hub,
     )
-    from .default import OPENVPN_SERVER_CN
-    from .validate_context import (
-        validate_optional_mtu,
-        validate_optional_ipip_mtu,
-        vprint,
-    )
-    from .validate_keys import parse_tunnel_conf, require_tunnel_sections
-except ImportError:
-    from common import *  # type: ignore
-    from wg_keys import derive_public_key  # type: ignore
-    from generated_files import exit_server_aliases_for_hub  # type: ignore
-    from validate_awg_helpers import (  # type: ignore
+    from .validate_awg_helpers import (
         find_block_by_type_and_name,
         require_interface_block,
         require_option,
@@ -52,29 +27,34 @@ except ImportError:
         validate_awg_peer_common,
         validate_router_awg_interface_common,
     )
-    from validate_network import (  # type: ignore
+    from .validate_context import (
+        validate_optional_ipip_mtu,
+        validate_optional_mtu,
+        vprint,
+    )
+    from .validate_keys import parse_tunnel_conf, require_tunnel_sections
+    from .validate_network import (
         validate_link_is_31_pair,
         validate_link_local_matches_ipv4,
     )
-    from validate_uci import parse_uci_file  # type: ignore
-    from openvpn_model import (  # type: ignore
-        check_cert_cn,
-        openvpn_client_cn,
-        openvpn_inline_material,
-        validate_openvpn_inline_material,
-        verify_key_matches_cert,
-    )
+    from .validate_uci import parse_uci_file
+    from .wg_keys import derive_public_key
+except ImportError:
+    from common import *  # type: ignore
+    from generated_files import exit_server_aliases_for_hub  # type: ignore
     from tunnel_model import (  # type: ignore
         exit_hub_is_public,
         exit_route_env_key,
         ipip_mtu_value,
         router_is_public_mesh_hub,
     )
-    from default import OPENVPN_SERVER_CN  # type: ignore
+    from validate_awg_helpers import (  # type: ignore
+        find_block_by_type_and_name,
+        require_option,
+        validate_awg_conf_options,
+    )
     from validate_context import (  # type: ignore
         validate_optional_mtu,
-        validate_optional_ipip_mtu,
-        vprint,
     )
     from validate_keys import parse_tunnel_conf, require_tunnel_sections  # type: ignore
 
