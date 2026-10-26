@@ -1,20 +1,21 @@
 # OpenWrt Spine-Leaf Mesh Builder
 
+OpenWrt Spine-Leaf Mesh Builder generates configurations, firmware images, and deployment
+files for routed OpenWrt/Linux mesh networks. It combines overlay links, Babel routing,
+managed exit paths, and firewall policy from a single `config.json`.
+
 ![Static topology](./topology/topology-2d.svg)
-
-OpenWrt Spine-Leaf Mesh Builder generates configuration, builds firmware, and deploys a small routed fabric of OpenWrt routers and Linux servers.
-
-The topology distinguishes public-IP spine nodes, NATed/private leaf nodes, and managed exit nodes. From a single `config.json`, the project generates overlay links, Babel routing, firewall policy, server-side files, access-client configuration, SSH aliases, and the IPIP-based exit data plane.
-
-The result is not a single VPN tunnel to one gateway but a routed overlay in which routers can reach each other, private leaf networks remain addressable through the fabric, and user traffic can fail over between multiple managed Internet exit paths. Firmware images can also be built from the same configuration with `build_router_images.py`.
-
-The current implementation targets OpenWrt 25.12+ with the apk-based ImageBuilder and AmneziaWG 3.1 packages. The repository is opinionated about addressing, generated configuration, and deployment order so that a multi-router setup can be reproduced rather than assembled manually node by node.
 
 ## Описание
 
-OpenWrt Spine-Leaf Mesh Builder генерирует конфигурацию, собирает прошивки и разворачивает небольшую маршрутизируемую spine-leaf сеть из роутеров OpenWrt и Linux серверов.
+OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, образы прошивок и файлы развёртывания
+маршрутизируемой mesh-сети из OpenWrt-роутеров и Linux-узлов. Из одного `config.json` он
+настраивает оверлейные соединения, Babel, управляемые выходы в Интернет и правила
+межсетевого экрана.
 
-Топология различает spine узлы с публичными IP, leaf узлы за NAT или с приватными адресами и управляемые exit узлы. Из одного `config.json` проект генерирует оверлейные соединения, маршрутизацию Babel, правила межсетевого экрана, серверные файлы, конфигурацию клиентов доступа, псевдонимы SSH и плоскость выхода на основе IPIP.
+Топология различает spine-узлы с публичными IP, leaf-узлы за NAT или с приватными адресами и
+управляемые exit-узлы. Помимо сетевой конфигурации, генератор создаёт серверные файлы,
+конфигурации клиентов доступа, псевдонимы SSH и настройки IPIP для выходных узлов.
 
 Результат - не один VPN туннель до одного шлюза, а маршрутизируемый оверлей, в котором роутеры доступны друг другу, приватные leaf сети остаются адресуемыми через общую сеть, а пользовательский трафик может переключаться между несколькими управляемыми путями выхода в Интернет. Из той же конфигурации можно собирать образы прошивки через `build_router_images.py`.
 
@@ -22,41 +23,32 @@ OpenWrt Spine-Leaf Mesh Builder генерирует конфигурацию, �
 
 ## Содержание
 
-- [Описание](#%D0%BE%D0%BF%D0%B8%D1%81%D0%B0%D0%BD%D0%B8%D0%B5)
-- [Что это дает](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D0%B5%D1%82)
-- [Идея сети](#%D0%B8%D0%B4%D0%B5%D1%8F-%D1%81%D0%B5%D1%82%D0%B8)
-- [Отказоустойчивость](#%D0%BE%D1%82%D0%BA%D0%B0%D0%B7%D0%BE%D1%83%D1%81%D1%82%D0%BE%D0%B9%D1%87%D0%B8%D0%B2%D0%BE%D1%81%D1%82%D1%8C)
-- [Spine-leaf на домашних и edge роутерах](#spine-leaf-%D0%BD%D0%B0-%D0%B4%D0%BE%D0%BC%D0%B0%D1%88%D0%BD%D0%B8%D1%85-%D0%B8-edge-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%B0%D1%85)
-- [Сетевые слои](#%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D1%8B%D0%B5-%D1%81%D0%BB%D0%BE%D0%B8)
-- [Адресация без ручного IPAM](#%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F-%D0%B1%D0%B5%D0%B7-%D1%80%D1%83%D1%87%D0%BD%D0%BE%D0%B3%D0%BE-ipam)
-- [Что проект делает](#%D1%87%D1%82%D0%BE-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82)
-- [Структура проекта](#%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
-- [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
+- [С чего начать](#%D1%81-%D1%87%D0%B5%D0%B3%D0%BE-%D0%BD%D0%B0%D1%87%D0%B0%D1%82%D1%8C)
 - [Быстрый старт](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82)
-- [Как строятся линки](#%D0%BA%D0%B0%D0%BA-%D1%81%D1%82%D1%80%D0%BE%D1%8F%D1%82%D1%81%D1%8F-%D0%BB%D0%B8%D0%BD%D0%BA%D0%B8)
-- [Служебная адресация](#%D1%81%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F-%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F)
+- [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
+- [Адресация без ручного IPAM](#%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F-%D0%B1%D0%B5%D0%B7-%D1%80%D1%83%D1%87%D0%BD%D0%BE%D0%B3%D0%BE-ipam)
+- [Сетевые слои](#%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D1%8B%D0%B5-%D1%81%D0%BB%D0%BE%D0%B8)
 - [Выбор exit и IPIP data-plane](#%D0%B2%D1%8B%D0%B1%D0%BE%D1%80-exit-%D0%B8-ipip-data-plane)
-- [Direct lists и server guard](#direct-lists-%D0%B8-server-guard)
-- [Firewall model на OpenWrt](#firewall-model-%D0%BD%D0%B0-openwrt)
 - [Что генерируется](#%D1%87%D1%82%D0%BE-%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B8%D1%80%D1%83%D0%B5%D1%82%D1%81%D1%8F)
-- [Шаблоны, managed секции и customization](#%D1%88%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD%D1%8B-managed-%D1%81%D0%B5%D0%BA%D1%86%D0%B8%D0%B8-%D0%B8-customization)
-- [Что делает 99-firstboot-custom](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-99-firstboot-custom)
-- [DoH и DNS failover](#doh-%D0%B8-dns-failover)
 - [Секреты и key material](#%D1%81%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D1%8B-%D0%B8-key-material)
-- [SSH keys и aliases](#ssh-keys-%D0%B8-aliases)
 - [config.json](#configjson)
-- [tools/default.py](#toolsdefaultpy)
 - [Основные команды](#%D0%BE%D1%81%D0%BD%D0%BE%D0%B2%D0%BD%D1%8B%D0%B5-%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D1%8B)
-- [Проверка скорости линков](#%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D1%81%D0%BA%D0%BE%D1%80%D0%BE%D1%81%D1%82%D0%B8-%D0%BB%D0%B8%D0%BD%D0%BA%D0%BE%D0%B2)
-- [Рендер topology](#%D1%80%D0%B5%D0%BD%D0%B4%D0%B5%D1%80-topology)
 - [Предусловия](#%D0%BF%D1%80%D0%B5%D0%B4%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F)
 - [Типовой рабочий цикл](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB)
 - [Полезные проверки](#%D0%BF%D0%BE%D0%BB%D0%B5%D0%B7%D0%BD%D1%8B%D0%B5-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8)
 - [Что важно помнить](#%D1%87%D1%82%D0%BE-%D0%B2%D0%B0%D0%B6%D0%BD%D0%BE-%D0%BF%D0%BE%D0%BC%D0%BD%D0%B8%D1%82%D1%8C)
-- [Для чего этот проект](#%D0%B4%D0%BB%D1%8F-%D1%87%D0%B5%D0%B3%D0%BE-%D1%8D%D1%82%D0%BE%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
 - [Не цели проекта](#%D0%BD%D0%B5-%D1%86%D0%B5%D0%BB%D0%B8-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
-- [Коротко](#%D0%BA%D0%BE%D1%80%D0%BE%D1%82%D0%BA%D0%BE)
 - [Лицензия](#%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F)
+
+## С чего начать
+
+Если вы впервые разворачиваете сеть, начните с [предусловий](#%D0%BF%D1%80%D0%B5%D0%B4%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F),
+затем перейдите к [быстрому старту](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82) и
+[типовому рабочему циклу](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB).
+Для изменения топологии и политик используйте разделы
+[Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8) и [`config.json`](#configjson).
+После развёртывания пригодятся [полезные проверки](#%D0%BF%D0%BE%D0%BB%D0%B5%D0%B7%D0%BD%D1%8B%D0%B5-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8).
+Остальная часть README подробно объясняет устройство сети и генератора.
 
 ## Что это дает
 
