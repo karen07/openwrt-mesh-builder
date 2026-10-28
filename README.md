@@ -4,14 +4,12 @@ OpenWrt Spine-Leaf Mesh Builder generates configurations, firmware images, and d
 files for routed OpenWrt/Linux mesh networks. It combines overlay links, Babel routing,
 managed exit paths, and firewall policy from a single `config.json`.
 
-![Static topology](./topology/topology-2d.svg)
-
-## Описание
-
 OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, образы прошивок и файлы развёртывания
 маршрутизируемой mesh-сети из OpenWrt-роутеров и Linux-узлов. Из одного `config.json` он
 настраивает оверлейные соединения, Babel, управляемые выходы в Интернет и правила
 межсетевого экрана.
+
+## Описание
 
 Топология различает spine-узлы с публичными IP, leaf-узлы за NAT или с приватными адресами и
 управляемые exit-узлы. Помимо сетевой конфигурации, генератор создаёт серверные файлы,
@@ -21,34 +19,265 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 
 Текущая реализация рассчитана на OpenWrt 25.12+ с ImageBuilder на основе apk и пакетами AmneziaWG 3.1. Проект намеренно задает строгие правила адресации, генерации конфигурации и порядка развертывания, чтобы сеть из нескольких роутеров можно было воспроизводить, а не собирать вручную по одному узлу.
 
+![Static topology](./topology/topology-2d.svg)
+
 ## Содержание
 
-- [С чего начать](#%D1%81-%D1%87%D0%B5%D0%B3%D0%BE-%D0%BD%D0%B0%D1%87%D0%B0%D1%82%D1%8C)
+- [Навигация](#%D0%BD%D0%B0%D0%B2%D0%B8%D0%B3%D0%B0%D1%86%D0%B8%D1%8F)
+- [Разработка и проверка изменений](#%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B0-%D0%B8-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B9)
+  - [Поток генерации и точки изменения](#%D0%BF%D0%BE%D1%82%D0%BE%D0%BA-%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B0%D1%86%D0%B8%D0%B8-%D0%B8-%D1%82%D0%BE%D1%87%D0%BA%D0%B8-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [Типовые изменения](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D1%8B%D0%B5-%D0%B8%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [Инварианты для правок](#%D0%B8%D0%BD%D0%B2%D0%B0%D1%80%D0%B8%D0%B0%D0%BD%D1%82%D1%8B-%D0%B4%D0%BB%D1%8F-%D0%BF%D1%80%D0%B0%D0%B2%D0%BE%D0%BA)
+- [Требования](#%D1%82%D1%80%D0%B5%D0%B1%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F)
 - [Быстрый старт](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82)
-- [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
-- [Адресация без ручного IPAM](#%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F-%D0%B1%D0%B5%D0%B7-%D1%80%D1%83%D1%87%D0%BD%D0%BE%D0%B3%D0%BE-ipam)
+- [Что это дает](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D0%B5%D1%82)
+- [Идея сети](#%D0%B8%D0%B4%D0%B5%D1%8F-%D1%81%D0%B5%D1%82%D0%B8)
+- [Отказоустойчивость](#%D0%BE%D1%82%D0%BA%D0%B0%D0%B7%D0%BE%D1%83%D1%81%D1%82%D0%BE%D0%B9%D1%87%D0%B8%D0%B2%D0%BE%D1%81%D1%82%D1%8C)
+- [Spine-leaf на домашних и edge роутерах](#spine-leaf-%D0%BD%D0%B0-%D0%B4%D0%BE%D0%BC%D0%B0%D1%88%D0%BD%D0%B8%D1%85-%D0%B8-edge-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%B0%D1%85)
 - [Сетевые слои](#%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D1%8B%D0%B5-%D1%81%D0%BB%D0%BE%D0%B8)
+- [Адресация без ручного IPAM](#%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F-%D0%B1%D0%B5%D0%B7-%D1%80%D1%83%D1%87%D0%BD%D0%BE%D0%B3%D0%BE-ipam)
+- [Что проект делает](#%D1%87%D1%82%D0%BE-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82)
+- [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
+  - [Router](#router)
+  - [Mesh hub / spine](#mesh-hub-spine)
+  - [Exit hub](#exit-hub)
+  - [Access](#access)
+- [Как строятся линки](#%D0%BA%D0%B0%D0%BA-%D1%81%D1%82%D1%80%D0%BE%D1%8F%D1%82%D1%81%D1%8F-%D0%BB%D0%B8%D0%BD%D0%BA%D0%B8)
+  - [AWG 3.1 diversification](#awg-31-diversification)
+- [Служебная адресация](#%D1%81%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F-%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F)
+  - [Infra p2p links](#infra-p2p-links)
+  - [Exit announce prefix](#exit-announce-prefix)
+  - [Exit node prefix](#exit-node-prefix)
 - [Выбор exit и IPIP data-plane](#%D0%B2%D1%8B%D0%B1%D0%BE%D1%80-exit-%D0%B8-ipip-data-plane)
+- [Direct lists и server guard](#direct-lists-%D0%B8-server-guard)
+- [Firewall model на OpenWrt](#firewall-model-%D0%BD%D0%B0-openwrt)
 - [Что генерируется](#%D1%87%D1%82%D0%BE-%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B8%D1%80%D1%83%D0%B5%D1%82%D1%81%D1%8F)
+  - [Для роутеров](#%D0%B4%D0%BB%D1%8F-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%BE%D0%B2)
+  - [Для exit серверов](#%D0%B4%D0%BB%D1%8F-exit-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%BE%D0%B2)
+- [Шаблоны, managed секции и customization](#%D1%88%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD%D1%8B-managed-%D1%81%D0%B5%D0%BA%D1%86%D0%B8%D0%B8-%D0%B8-customization)
+- [Что делает 99-firstboot-custom](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-99-firstboot-custom)
+- [Connectivity watchdog](#connectivity-watchdog)
+- [DoH и DNS failover](#doh-%D0%B8-dns-failover)
 - [Секреты и key material](#%D1%81%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D1%8B-%D0%B8-key-material)
+- [SSH keys и aliases](#ssh-keys-%D0%B8-aliases)
 - [config.json](#configjson)
+  - [Top-level keys](#top-level-keys)
+  - [Device profiles](#device-profiles)
+  - [Правила валидации config](#%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0-%D0%B2%D0%B0%D0%BB%D0%B8%D0%B4%D0%B0%D1%86%D0%B8%D0%B8-config)
+  - [Wi-Fi](#wi-fi)
+  - [PPPoE](#pppoe)
+- [tools/default.py](#toolsdefaultpy)
 - [Основные команды](#%D0%BE%D1%81%D0%BD%D0%BE%D0%B2%D0%BD%D1%8B%D0%B5-%D0%BA%D0%BE%D0%BC%D0%B0%D0%BD%D0%B4%D1%8B)
-- [Предусловия](#%D0%BF%D1%80%D0%B5%D0%B4%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F)
+  - [generate_configs.py](#generateconfigspy)
+  - [deploy_servers.py](#deployserverspy)
+  - [build_router_images.py](#buildrouterimagespy)
+  - [upgrade_routers.py](#upgraderouterspy)
+  - [run_routers.py](#runrouterspy)
+  - [run_servers.py](#runserverspy)
+- [Проверка скорости линков](#%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D1%81%D0%BA%D0%BE%D1%80%D0%BE%D1%81%D1%82%D0%B8-%D0%BB%D0%B8%D0%BD%D0%BA%D0%BE%D0%B2)
+- [Рендер topology](#%D1%80%D0%B5%D0%BD%D0%B4%D0%B5%D1%80-topology)
+  - [2D HTML and SVG](#2d-html-and-svg)
+  - [3D HTML](#3d-html)
 - [Типовой рабочий цикл](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB)
 - [Полезные проверки](#%D0%BF%D0%BE%D0%BB%D0%B5%D0%B7%D0%BD%D1%8B%D0%B5-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8)
 - [Что важно помнить](#%D1%87%D1%82%D0%BE-%D0%B2%D0%B0%D0%B6%D0%BD%D0%BE-%D0%BF%D0%BE%D0%BC%D0%BD%D0%B8%D1%82%D1%8C)
+- [Для чего этот проект](#%D0%B4%D0%BB%D1%8F-%D1%87%D0%B5%D0%B3%D0%BE-%D1%8D%D1%82%D0%BE%D1%82-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82)
 - [Не цели проекта](#%D0%BD%D0%B5-%D1%86%D0%B5%D0%BB%D0%B8-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
+- [Структура проекта](#%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%B0-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D0%B0)
+- [Краткая памятка](#%D0%BA%D1%80%D0%B0%D1%82%D0%BA%D0%B0%D1%8F-%D0%BF%D0%B0%D0%BC%D1%8F%D1%82%D0%BA%D0%B0)
 - [Лицензия](#%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F)
 
-## С чего начать
+## Навигация
 
-Если вы впервые разворачиваете сеть, начните с [предусловий](#%D0%BF%D1%80%D0%B5%D0%B4%D1%83%D1%81%D0%BB%D0%BE%D0%B2%D0%B8%D1%8F),
+Если вы впервые разворачиваете сеть, начните с [требований](#%D1%82%D1%80%D0%B5%D0%B1%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F),
 затем перейдите к [быстрому старту](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82) и
 [типовому рабочему циклу](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB).
 Для изменения топологии и политик используйте разделы
 [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8) и [`config.json`](#configjson).
 После развёртывания пригодятся [полезные проверки](#%D0%BF%D0%BE%D0%BB%D0%B5%D0%B7%D0%BD%D1%8B%D0%B5-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8).
 Остальная часть README подробно объясняет устройство сети и генератора.
+
+## Разработка и проверка изменений
+
+**Основные точки изменения:**
+
+- `config.json` - описание целевой топологии и параметров;
+- `generate_configs.py` - основной сценарий построения конфигураций;
+- `tools/config_model.py` - модель конфигурации;
+- `tools/validate.py` - проверки конфигураций и ограничений;
+- `tools/generate_network.py` - генерация сетевой конфигурации;
+- `tools/generate_firewall.py` - генерация правил межсетевого экрана;
+- `tools/sync_rules.py` - согласование управляемых и пользовательских блоков;
+- `build_router_images.py` - сборка образов OpenWrt;
+- `deploy_servers.py` - развёртывание Linux-серверов;
+- `upgrade_routers.py` - обновление роутеров.
+
+**Проверка изменений:** Источник желаемого состояния - `config.json` и код генераторов, а не вручную изменённые сгенерированные файлы в `routers/` и `servers/`. При правке модели меняйте соответствующие валидаторы и генераторы вместе; сначала используйте проверки из "Полезные проверки", затем генерацию и сравнение результата, и только после этого развёртывание. Секретные ключи и материалы не включайте в логи или примеры.
+
+### Поток генерации и точки изменения
+
+- `generate_configs.py` читает `config.json`, строит `ConfigData`, создает каталоги
+  роутеров из `routers/example` и синхронизирует шаблоны и пакеты. Если хуки
+  включены, далее вызываются генератор, подготовка SSH-ключей, валидатор
+  и отчет о пользовательских файлах.
+- `tools/generate.py` собирает состояния mesh/exit/access; изменения модели
+  нужно согласовывать с `tools/config_model.py`, `tools/config_schema.py`,
+  соответствующими `tools/generate_*.py` и `tools/validate_*.py`.
+- `tools/sync_rules.py` задает разные режимы синхронизации: копирование файлов,
+  обновление каталогов и слияние по маркеру. У слияния сохраняется часть
+  назначения **до маркера**, а содержимое **после маркера** берется из шаблона.
+
+### Типовые изменения
+
+- Новое поле `config.json`: согласуйте модель и схему конфигурации,
+  генератор соответствующей подсистемы и ее валидатор.
+- Маршруты и firewall: сверяйте `tools/generate_network.py`,
+  `tools/generate_firewall.py` и соответствующие правила проверки.
+- Копирование шаблонов: изучайте `tools/sync_rules.py` до правок в
+  `routers/` и `servers/`, особенно правила удаления и managed-секции.
+
+### Инварианты для правок
+
+- Синхронизация каталогов в `copy_dir` удаляет элементы назначения,
+  отсутствующие в шаблоне. Не размещайте пользовательские файлы в таких
+  управляемых каталогах, не изучив правила синхронизации.
+- `--skip-hooks` отключает последующие хуки, но не начальную синхронизацию
+  каталогов и файлов. Загрузки и синхронизация пакетов управляются отдельными
+  флагами `--skip-awg-download`, `--skip-cidr-squash-download` и `--skip-package-sync`.
+- `--force` передается генератору и меняет ключи mesh/exit; секреты access
+  сохраняются. Считайте этот флаг изменением состояния, а не проверкой.
+- Валидатор в `tools/validate.py` сопоставляет сгенерированные файлы, ключи,
+  адреса, порты, firewall и маршрутизацию. Изменения генератора должны
+  сопровождаться изменениями соответствующих валидаторов.
+- Ключи и содержимое секретов не следует включать в вывод отладки,
+  демонстрационные конфиги и отчеты.
+
+## Требования
+
+На build/deploy машине обычно нужны:
+
+```text
+python3
+Python module cryptography
+git
+ssh
+scp
+ssh-keygen
+curl
+wg
+openssl
+apk-tools 3.x
+tar с поддержкой zst
+make
+cmake
+C compiler (gcc или clang)
+```
+
+Для `apk-tools 3.x` нужен `apk`. Также используется `apk adbdump` или `apk manifest`.
+
+Python module `cryptography` нужен для OWMB secret/material markers.
+
+На build/deploy машине также должен быть собран и установлен `cidr-squash`, потому что
+`generate_configs.py` использует его для локальной оптимизации dynamic direct-list:
+
+```sh
+git clone https://github.com/karen07/cidr-squash.git
+cd cidr-squash
+cmake --preset release
+cmake --build --preset release
+sudo cmake --install build/release
+```
+
+После установки команда `cidr-squash` должна быть доступна через `PATH`.
+
+На exit серверах `root/deploy.sh` также автоматически собирает и устанавливает `cidr-squash`
+из `https://github.com/karen07/cidr-squash`, потому что ежедневный server-side
+`update-ipsets.sh` использует тот же оптимизатор, что и роутеры.
+
+В Debian/Ubuntu это обычно пакет:
+
+```text
+python3-cryptography
+```
+
+В Arch Linux:
+
+```text
+python-cryptography
+```
+
+Для замеров скорости дополнительно нужны:
+
+```text
+iperf3
+jq
+```
+
+На exit серверах предполагается Ubuntu/Debian compatible Linux с systemd, root доступом и `apt-get`.
+
+Шаблонный `servers/example/root/deploy.sh` ставит:
+
+- Babel
+- ipset/iptables tooling
+- iperf3
+- jq
+- AmneziaWG из PPA Amnezia
+
+Если используется другой дистрибутив, нужно адаптировать `servers/example/root/deploy.sh` под его package manager и имена сервисов.
+
+## Быстрый старт
+
+```sh
+# 1. Описать сеть
+vim config.json
+
+# 2. Сгенерировать конфиги, ключи и проверки.
+# Clean archive содержит только routers/example и servers/example.
+# Целевые routers/* и servers/* создаются из config.json.
+# OWMB master key files создаются автоматически по
+# secrets_key_path/materials_key_path.
+./generate_configs.py
+
+# 3. Задеплоить exit серверы
+./deploy_servers.py
+
+# 4. Собрать OpenWrt firmware образы
+./build_router_images.py
+
+# 5. Обновить роутеры образами текущего git commit из images/
+./upgrade_routers.py
+```
+
+Для локального просмотра структуры, без загрузки AWG/CIDR-squash пакетов и без синхронизации `packages/`, можно запускать так:
+
+```sh
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync
+```
+
+Такой режим удобен, если custom AWG/CIDR-squash `.apk` и per-router package repos уже не нужны для текущей проверки.
+
+Hooks при этом все равно запускаются, поэтому `tools/generate.py` все еще может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
+
+Для просмотра только синхронизированной template структуры без generator hooks добавляйте `--skip-hooks`:
+
+```sh
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-hooks
+```
+
+Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены. При обычной генерации `tools/generate.py` один раз локально запускает настоящий `routers/example/files/etc/scripts/update-ipsets.sh` во временном `IPSETS_DIR`. Для этого на машине генерации должен быть доступен `cidr-squash`. Полученные `direct-static.txt` и оптимизированный `direct.txt` затем одинаково записываются во все generated router и server каталоги.
+
+Если нужен полностью локальный smoke run без запуска `update-ipsets.sh` и без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
+
+```sh
+./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-direct-downloads
+```
+
+В этом режиме generated `direct.txt` будет содержать только static direct entries:
+
+- `LOCAL_DIRECT_IPSETS`
+- `EXIT_DIRECT_STATIC_IPSETS`
+- listen IP mesh/exit hubs
+- exit IP
 
 ## Что это дает
 
@@ -248,52 +477,6 @@ servers/example
 ```sh
 ./generate_configs.py
 ```
-
-## Структура проекта
-
-```text
-.
-|-- LICENSE
-|-- README.md
-|-- build_router_images.py
-|-- collect_link_speeds.py
-|-- config.json
-|-- deploy_servers.py
-|-- generate_configs.py
-|-- render_topology_2d.py
-|-- render_topology_3d.py
-|-- run_routers.py
-|-- run_servers.py
-|-- upgrade_routers.py
-|-- routers
-|   `-- example
-|-- servers
-|   `-- example
-|-- tools
-`-- topology
-    |-- topology-2d.html
-    |-- topology-2d.svg
-    `-- topology-3d.html
-```
-
-Основные файлы:
-
-| Путь | Назначение |
-| ------------------------ | ---------------------------------------------------------------- |
-| `config.json` | Declarative topology model. |
-| `generate_configs.py` | Генерация router/server configs, keys, access groups и проверок. |
-| `build_router_images.py` | Сборка OpenWrt firmware через ImageBuilder. |
-| `deploy_servers.py` | Деплой и undeploy generated server tree на exit серверах. |
-| `upgrade_routers.py` | Обновление роутеров через sysupgrade images. |
-| `run_routers.py` | Запуск команд на роутерах. |
-| `run_servers.py` | Запуск команд на exit серверах. |
-| `collect_link_speeds.py` | Сбор iperf3 замеров между узлами. |
-| `render_topology_2d.py` | Рендер 2D Canvas HTML и статического topology SVG. |
-| `render_topology_3d.py` | Рендер интерактивной 3D HTML topology. |
-| `routers/example` | Шаблон OpenWrt router tree. |
-| `servers/example` | Шаблон Linux server tree. |
-| `tools/` | Генераторы, defaults, secrets, validation и helper scripts. |
-| `topology/` | Сгенерированные topology HTML и SVG файлы. |
 
 ## Модель сети
 
@@ -532,60 +715,6 @@ Access `port` не должен попадать в `INFRA_AWG_PORT_RANGE`, по
 Этот блок вставляется рядом с `name`, `protocol`, `port`, `subnet` и `users` соответствующей AmneziaWG access группы. Если новые AWG 3.x поля не указаны явно, builder детерминированно выводит их из access group key.
 
 `HeaderProtectionKey` и `ContentPaddingAddition` также поддерживаются как `header_protection_key` и `content_padding_addition`. Если `header_protection_key` не задан явно, builder детерминированно выводит общий 32-byte Base64 key из access/infra link key. При включенном header protection все `S1-S4` должны быть не меньше `12`; generated infra `S1-S4` сразу детерминированно выбираются из диапазонов с нижней границей `12`. `ContentPaddingAddition` оставлен пустым, чтобы transport padding делал `RandomTrailers`.
-
-## Быстрый старт
-
-```sh
-# 1. Описать сеть
-vim config.json
-
-# 2. Сгенерировать конфиги, ключи и проверки.
-# Clean archive содержит только routers/example и servers/example.
-# Целевые routers/* и servers/* создаются из config.json.
-# OWMB master key files создаются автоматически по
-# secrets_key_path/materials_key_path.
-./generate_configs.py
-
-# 3. Задеплоить exit серверы
-./deploy_servers.py
-
-# 4. Собрать OpenWrt firmware образы
-./build_router_images.py
-
-# 5. Обновить роутеры образами текущего git commit из images/
-./upgrade_routers.py
-```
-
-Для локального просмотра структуры, без загрузки AWG/CIDR-squash пакетов и без синхронизации `packages/`, можно запускать так:
-
-```sh
-./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync
-```
-
-Такой режим удобен, если custom AWG/CIDR-squash `.apk` и per-router package repos уже не нужны для текущей проверки.
-
-Hooks при этом все равно запускаются, поэтому `tools/generate.py` все еще может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
-
-Для просмотра только синхронизированной template структуры без generator hooks добавляйте `--skip-hooks`:
-
-```sh
-./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-hooks
-```
-
-Dynamic direct-list sources из `tools/default.py` должны быть доступны, если они включены. При обычной генерации `tools/generate.py` один раз локально запускает настоящий `routers/example/files/etc/scripts/update-ipsets.sh` во временном `IPSETS_DIR`. Для этого на машине генерации должен быть доступен `cidr-squash`. Полученные `direct-static.txt` и оптимизированный `direct.txt` затем одинаково записываются во все generated router и server каталоги.
-
-Если нужен полностью локальный smoke run без запуска `update-ipsets.sh` и без загрузки country/ASN direct-list IP sets, добавьте `--skip-direct-downloads`:
-
-```sh
-./generate_configs.py --skip-awg-download --skip-cidr-squash-download --skip-package-sync --skip-direct-downloads
-```
-
-В этом режиме generated `direct.txt` будет содержать только static direct entries:
-
-- `LOCAL_DIRECT_IPSETS`
-- `EXIT_DIRECT_STATIC_IPSETS`
-- listen IP mesh/exit hubs
-- exit IP
 
 ## Как строятся линки
 
@@ -1971,79 +2100,6 @@ topology/topology-3d.html
 
 В measured режиме 3D renderer использует такой же двойной логарифмический фильтр скоростей, как 2D renderer: links вне диапазона можно затемнять или полностью скрывать.
 
-## Предусловия
-
-На build/deploy машине обычно нужны:
-
-```text
-python3
-Python module cryptography
-git
-ssh
-scp
-ssh-keygen
-curl
-wg
-openssl
-apk-tools 3.x
-tar с поддержкой zst
-make
-cmake
-C compiler (gcc или clang)
-```
-
-Для `apk-tools 3.x` нужен `apk`. Также используется `apk adbdump` или `apk manifest`.
-
-Python module `cryptography` нужен для OWMB secret/material markers.
-
-На build/deploy машине также должен быть собран и установлен `cidr-squash`, потому что
-`generate_configs.py` использует его для локальной оптимизации dynamic direct-list:
-
-```sh
-git clone https://github.com/karen07/cidr-squash.git
-cd cidr-squash
-cmake --preset release
-cmake --build --preset release
-sudo cmake --install build/release
-```
-
-После установки команда `cidr-squash` должна быть доступна через `PATH`.
-
-На exit серверах `root/deploy.sh` также автоматически собирает и устанавливает `cidr-squash`
-из `https://github.com/karen07/cidr-squash`, потому что ежедневный server-side
-`update-ipsets.sh` использует тот же оптимизатор, что и роутеры.
-
-В Debian/Ubuntu это обычно пакет:
-
-```text
-python3-cryptography
-```
-
-В Arch Linux:
-
-```text
-python-cryptography
-```
-
-Для замеров скорости дополнительно нужны:
-
-```text
-iperf3
-jq
-```
-
-На exit серверах предполагается Ubuntu/Debian compatible Linux с systemd, root доступом и `apt-get`.
-
-Шаблонный `servers/example/root/deploy.sh` ставит:
-
-- Babel
-- ipset/iptables tooling
-- iperf3
-- jq
-- AmneziaWG из PPA Amnezia
-
-Если используется другой дистрибутив, нужно адаптировать `servers/example/root/deploy.sh` под его package manager и имена сервисов.
-
 ## Типовой рабочий цикл
 
 ```sh
@@ -2170,7 +2226,53 @@ Failed systemd units на exit:
 - быть production ready решением без аудита и тестов на вашей инфраструктуре
 - поддерживать старые OpenWrt версии с opkg/ipk
 
-## Коротко
+## Структура проекта
+
+```text
+.
+|-- LICENSE
+|-- README.md
+|-- build_router_images.py
+|-- collect_link_speeds.py
+|-- config.json
+|-- deploy_servers.py
+|-- generate_configs.py
+|-- render_topology_2d.py
+|-- render_topology_3d.py
+|-- run_routers.py
+|-- run_servers.py
+|-- upgrade_routers.py
+|-- routers
+|   `-- example
+|-- servers
+|   `-- example
+|-- tools
+`-- topology
+    |-- topology-2d.html
+    |-- topology-2d.svg
+    `-- topology-3d.html
+```
+
+Основные файлы:
+
+| Путь | Назначение |
+| ------------------------ | ---------------------------------------------------------------- |
+| `config.json` | Declarative topology model. |
+| `generate_configs.py` | Генерация router/server configs, keys, access groups и проверок. |
+| `build_router_images.py` | Сборка OpenWrt firmware через ImageBuilder. |
+| `deploy_servers.py` | Деплой и undeploy generated server tree на exit серверах. |
+| `upgrade_routers.py` | Обновление роутеров через sysupgrade images. |
+| `run_routers.py` | Запуск команд на роутерах. |
+| `run_servers.py` | Запуск команд на exit серверах. |
+| `collect_link_speeds.py` | Сбор iperf3 замеров между узлами. |
+| `render_topology_2d.py` | Рендер 2D Canvas HTML и статического topology SVG. |
+| `render_topology_3d.py` | Рендер интерактивной 3D HTML topology. |
+| `routers/example` | Шаблон OpenWrt router tree. |
+| `servers/example` | Шаблон Linux server tree. |
+| `tools/` | Генераторы, defaults, secrets, validation и helper scripts. |
+| `topology/` | Сгенерированные topology HTML и SVG файлы. |
+
+## Краткая памятка
 
 ```sh
 vim config.json
@@ -2192,4 +2294,4 @@ vim config.json
 
 ## Лицензия
 
-Проект распространяется под лицензией GNU Affero General Public License v3.0. Подробности смотрите в файле LICENSE.
+Проект распространяется под лицензией GNU Affero General Public License v3.0. Подробности см. в файле [LICENSE](LICENSE).
