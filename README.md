@@ -17,7 +17,7 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 
 Результат - не один VPN туннель до одного шлюза, а маршрутизируемый оверлей, в котором роутеры доступны друг другу, приватные leaf сети остаются адресуемыми через общую сеть, а пользовательский трафик может переключаться между несколькими управляемыми путями выхода в Интернет. Из той же конфигурации можно собирать образы прошивки через `build_router_images.py`.
 
-Текущая реализация рассчитана на OpenWrt 25.12+ с ImageBuilder на основе apk и пакетами AmneziaWG 3.1. Проект намеренно задает строгие правила адресации, генерации конфигурации и порядка развертывания, чтобы сеть из нескольких роутеров можно было воспроизводить, а не собирать вручную по одному узлу.
+Текущая реализация рассчитана на OpenWrt 25.12+ с ImageBuilder на основе apk и пакетами AmneziaWG 3.1. Проект намеренно задаёт строгие правила адресации, генерации конфигурации и порядка развертывания, чтобы сеть из нескольких роутеров можно было воспроизводить, а не собирать вручную по одному узлу.
 
 ![Static topology](./topology/topology-2d.svg)
 
@@ -30,40 +30,40 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
   - [Инварианты для правок](#%D0%B8%D0%BD%D0%B2%D0%B0%D1%80%D0%B8%D0%B0%D0%BD%D1%82%D1%8B-%D0%B4%D0%BB%D1%8F-%D0%BF%D1%80%D0%B0%D0%B2%D0%BE%D0%BA)
 - [Требования](#%D1%82%D1%80%D0%B5%D0%B1%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F)
 - [Быстрый старт](#%D0%B1%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D1%81%D1%82%D0%B0%D1%80%D1%82)
-- [Что это дает](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D0%B5%D1%82)
+- [Что это даёт](#%D1%87%D1%82%D0%BE-%D1%8D%D1%82%D0%BE-%D0%B4%D0%B0%D1%91%D1%82)
 - [Идея сети](#%D0%B8%D0%B4%D0%B5%D1%8F-%D1%81%D0%B5%D1%82%D0%B8)
 - [Отказоустойчивость](#%D0%BE%D1%82%D0%BA%D0%B0%D0%B7%D0%BE%D1%83%D1%81%D1%82%D0%BE%D0%B9%D1%87%D0%B8%D0%B2%D0%BE%D1%81%D1%82%D1%8C)
-- [Spine-leaf на домашних и edge роутерах](#spine-leaf-%D0%BD%D0%B0-%D0%B4%D0%BE%D0%BC%D0%B0%D1%88%D0%BD%D0%B8%D1%85-%D0%B8-edge-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%B0%D1%85)
+- [Spine-leaf на домашних и пограничных роутерах](#spine-leaf-%D0%BD%D0%B0-%D0%B4%D0%BE%D0%BC%D0%B0%D1%88%D0%BD%D0%B8%D1%85-%D0%B8-%D0%BF%D0%BE%D0%B3%D1%80%D0%B0%D0%BD%D0%B8%D1%87%D0%BD%D1%8B%D1%85-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%B0%D1%85)
 - [Сетевые слои](#%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D1%8B%D0%B5-%D1%81%D0%BB%D0%BE%D0%B8)
 - [Адресация без ручного IPAM](#%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F-%D0%B1%D0%B5%D0%B7-%D1%80%D1%83%D1%87%D0%BD%D0%BE%D0%B3%D0%BE-ipam)
 - [Что проект делает](#%D1%87%D1%82%D0%BE-%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82)
 - [Модель сети](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D1%81%D0%B5%D1%82%D0%B8)
-  - [Router](#router)
-  - [Mesh hub / spine](#mesh-hub-spine)
-  - [Exit hub](#exit-hub)
-  - [Access](#access)
+  - [Роутеры](#%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D1%8B)
+  - [Узлы spine (mesh hub)](#%D1%83%D0%B7%D0%BB%D1%8B-spine-mesh-hub)
+  - [Выходные узлы (exit hub)](#%D0%B2%D1%8B%D1%85%D0%BE%D0%B4%D0%BD%D1%8B%D0%B5-%D1%83%D0%B7%D0%BB%D1%8B-exit-hub)
+  - [Узлы доступа](#%D1%83%D0%B7%D0%BB%D1%8B-%D0%B4%D0%BE%D1%81%D1%82%D1%83%D0%BF%D0%B0)
 - [Как строятся линки](#%D0%BA%D0%B0%D0%BA-%D1%81%D1%82%D1%80%D0%BE%D1%8F%D1%82%D1%81%D1%8F-%D0%BB%D0%B8%D0%BD%D0%BA%D0%B8)
-  - [AWG 3.1 diversification](#awg-31-diversification)
+  - [Диверсификация AWG 3.1](#%D0%B4%D0%B8%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%84%D0%B8%D0%BA%D0%B0%D1%86%D0%B8%D1%8F-awg-31)
 - [Служебная адресация](#%D1%81%D0%BB%D1%83%D0%B6%D0%B5%D0%B1%D0%BD%D0%B0%D1%8F-%D0%B0%D0%B4%D1%80%D0%B5%D1%81%D0%B0%D1%86%D0%B8%D1%8F)
-  - [Infra p2p links](#infra-p2p-links)
-  - [Exit announce prefix](#exit-announce-prefix)
-  - [Exit node prefix](#exit-node-prefix)
-- [Выбор exit и IPIP data-plane](#%D0%B2%D1%8B%D0%B1%D0%BE%D1%80-exit-%D0%B8-ipip-data-plane)
-- [Direct lists и server guard](#direct-lists-%D0%B8-server-guard)
-- [Firewall model на OpenWrt](#firewall-model-%D0%BD%D0%B0-openwrt)
+  - [Инфраструктурные P2P-соединения](#%D0%B8%D0%BD%D1%84%D1%80%D0%B0%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D1%83%D1%80%D0%BD%D1%8B%D0%B5-p2p-%D1%81%D0%BE%D0%B5%D0%B4%D0%B8%D0%BD%D0%B5%D0%BD%D0%B8%D1%8F)
+  - [Префикс объявления выхода](#%D0%BF%D1%80%D0%B5%D1%84%D0%B8%D0%BA%D1%81-%D0%BE%D0%B1%D1%8A%D1%8F%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F-%D0%B2%D1%8B%D1%85%D0%BE%D0%B4%D0%B0)
+  - [Префикс выходного узла](#%D0%BF%D1%80%D0%B5%D1%84%D0%B8%D0%BA%D1%81-%D0%B2%D1%8B%D1%85%D0%BE%D0%B4%D0%BD%D0%BE%D0%B3%D0%BE-%D1%83%D0%B7%D0%BB%D0%B0)
+- [Выбор выхода и плоскость данных IPIP](#%D0%B2%D1%8B%D0%B1%D0%BE%D1%80-%D0%B2%D1%8B%D1%85%D0%BE%D0%B4%D0%B0-%D0%B8-%D0%BF%D0%BB%D0%BE%D1%81%D0%BA%D0%BE%D1%81%D1%82%D1%8C-%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85-ipip)
+- [Прямые списки (direct lists) и защита сервера](#%D0%BF%D1%80%D1%8F%D0%BC%D1%8B%D0%B5-%D1%81%D0%BF%D0%B8%D1%81%D0%BA%D0%B8-direct-lists-%D0%B8-%D0%B7%D0%B0%D1%89%D0%B8%D1%82%D0%B0-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B0)
+- [Модель межсетевого экрана OpenWrt](#%D0%BC%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C-%D0%BC%D0%B5%D0%B6%D1%81%D0%B5%D1%82%D0%B5%D0%B2%D0%BE%D0%B3%D0%BE-%D1%8D%D0%BA%D1%80%D0%B0%D0%BD%D0%B0-openwrt)
 - [Что генерируется](#%D1%87%D1%82%D0%BE-%D0%B3%D0%B5%D0%BD%D0%B5%D1%80%D0%B8%D1%80%D1%83%D0%B5%D1%82%D1%81%D1%8F)
   - [Для роутеров](#%D0%B4%D0%BB%D1%8F-%D1%80%D0%BE%D1%83%D1%82%D0%B5%D1%80%D0%BE%D0%B2)
-  - [Для exit серверов](#%D0%B4%D0%BB%D1%8F-exit-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%BE%D0%B2)
-- [Шаблоны, managed секции и customization](#%D1%88%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD%D1%8B-managed-%D1%81%D0%B5%D0%BA%D1%86%D0%B8%D0%B8-%D0%B8-customization)
+  - [Для выходных серверов (exit)](#%D0%B4%D0%BB%D1%8F-%D0%B2%D1%8B%D1%85%D0%BE%D0%B4%D0%BD%D1%8B%D1%85-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%BE%D0%B2-exit)
+- [Шаблоны, секции managed и пользовательские настройки](#%D1%88%D0%B0%D0%B1%D0%BB%D0%BE%D0%BD%D1%8B-%D1%81%D0%B5%D0%BA%D1%86%D0%B8%D0%B8-managed-%D0%B8-%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8C%D1%81%D0%BA%D0%B8%D0%B5-%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B8)
 - [Что делает 99-firstboot-custom](#%D1%87%D1%82%D0%BE-%D0%B4%D0%B5%D0%BB%D0%B0%D0%B5%D1%82-99-firstboot-custom)
-- [Connectivity watchdog](#connectivity-watchdog)
-- [DoH и DNS failover](#doh-%D0%B8-dns-failover)
-- [Секреты и key material](#%D1%81%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D1%8B-%D0%B8-key-material)
-- [SSH keys и aliases](#ssh-keys-%D0%B8-aliases)
+- [Контроль связности (watchdog)](#%D0%BA%D0%BE%D0%BD%D1%82%D1%80%D0%BE%D0%BB%D1%8C-%D1%81%D0%B2%D1%8F%D0%B7%D0%BD%D0%BE%D1%81%D1%82%D0%B8-watchdog)
+- [DoH и резервирование DNS](#doh-%D0%B8-%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5-dns)
+- [Секреты и ключевой материал](#%D1%81%D0%B5%D0%BA%D1%80%D0%B5%D1%82%D1%8B-%D0%B8-%D0%BA%D0%BB%D1%8E%D1%87%D0%B5%D0%B2%D0%BE%D0%B9-%D0%BC%D0%B0%D1%82%D0%B5%D1%80%D0%B8%D0%B0%D0%BB)
+- [Ключи SSH и псевдонимы](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-ssh-%D0%B8-%D0%BF%D1%81%D0%B5%D0%B2%D0%B4%D0%BE%D0%BD%D0%B8%D0%BC%D1%8B)
 - [config.json](#configjson)
-  - [Top-level keys](#top-level-keys)
-  - [Device profiles](#device-profiles)
-  - [Правила валидации config](#%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0-%D0%B2%D0%B0%D0%BB%D0%B8%D0%B4%D0%B0%D1%86%D0%B8%D0%B8-config)
+  - [Ключи верхнего уровня](#%D0%BA%D0%BB%D1%8E%D1%87%D0%B8-%D0%B2%D0%B5%D1%80%D1%85%D0%BD%D0%B5%D0%B3%D0%BE-%D1%83%D1%80%D0%BE%D0%B2%D0%BD%D1%8F)
+  - [Профили устройств](#%D0%BF%D1%80%D0%BE%D1%84%D0%B8%D0%BB%D0%B8-%D1%83%D1%81%D1%82%D1%80%D0%BE%D0%B9%D1%81%D1%82%D0%B2)
+  - [Правила проверки конфигурации](#%D0%BF%D1%80%D0%B0%D0%B2%D0%B8%D0%BB%D0%B0-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8-%D0%BA%D0%BE%D0%BD%D1%84%D0%B8%D0%B3%D1%83%D1%80%D0%B0%D1%86%D0%B8%D0%B8)
   - [Wi-Fi](#wi-fi)
   - [PPPoE](#pppoe)
 - [tools/default.py](#toolsdefaultpy)
@@ -75,9 +75,9 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
   - [run_routers.py](#runrouterspy)
   - [run_servers.py](#runserverspy)
 - [Проверка скорости линков](#%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B0-%D1%81%D0%BA%D0%BE%D1%80%D0%BE%D1%81%D1%82%D0%B8-%D0%BB%D0%B8%D0%BD%D0%BA%D0%BE%D0%B2)
-- [Рендер topology](#%D1%80%D0%B5%D0%BD%D0%B4%D0%B5%D1%80-topology)
-  - [2D HTML and SVG](#2d-html-and-svg)
-  - [3D HTML](#3d-html)
+- [Визуализация топологии](#%D0%B2%D0%B8%D0%B7%D1%83%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-%D1%82%D0%BE%D0%BF%D0%BE%D0%BB%D0%BE%D0%B3%D0%B8%D0%B8)
+  - [Двумерная визуализация (HTML и SVG)](#%D0%B4%D0%B2%D1%83%D0%BC%D0%B5%D1%80%D0%BD%D0%B0%D1%8F-%D0%B2%D0%B8%D0%B7%D1%83%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-html-%D0%B8-svg)
+  - [Трёхмерная визуализация (HTML)](#%D1%82%D1%80%D1%91%D1%85%D0%BC%D0%B5%D1%80%D0%BD%D0%B0%D1%8F-%D0%B2%D0%B8%D0%B7%D1%83%D0%B0%D0%BB%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-html)
 - [Типовой рабочий цикл](#%D1%82%D0%B8%D0%BF%D0%BE%D0%B2%D0%BE%D0%B9-%D1%80%D0%B0%D0%B1%D0%BE%D1%87%D0%B8%D0%B9-%D1%86%D0%B8%D0%BA%D0%BB)
 - [Полезные проверки](#%D0%BF%D0%BE%D0%BB%D0%B5%D0%B7%D0%BD%D1%8B%D0%B5-%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8)
 - [Что важно помнить](#%D1%87%D1%82%D0%BE-%D0%B2%D0%B0%D0%B6%D0%BD%D0%BE-%D0%BF%D0%BE%D0%BC%D0%BD%D0%B8%D1%82%D1%8C)
@@ -98,6 +98,16 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 Остальная часть README подробно объясняет устройство сети и генератора.
 
 ## Разработка и проверка изменений
+
+**Опорные символы для изменения поведения:**
+
+1. `ConfigData` в `tools/config_model.py` - типизированная модель общей конфигурации; новые поля
+   требуют согласования с валидаторами и соответствующими генераторами.
+1. `generate_configs.py:main` и `tools/generate.py` - оркестрация генерации и подсистемные
+   преобразования; изменяйте источник генерации, а не её выходные каталоги.
+1. `build_router_images.py:build_router` и `deploy_servers.py:deploy_one` - отдельные точки
+   изменений в построении образов и развёртывании серверов; не смешивайте эти операции с
+   генерацией конфигураций.
 
 **Основные точки изменения:**
 
@@ -123,9 +133,76 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 - `tools/generate.py` собирает состояния mesh/exit/access; изменения модели
   нужно согласовывать с `tools/config_model.py`, `tools/config_schema.py`,
   соответствующими `tools/generate_*.py` и `tools/validate_*.py`.
-- `tools/sync_rules.py` задает разные режимы синхронизации: копирование файлов,
+- `tools/sync_rules.py` задаёт разные режимы синхронизации: копирование файлов,
   обновление каталогов и слияние по маркеру. У слияния сохраняется часть
   назначения **до маркера**, а содержимое **после маркера** берется из шаблона.
+
+**Карта внутренних подсистем `tools/`:**
+
+- Загрузка и представление параметров: `config_io.py`, `config_model.py`,
+  `config_schema.py` и `config_loaders.py`. Новое поле проходит от JSON
+  через модель и проверку схемы до генератора, который его использует.
+- Сетевые модели: `net_model.py`, `link_model.py`, `tunnel_model.py`,
+  `awg_model.py` и `openvpn_model.py`; формирование конфигураций разделено
+  между `generate_mesh.py`, `generate_exit.py`, `generate_access.py`
+  и `generate_dhcp.py`. Меняя тип линка, сверяйте модель и генерацию.
+- Выходные файлы и синхронизация: `generated_files.py`, `layout.py`,
+  `file_ops.py`, `managed_blocks.py` и `sync_rules.py`. Не путайте
+  генерацию содержимого с копированием в управляемые каталоги.
+- Проверки: `validate_network.py`, `validate_firewall.py`,
+  `validate_keys.py`, `validate_uci.py` и `validate_runtime_files.py`
+  проверяют разные аспекты выходных конфигураций; общего упоминания
+  `validate.py` недостаточно при изменении соответствующей подсистемы.
+- Развёртывание и сборка: `remote_exec.py` отвечает за SSH/SCP и
+  обработку удалённых команд, `remote_hosts.py` - за выбор адресатов,
+  `process.py` - за локальные вызовы внешних программ.
+- Визуализация: `topology_data.py` формирует данные, `topology_metrics.py`
+  обрабатывает показатели линков, `topology_2d_layout.py` и
+  `topology_3d_graph.py` готовят представления. Их потребляют
+  соответствующие генераторы HTML/SVG.
+
+**Дополнительные модули по границам ответственности:**
+
+- Исходные модели и ограничения: `access_model.py`, `config_exit_model.py`,
+  `config_firewall_model.py`, `config_builder.py` и `identifiers.py`
+  работают с ролями доступа, выходными интерфейсами, firewall, сборкой
+  модели и допустимыми именами. `stable_model.py` обеспечивает
+  воспроизводимое формирование значений. `common.py` связывает общие
+  функции, но не заменяет специализированные модули.
+- Параметры запуска и адресаты: `cli_common.py`, `targets.py`,
+  `router_order.py` и `git_utils.py` обрабатывают аргументы, выбор
+  узлов, порядок роутеров и информацию Git.
+- Генерация и формат OpenWrt: `generate_clients.py`,
+  `generate_router_misc.py`, `generate_runtime.py`,
+  `generate_server_runtime.py`, `network_config.py` и `uci.py`
+  формируют разные клиентские, роутерные и серверные файлы;
+  `tools/uci.py` разбирает и записывает UCI-блоки.
+- Секреты и ключи: `materials.py`, `secrets.py`, `secrets_cli.py`,
+  `openvpn_pki.py` и `wg_keys.py` обрабатывают ключевой материал,
+  зашифрованную конфигурацию и генерацию ключей.
+- Пакеты и псевдонимы: `package_model.py` и `packages.py` отвечают
+  за списки пакетов и APK, `link_alias_model.py` - за имена линков,
+  `link_speed_model.py` - за модель результатов измерений.
+- Представление топологии: `topology_cli.py` и `topology_index.py`
+  задают входы/выходы и индекс генерации; `topology_2d_page.py` и
+  `topology_3d_page.py` создают HTML. `topology_svg.py`,
+  `topology_svg_colors.py`, `topology_svg_geometry.py` и
+  `topology_svg_theme.py` относятся к отдельному SVG-представлению.
+- Специализированные валидаторы: `validate_access.py`,
+  `validate_awg_helpers.py`, `validate_context.py`, `validate_ports.py`,
+  `validate_router_files.py`, `validate_secrets.py` и
+  `validate_tunnel_files.py`. При изменении генерируемого формата
+  выберите соответствующий валидатор, не ограничиваясь `validate.py`.
+- `show_unmanaged_collect.py` определяет, какие файлы и блоки остались
+  вне управления генератором; сверяйте его при изменении правил
+  синхронизации шаблонов.
+
+**Скрипты шаблона роутера:**
+`routers/example/files/etc/init.d/iperf3-server` запускает `iperf3 -s`
+через procd. `routers/example/files/etc/scripts/firstboot-maximize-wifi.uc`
+подбирает параметры радиоинтерфейсов по данным UCI и `/etc/board.json`.
+Это часть шаблона прошивки, а не универсальный хук Python-генератора;
+при изменении проверяйте совместимость с целевой версией OpenWrt.
 
 ### Типовые изменения
 
@@ -141,14 +218,35 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 - Синхронизация каталогов в `copy_dir` удаляет элементы назначения,
   отсутствующие в шаблоне. Не размещайте пользовательские файлы в таких
   управляемых каталогах, не изучив правила синхронизации.
+- `merge_after_mark` требует маркер `FIREWALL_MARKER` и в шаблоне, и в уже
+  существующем целевом файле. При отсутствии маркера генерация прекращается;
+  сохранённые строки **до маркера** остаются пользовательскими, а всё после
+  него заменяется строками шаблона. Общая синхронизация роутеров не является
+  одной атомарной транзакцией: файлы предыдущих этапов уже могут измениться
+  до этой ошибки. Перед повтором исправьте маркер и проверьте `git diff`.
 - `--skip-hooks` отключает последующие хуки, но не начальную синхронизацию
   каталогов и файлов. Загрузки и синхронизация пакетов управляются отдельными
   флагами `--skip-awg-download`, `--skip-cidr-squash-download` и `--skip-package-sync`.
 - `--force` передается генератору и меняет ключи mesh/exit; секреты access
   сохраняются. Считайте этот флаг изменением состояния, а не проверкой.
+  При одновременном `--force --skip-hooks` регенерация ключей не
+  запускается: `--force` только передаётся в `tools/generate.py`,
+  а этот хук пропущен. При этом ранние операции синхронизации всё ещё
+  могут менять файлы, так что комбинация не является dry-run.
 - Валидатор в `tools/validate.py` сопоставляет сгенерированные файлы, ключи,
   адреса, порты, firewall и маршрутизацию. Изменения генератора должны
   сопровождаться изменениями соответствующих валидаторов.
+- В `generate_configs.py` проверка скачанного APK ограничена существованием
+  и ненулевым размером файла `*.apk` в каталоге источников: повторный
+  запуск не проверяет контрольную сумму и не скачивает новую версию
+  поверх такого файла. Обновление пакета потребует отдельного обновления
+  локального файла.
+- `sync_router_packages` нормализует имена APK и удаляет из целевого
+  `routers/<router>/packages/` все элементы, отсутствующие в наборе
+  источников, включая пользовательские файлы. Файлы индексов пакетов
+  удаляются и в исходном, и в целевом каталоге. Не используйте этот
+  каталог для неуправляемых данных; `--skip-package-sync` отключает
+  синхронизацию, но не скачивание пакетов.
 - Ключи и содержимое секретов не следует включать в вывод отладки,
   демонстрационные конфиги и отчеты.
 
@@ -256,7 +354,7 @@ vim config.json
 
 Такой режим удобен, если custom AWG/CIDR-squash `.apk` и per-router package repos уже не нужны для текущей проверки.
 
-Hooks при этом все равно запускаются, поэтому `tools/generate.py` все еще может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
+Hooks при этом все равно запускаются, поэтому `tools/generate.py` все ещё может требовать `wg` и `openssl`, если нужно создать недостающие WireGuard/OpenVPN secrets.
 
 Для просмотра только синхронизированной template структуры без generator hooks добавляйте `--skip-hooks`:
 
@@ -279,7 +377,7 @@ Dynamic direct-list sources из `tools/default.py` должны быть дос
 - listen IP mesh/exit hubs
 - exit IP
 
-## Что это дает
+## Что это даёт
 
 Главная идея - превратить набор роутеров, VPS и домашних сетей в управляемую routed mesh сеть.
 
@@ -327,7 +425,7 @@ Dynamic direct-list sources из `tools/default.py` должны быть дос
 
 Благодаря этому multi-exit схема удобнее обычного варианта `один роутер -> один VPN сервер`.
 
-Fabric дает не только egress в интернет, но и связность между площадками:
+Fabric даёт не только egress в интернет, но и связность между площадками:
 
 - можно разрешить LAN одного роутера ходить к LAN другого
 - можно подключить access клиента к одному публичному endpoint и все равно попасть в нужный remote segment
@@ -338,7 +436,7 @@ Fabric дает не только egress в интернет, но и связн
 Firewall model остается явной:
 
 - LAN, Mesh, Exit, ExitIPIP, TrustedAccess и TransitAccess разделены зонами
-- доступ к роутерам и LAN задается через `allow_to_router` и `allow_to_lan`
+- доступ к роутерам и LAN задаётся через `allow_to_router` и `allow_to_lan`
 - direct destinations не отправляются через exit
 - server guard на exit дополнительно дропает нежелательный direct выход, если такой пакет все же дошел до сервера
 
@@ -366,9 +464,9 @@ disabled=1
 
 Это не заменяет физическую отказоустойчивость провайдера или питания. Если у узла не осталось ни одного живого пути в fabric, маршрутизировать его уже некуда. Но пока есть альтернативный tunnel path, сеть может переживать падение отдельных линков, spine узлов и exit.
 
-## Spine-leaf на домашних и edge роутерах
+## Spine-leaf на домашних и пограничных роутерах
 
-В ЦОДовой spine-leaf схеме leaf подключает клиентов и серверы, а spine дает связность между leaf узлами.
+В ЦОДовой spine-leaf схеме leaf подключает клиентов и серверы, а spine даёт связность между leaf узлами.
 
 Здесь та же идея применяется к домашним роутерам, VPS и NAT.
 
@@ -493,7 +591,7 @@ exit_order         глобальный приоритет exit серверов
 access             пользовательские WG/AWG/OpenVPN входы на router узлах
 ```
 
-### Router
+### Роутеры
 
 `routers` описывает все OpenWrt устройства.
 
@@ -554,7 +652,7 @@ Spine01 -> routers/spine01/
 Leaf03  -> routers/leaf03/
 ```
 
-### Mesh hub / spine
+### Узлы spine (mesh hub)
 
 `mesh_hubs` добавляет публичную endpoint роль поверх уже описанного router узла.
 
@@ -583,11 +681,11 @@ Babel использует эти линки как routed overlay.
 
 `mesh_hubs[].name` всегда ссылается на существующий router.
 
-`listen_ip` задается canonical IPv4 адресом без порта и hostname.
+`listen_ip` задаётся canonical IPv4 адресом без порта и hostname.
 
 Один и тот же `listen_ip` нельзя использовать в нескольких `mesh_hubs`, включая `access_only` hubs.
 
-### Exit hub
+### Выходные узлы (exit hub)
 
 `exit_hubs` описывает Linux серверы, через которые пользовательский трафик выходит в интернет.
 
@@ -634,9 +732,9 @@ REV01 -> servers/rev01/
 
 Reverse-only exit без `listen_ip` первично деплоится руками. После bootstrap он получает generated node IP из `EXIT_NODE_SUPERNET4`, и дальнейший SSH/deploy может идти через `server_<name>_node`.
 
-### Access
+### Узлы доступа
 
-`access` задает пользовательские входы в overlay.
+`access` задаёт пользовательские входы в overlay.
 
 Поддерживаемые протоколы:
 
@@ -732,9 +830,9 @@ Reverse exit без `listen_ip` не принимает входящие tunnel 
 
 На infra линках не включается обычный default route. Они используются как транспорт для Babel и служебной маршрутизации.
 
-### AWG 3.1 diversification
+### Диверсификация AWG 3.1
 
-Infra AWG профиль генерируется детерминированно, но разделен на shared per-link и local per-direction параметры. Это дает воспроизводимые конфиги без одинакового fingerprint у всех направлений.
+Infra AWG профиль генерируется детерминированно, но разделен на shared per-link и local per-direction параметры. Это даёт воспроизводимые конфиги без одинакового fingerprint у всех направлений.
 
 | Параметры | Модель |
 | --- | --- |
@@ -746,7 +844,7 @@ Infra AWG профиль генерируется детерминированн
 | `PersistentKeepalive` | per-direction range внутри 20-30 seconds |
 | `RandomTrailers` | включен |
 | `DisableCookies` | выключен |
-| `ContentPaddingAddition` | не задается |
+| `ContentPaddingAddition` | не задаётся |
 | `HeaderProtectionKey` | shared per-link; детерминированный 32-byte key, auto-generation включен |
 
 Babel timers также диверсифицированы per local tunnel direction: `hello_interval` выбирается в диапазоне 2-4 seconds, а `update_interval` - 8-14 seconds с привязкой к hello interval.
@@ -763,7 +861,7 @@ EXIT_ANNOUNCE_SUPERNET4 = "10.254.0.0/24"
 EXIT_NODE_SUPERNET4 = "10.254.1.0/24"
 ```
 
-### Infra p2p links
+### Инфраструктурные P2P-соединения
 
 Для AWG p2p линков генератор детерминированно выделяет `/31` из `INFRA_LINK_POOL`.
 
@@ -777,7 +875,7 @@ link key -> stable hash -> /31 из 10.255.0.0/16
 10.255.x.y -> fe80::10:255:x:y/64
 ```
 
-### Exit announce prefix
+### Префикс объявления выхода
 
 Каждый exit получает служебный `/31` из `EXIT_ANNOUNCE_SUPERNET4`.
 
@@ -785,7 +883,7 @@ link key -> stable hash -> /31 из 10.255.0.0/16
 
 Если Babel видит marker prefix, `exit-route.sh` считает соответствующий exit usable для IPIP data-plane.
 
-### Exit node prefix
+### Префикс выходного узла
 
 Каждый exit получает node/control prefix из `EXIT_NODE_SUPERNET4`.
 
@@ -799,7 +897,7 @@ link key -> stable hash -> /31 из 10.255.0.0/16
 
 Node IP выбирается стабильно по имени exit, а не по позиции в `exit_order`.
 
-## Выбор exit и IPIP data-plane
+## Выбор выхода и плоскость данных IPIP
 
 Пользовательский трафик до exit идет через IPIP.
 
@@ -869,7 +967,7 @@ Per-router `exit_order` может содержать только часть ex
 
 Генератор изменяет только часть до marker. Строка marker и весь хвост после нее
 дописываются побайтно без нормализации. Хвостом владеет только `tools/sync_rules.py`,
-который берет его из `routers/example`. Валидация проверяет итоговый конфиг
+который берёт его из `routers/example`. Валидация проверяет итоговый конфиг
 каждого роутера и до, и после marker, но общий хвост не переписывает. Если
 router-specific правило `Routing-*` обнаружено после marker, генератор
 завершится с ошибкой, но не станет менять общий хвост.
@@ -904,7 +1002,7 @@ disabled=1
 
 После этого помеченный трафик возвращается на обычный main default path.
 
-## Direct lists и server guard
+## Прямые списки (direct lists) и защита сервера
 
 Проект различает трафик, который должен идти напрямую, и трафик, который должен идти через exit.
 
@@ -922,7 +1020,7 @@ Direct lists собираются из нескольких источников
 - публичные `listen_ip` и `exit_ip` из `config.json`
 - дополнительные CIDR prefixes из `EXIT_DIRECT_STATIC_IPSETS`
 
-Динамическая часть задается странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются нужные IPv4 prefixes; ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`. Перед записью итоговый список передается напрямую в `cidr-squash`: он объединяет дубликаты/пересечения, сортирует результат и сам выводит одиночные IPv4 адреса как `/32`, сохраняя явную IPv4 CIDR-нотацию.
+Динамическая часть задаётся странами и ASN. Страны берутся из IPinfo Lite через `Alice39s/ipinfo-csv-lite`: daily release содержит готовые CIDR, country code, continent и ASN. Для `DIRECT_COUNTRIES` выбираются нужные IPv4 prefixes; ASN lists по-прежнему берутся из `ipverse/as-ip-blocks`. Перед записью итоговый список передается напрямую в `cidr-squash`: он объединяет дубликаты/пересечения, сортирует результат и сам выводит одиночные IPv4 адреса как `/32`, сохраняя явную IPv4 CIDR-нотацию.
 
 Runtime-параметры direct-list, которые задаются в `tools/default.py`, генерируются в `/etc/router-autoinstall.env`. В том числе туда попадают country/ASN settings, runtime paths/names, source URLs и curl timeout/retry:
 
@@ -959,7 +1057,7 @@ UPDATE_IPSETS_CURL_RETRY='3'
 
 Отдельный `/etc/router-autoinstall.env` на серверах не создаётся.
 
-Нормальный direct трафик должен отсечься еще на роутере и не прийти на exit. Но если он все же пришел через managed exit subnet, `exit-direct-guard.service` держит FORWARD guard rule и дропает такой выход в WAN.
+Нормальный direct трафик должен отсечься ещё на роутере и не прийти на exit. Но если он все же пришел через managed exit subnet, `exit-direct-guard.service` держит FORWARD guard rule и дропает такой выход в WAN.
 
 Иными словами:
 
@@ -970,7 +1068,7 @@ server guard rule   -> если direct destination все же пришел на
 
 `exit-direct-guard.timer` ежедневно запускает `exit-direct-guard.service`: сначала общий `/etc/scripts/update-ipsets.sh` обновляет `direct.txt`, затем `awg-server.sh guard` перезагружает `ipset` и guard rules. `awg-server-network.service` при network-up ставит guard из уже существующего списка.
 
-## Firewall model на OpenWrt
+## Модель межсетевого экрана OpenWrt
 
 Генератор создаёт managed zones:
 
@@ -985,9 +1083,9 @@ server guard rule   -> если direct destination все же пришел на
 - LAN может идти в Mesh, Exit, ExitIPIP.
 - TrustedAccess может идти в LAN, Mesh, Exit и WAN.
 - TransitAccess не получает input к самому роутеру, но может транзитить.
-- Точечный доступ к самим роутерам задается через `allow_to_router`.
+- Точечный доступ к самим роутерам задаётся через `allow_to_router`.
 - Direct destinations исключаются из exit marking через ipset.
-- Точечный доступ к LAN других роутеров задается через `allow_to_lan`.
+- Точечный доступ к LAN других роутеров задаётся через `allow_to_lan`.
 - IPIP destination clear mark rule снимает mark при уходе в `ExitIPIP`.
 
 Файл:
@@ -996,7 +1094,7 @@ server guard rule   -> если direct destination все же пришел на
 routers/example/files/etc/config/firewall_part
 ```
 
-задает общую tail-часть после marker. В router-specific `firewall_part` часть
+задаёт общую tail-часть после marker. В router-specific `firewall_part` часть
 до marker генерируется отдельно, а часть начиная с marker целиком копируется
 из `example` через `tools/sync_rules.py`:
 
@@ -1038,7 +1136,7 @@ files/etc/wireguard/<access>/clients/*.conf      # при WireGuard или Amnez
 
 Конкретные роутеры создаются рядом с ним в lowercase директориях.
 
-### Для exit серверов
+### Для выходных серверов (exit)
 
 Для каждого exit создаётся:
 
@@ -1071,7 +1169,7 @@ EGR01 -> servers/egr01/
 etc/awg-server.env
 ```
 
-## Шаблоны, managed секции и customization
+## Шаблоны, секции managed и пользовательские настройки
 
 `routers/example` содержит базовый OpenWrt overlay:
 
@@ -1161,7 +1259,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 - для включенных Wi-Fi radio выбирает максимальную поддерживаемую ширину и самый низкий доступный канал
 - делает `uci commit`
 
-## Connectivity watchdog
+## Контроль связности (watchdog)
 
 Вместо `watchcat` проект использует простой `/etc/scripts/ping-reboot.sh` с procd-службой `/etc/init.d/ping-reboot`.
 
@@ -1178,7 +1276,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 
 Достаточно ответа хотя бы от одного адреса. После пяти последовательных успешных проверок watchdog взводится. Начиная с этого момента, если пять последовательных 10-секундных проверок заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счётчик ошибок.
 
-Пока watchdog еще не взведен, обычные неудачные ping не вызывают быстрый reboot. Однако действует hard fallback: если за 3600 секунд после запуска службы так и не удалось получить 5 последовательных успешных проверок, роутер принудительно перезагружается. После reboot часовой таймер начинается заново. Таймер измеряется по `/proc/uptime`, поэтому изменение системного времени/NTP на него не влияет. Значение `PING_REBOOT_UNARMED_REBOOT=0` отключает hard fallback.
+Пока watchdog ещё не взведен, обычные неудачные ping не вызывают быстрый reboot. Однако действует hard fallback: если за 3600 секунд после запуска службы так и не удалось получить 5 последовательных успешных проверок, роутер принудительно перезагружается. После reboot часовой таймер начинается заново. Таймер измеряется по `/proc/uptime`, поэтому изменение системного времени/NTP на него не влияет. Значение `PING_REBOOT_UNARMED_REBOOT=0` отключает hard fallback.
 
 Для ручной проверки без reboot loop:
 
@@ -1186,9 +1284,9 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 /etc/scripts/ping-reboot.sh once
 ```
 
-## DoH и DNS failover
+## DoH и резервирование DNS
 
-Для каждого роутера генератор ведет managed DNS-записи в начале
+Для каждого роутера генератор ведёт managed DNS-записи в начале
 `files/etc/config/dhcp_part` по объединению всех его `allow_to_router`: как
 router-level правила, так и `allow_to_router` внутри access-групп этого роутера.
 Если хотя бы одно правило содержит `allow_to_router: ["all"]`, создаются записи
@@ -1261,9 +1359,9 @@ CHECK_DOH_RESOLV_WAIT_MAX='300'
 CHECK_DOH_PROVIDER_DOMAINS='ru xn--p1ai'
 ```
 
-`CHECK_DOH_RESOLV_WAIT_MAX` задает, сколько секунд `check-doh.sh` ждет появления `nameserver` в `CHECK_DOH_RESOLV` при старте службы.
+`CHECK_DOH_RESOLV_WAIT_MAX` задаёт, сколько секунд `check-doh.sh` ждет появления `nameserver` в `CHECK_DOH_RESOLV` при старте службы.
 
-`CHECK_DOH_PROVIDER_DOMAINS` задает доменные зоны, которые dnsmasq резолвит через провайдерские DNS из `CHECK_DOH_RESOLV`.
+`CHECK_DOH_PROVIDER_DOMAINS` задаёт доменные зоны, которые dnsmasq резолвит через провайдерские DNS из `CHECK_DOH_RESOLV`.
 
 Значения пишутся без начальной точки.
 
@@ -1293,13 +1391,13 @@ xn--p1ai
 
 `CHECK_DOH_DOMAIN` - это домен для health check через `nslookup`.
 
-Он не задает маршрут для `google.com`, а только определяет, какой домен проверяется на каждом DNS endpoint.
+Он не задаёт маршрут для `google.com`, а только определяет, какой домен проверяется на каждом DNS endpoint.
 
 DoH процесс работает под uid `4453`, а network rule отправляет uidrange `4453-4453` в table `10000`.
 
 Это позволяет DoH bootstrap трафику идти через выбранный exit так же, как помеченному пользовательскому трафику.
 
-## Секреты и key material
+## Секреты и ключевой материал
 
 Проект хранит чувствительные значения в исходном дереве как OWMB markers.
 
@@ -1403,11 +1501,11 @@ AAD = marker name
 
 В исходном дереве private keys и секреты остаются зашифрованными. Если украден только репозиторий без master key files, из него нельзя получить приватные ключи, пароли и токены.
 
-## SSH keys и aliases
+## Ключи SSH и псевдонимы
 
 `tools/ensure_ssh_keys.py` создаёт per-router и per-server ed25519 ключи, пишет public keys в generated trees и собирает локальный SSH config.
 
-Путь задается в `config.json`:
+Путь задаётся в `config.json`:
 
 ```json
 {
@@ -1602,7 +1700,7 @@ Per-router overrides используют `+` и `-`:
 
 Удалять managed-required packages нельзя. Удаление пакета, которого нет в итоговом package set роутера, тоже считается ошибкой config.
 
-### Top-level keys
+### Ключи верхнего уровня
 
 Поддерживаемые top-level keys:
 
@@ -1621,7 +1719,7 @@ exit_order
 access
 ```
 
-### Device profiles
+### Профили устройств
 
 `device_profiles` связывает короткое имя профиля с OpenWrt target/subtarget и apk arch:
 
@@ -1648,7 +1746,7 @@ Profile name является безопасным ASCII identifier.
 
 `board` segments и `arch` являются безопасными ASCII path segments. `.` и `..` как path segment не принимаются.
 
-### Правила валидации config
+### Правила проверки конфигурации
 
 `build_config_data()` является общим fail-fast слоем для основных entrypoints.
 
@@ -1719,7 +1817,7 @@ Profile name является безопасным ASCII identifier.
 
 ## tools/default.py
 
-`config.json` описывает конкретную сеть, а `tools/default.py` задает глобальную механику проекта:
+`config.json` описывает конкретную сеть, а `tools/default.py` задаёт глобальную механику проекта:
 
 - пулы служебной адресации
 - диапазон infra AWG ports
@@ -1905,7 +2003,7 @@ images/<router>_<version>_<git>_<timestamp>_factory.bin
 
 По умолчанию для каждого роутера выбирается образ именно его эффективной версии:
 `routers[].openwrt_version`, а если override не задан - top-level `openwrt_version`.
-Это не дает случайно выбрать release-образ вместо snapshot (или наоборот), если в
+Это не даёт случайно выбрать release-образ вместо snapshot (или наоборот), если в
 `images/` лежат артефакты нескольких версий с одним git hash. `--version` является
 явным override для всех выбранных роутеров и должен совпадать с версией, с которой
 они были собраны.
@@ -2009,9 +2107,9 @@ iperf3
 jq
 ```
 
-## Рендер topology
+## Визуализация топологии
 
-### 2D HTML and SVG
+### Двумерная визуализация (HTML и SVG)
 
 `render_topology_2d.py` строит интерактивную HTML карту на Canvas и
 статический SVG с topology colors.
@@ -2082,7 +2180,7 @@ Topology-only без замеров:
 
 `--only topology`, `--only from` и `--only to` сохранены для совместимости и задают начальный режим страницы. Переключить режим после открытия всё равно можно в панели.
 
-### 3D HTML
+### Трёхмерная визуализация (HTML)
 
 `render_topology_3d.py` строит интерактивную Three.js карту.
 
@@ -2182,7 +2280,7 @@ Failed systemd units на exit:
 - Server directories всегда lowercase: `servers/egr01`, `servers/rev01`.
 - `allow_to_router` разрешает INPUT на target роутер.
 - `allow_to_lan` разрешает FORWARD в LAN target роутера.
-- `exit_order` задает приоритет выхода, но не адресацию.
+- `exit_order` задаёт приоритет выхода, но не адресацию.
 - Если все exit недоступны, `exit-route.sh` ставит `network.exit10000.disabled=1`, и трафик возвращается на main default path.
 - Reverse exit без `listen_ip` первично деплоится руками, а после bootstrap доступен через generated node IP.
 - `server_<name>_node` - overlay alias.
