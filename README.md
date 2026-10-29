@@ -116,7 +116,7 @@ OpenWrt Spine-Leaf Mesh Builder создаёт конфигурации, обр�
 
 ### Поток генерации и точки изменения
 
-- `generate_configs.py` читает `config.json`, строит `ConfigData`, создает каталоги
+- `generate_configs.py` читает `config.json`, строит `ConfigData`, создаёт каталоги
   роутеров из `routers/example` и синхронизирует шаблоны и пакеты. Если хуки
   включены, далее вызываются генератор, подготовка SSH-ключей, валидатор
   и отчет о пользовательских файлах.
@@ -547,7 +547,7 @@ access             пользовательские WG/AWG/OpenVPN входы н
 
 В этом фрагменте LAN `Leaf04` может форвардиться в LAN `Spine01` и `Leaf01`.
 
-Директория роутера создается как lowercase slug:
+Директория роутера создаётся как lowercase slug:
 
 ```text
 Spine01 -> routers/spine01/
@@ -625,7 +625,7 @@ A-Z, 0-9, _
 
 Это нужно, чтобы generated Linux IPIP device вида `ipip-ip` помещался в лимит 15 видимых байт.
 
-Директория сервера создается как lowercase slug:
+Директория сервера создаётся как lowercase slug:
 
 ```text
 EGR01 -> servers/egr01/
@@ -957,7 +957,7 @@ UPDATE_IPSETS_CURL_RETRY='3'
 /etc/awg-server.env
 ```
 
-Отдельный `/etc/router-autoinstall.env` на серверах не создается.
+Отдельный `/etc/router-autoinstall.env` на серверах не создаётся.
 
 Нормальный direct трафик должен отсечься еще на роутере и не прийти на exit. Но если он все же пришел через managed exit subnet, `exit-direct-guard.service` держит FORWARD guard rule и дропает такой выход в WAN.
 
@@ -972,7 +972,7 @@ server guard rule   -> если direct destination все же пришел на
 
 ## Firewall model на OpenWrt
 
-Генератор создает managed zones:
+Генератор создаёт managed zones:
 
 - `Mesh` - infra overlay между роутерами
 - `Exit` - AWG/WG линки к exit серверам
@@ -1008,7 +1008,7 @@ routers/example/files/etc/config/firewall_part
 
 ### Для роутеров
 
-После `./generate_configs.py` для каждого router создается дерево managed/template файлов:
+После `./generate_configs.py` для каждого router создаётся дерево managed/template файлов:
 
 ```text
 routers/<router>/
@@ -1040,7 +1040,7 @@ files/etc/wireguard/<access>/clients/*.conf      # при WireGuard или Amnez
 
 ### Для exit серверов
 
-Для каждого exit создается:
+Для каждого exit создаётся:
 
 ```text
 servers/<exit>/
@@ -1150,7 +1150,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 
 - сшивает `network_part`, опциональный `dhcp_part` и `firewall_part` с реальными UCI файлами
 - настраивает `https-dns-proxy` и dnsmasq
-- создает пользователя и группу `doh` с uid/gid `4453`
+- создаёт пользователя и группу `doh` с uid/gid `4453`
 - увеличивает log buffer
 - ставит timezone
 - отключает HTTPS listener LuCI на `443`
@@ -1165,7 +1165,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 
 Вместо `watchcat` проект использует простой `/etc/scripts/ping-reboot.sh` с procd-службой `/etc/init.d/ping-reboot`.
 
-После запуска watchdog сначала остается невооруженным и ждет 5 последовательных успешных проверок связи. Только после этого он начинает считать потери связи и получает право на быстрый reboot. Если успешная серия прерывается до взведения, счетчик успешных проверок сбрасывается.
+После запуска watchdog сначала остается невооруженным и ждет 5 последовательных успешных проверок связи. Только после этого он начинает считать потери связи и получает право на быстрый reboot. Если успешная серия прерывается до взведения, счётчик успешных проверок сбрасывается.
 
 Параметры watchdog генерируются в `/etc/router-autoinstall.env`: адреса для ping, число успешных проверок для взведения, hard-recovery timeout для невзведенного состояния, интервал проверки, число неудач и timeout ping.
 
@@ -1176,7 +1176,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 77.88.8.8
 ```
 
-Достаточно ответа хотя бы от одного адреса. После пяти последовательных успешных проверок watchdog взводится. Начиная с этого момента, если пять последовательных 10-секундных проверок заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счетчик ошибок.
+Достаточно ответа хотя бы от одного адреса. После пяти последовательных успешных проверок watchdog взводится. Начиная с этого момента, если пять последовательных 10-секундных проверок заканчиваются без ответа от обоих адресов, роутер перезагружается. Успешный ping сбрасывает счётчик ошибок.
 
 Пока watchdog еще не взведен, обычные неудачные ping не вызывают быстрый reboot. Однако действует hard fallback: если за 3600 секунд после запуска службы так и не удалось получить 5 последовательных успешных проверок, роутер принудительно перезагружается. После reboot часовой таймер начинается заново. Таймер измеряется по `/proc/uptime`, поэтому изменение системного времени/NTP на него не влияет. Значение `PING_REBOOT_UNARMED_REBOOT=0` отключает hard fallback.
 
@@ -1192,7 +1192,7 @@ Bootstrap скрипт на OpenWrt при первом запуске обра�
 `files/etc/config/dhcp_part` по объединению всех его `allow_to_router`: как
 router-level правила, так и `allow_to_router` внутри access-групп этого роутера.
 Если хотя бы одно правило содержит `allow_to_router: ["all"]`, создаются записи
-для всех остальных роутеров; иначе создается union всех явно указанных target
+для всех остальных роутеров; иначе создаётся union всех явно указанных target
 routers. Например:
 
 ```text
@@ -1405,7 +1405,7 @@ AAD = marker name
 
 ## SSH keys и aliases
 
-`tools/ensure_ssh_keys.py` создает per-router и per-server ed25519 ключи, пишет public keys в generated trees и собирает локальный SSH config.
+`tools/ensure_ssh_keys.py` создаёт per-router и per-server ed25519 ключи, пишет public keys в generated trees и собирает локальный SSH config.
 
 Путь задается в `config.json`:
 
@@ -1752,7 +1752,7 @@ Profile name является безопасным ASCII identifier.
 Что делает:
 
 1. читает и валидирует `config.json`
-1. создает `routers/` из `routers/example`
+1. создаёт `routers/` из `routers/example`
 1. скачивает AmneziaWG `.apk`, если не указан `--skip-awg-download`
 1. скачивает CIDR-squash `.apk`, если не указан `--skip-cidr-squash-download`
 1. синхронизирует per-router `packages/`, если не указан `--skip-package-sync`
@@ -1767,7 +1767,7 @@ Profile name является безопасным ASCII identifier.
 Если в одном config смешаны release и snapshot, пакеты скачиваются и хранятся
 раздельно по версиям.
 
-`--force` передается в `tools/generate.py` и пересоздает mesh/exit WG/AWG keys. Access secrets сохраняются.
+`--force` передается в `tools/generate.py` и пересоздаёт mesh/exit WG/AWG keys. Access secrets сохраняются.
 
 `--details` после генерации печатает не только SHA-256, но и полный отчет по unmanaged sections/files. Это основной удобный способ проверить результат генерации; отдельно запускать `tools/show_unmanaged.py` обычно не требуется.
 
@@ -2193,7 +2193,7 @@ Failed systemd units на exit:
 - `wireguard` access добавляет `luci-proto-wireguard`.
 - `openvpn` access добавляет `openvpn-openssl`.
 - Если на роутере есть оба access типа, добавляются оба пакета.
-- `--force` пересоздает mesh/exit tunnel keys.
+- `--force` пересоздаёт mesh/exit tunnel keys.
 - Access secrets сохраняются.
 - Секреты и key material остаются в исходном дереве как `OWMB_ENC_SECRET_V1{...}` и `OWMB_ENC_MATERIAL_V1{...}`.
 - Секреты расшифровываются только в staging/build/deploy.
