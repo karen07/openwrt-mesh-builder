@@ -5,12 +5,13 @@ sys.dont_write_bytecode = True
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from tools.common import (
-    ConfigData,
-    ExitHub,
+from .config_model import ConfigData, ExitHub
+from .link_alias_model import (
     build_exit_client_alias,
     build_exit_exit_alias,
     build_exit_reverse_client_alias,
+)
+from .link_model import (
     client_iface_name_for_target,
     compute_exit_exit_link_params,
     compute_exit_link_params,
@@ -19,14 +20,14 @@ from tools.common import (
     exit_exit_peer_names_for_hub,
     exit_in_iface_name,
     exit_out_iface_name,
-    ipv4_without_prefix,
     mesh_link_specs_for_router,
     mesh_server_iface_name_for_target,
 )
-from tools.process import die
-from tools.remote_hosts import server_ssh_hosts
-from tools.topology_index import GeneratedTopologyIndex
-from tools.tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
+from .net_model import ipv4_without_prefix
+from .process import die
+from .remote_hosts import server_ssh_hosts
+from .topology_index import GeneratedTopologyIndex
+from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
 
 STATUS_TARGET = "target"
 

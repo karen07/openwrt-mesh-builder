@@ -13,30 +13,17 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from .config_io import load_json_config
-    from .default import (
-        CONFIG_KEY_SSH_KEY_DIR,
-        CONFIG_PATH,
-        SCP_COMMAND_TIMEOUT_GRACE_SEC,
-        SCP_TIMEOUT,
-        SSH_COMMAND_TIMEOUT_GRACE_SEC,
-        SSH_CONFIG_FILENAME,
-        SSH_TIMEOUT,
-    )
-    from .process import die, run_command, run_interactive
-except ImportError:
-    from config_io import load_json_config  # type: ignore
-    from default import (  # type: ignore
-        CONFIG_KEY_SSH_KEY_DIR,
-        CONFIG_PATH,
-        SCP_COMMAND_TIMEOUT_GRACE_SEC,
-        SCP_TIMEOUT,
-        SSH_COMMAND_TIMEOUT_GRACE_SEC,
-        SSH_CONFIG_FILENAME,
-        SSH_TIMEOUT,
-    )
-    from process import die, run_command, run_interactive  # type: ignore
+from .config_io import load_json_config
+from .default import (
+    CONFIG_KEY_SSH_KEY_DIR,
+    CONFIG_PATH,
+    SCP_COMMAND_TIMEOUT_GRACE_SEC,
+    SCP_TIMEOUT,
+    SSH_COMMAND_TIMEOUT_GRACE_SEC,
+    SSH_CONFIG_FILENAME,
+    SSH_TIMEOUT,
+)
+from .process import die, run_command, run_interactive
 
 
 def expand_user_path(value: str) -> Path:

@@ -3,24 +3,18 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .managed_blocks import (
-        consume_expected_uci_block,
-        generated_uci_management_keys,
-        render_marked_uci_text,
-        uci_counter_from_text,
-        uci_management_key,
-    )
-except ImportError:
-    from common import *  # type: ignore
-    from managed_blocks import (  # type: ignore
-        consume_expected_uci_block,
-        generated_uci_management_keys,
-        render_marked_uci_text,
-        uci_counter_from_text,
-        uci_management_key,
-    )
+from .config_model import ConfigData
+from .default import (
+    BABELD_LAN_IFACE,
+    BABELD_LOG_FILE,
+    BABELD_SPLIT_HORIZON,
+    BABELD_TUNNEL_TYPE,
+    BABELD_UBUS_BINDINGS,
+)
+from .file_ops import write
+from .layout import router_path
+from .stable_model import stable_babel_intervals
+from .uci import normalize_uci
 
 
 def update_network_part(
@@ -31,47 +25,13 @@ def update_network_part(
     ipip_text: str,
     exit_rule_text: str,
     access_text: str,
-    access_names: set[str],
 ) -> None:
+    # The existing file is also read earlier for tunnel key reuse.
     path = router_path(cfg, router_name, "network")
-    original = read(path)
-
-    before_marker, marker_and_tail = split_text_by_marker(original, path)
-
-    generated_parts = [access_text, mesh_text, exit_text, ipip_text, exit_rule_text]
-    managed_keys = generated_uci_management_keys(generated_parts)
-    anonymous_exit_blocks = uci_counter_from_text(
-        exit_rule_text, where="generate_network"
-    )
-
-    def keep_block(parsed: dict[str, object]) -> bool:
-        # Migrate the old named exit policy sections to anonymous UCI blocks.
-        name = str(parsed.get("name", ""))
-        typ = str(parsed.get("type", ""))
-        if typ == "rule" and name.startswith(LEGACY_EXIT_RULE_SECTION_PREFIX):
-            return False
-        if typ == "route" and name.startswith(LEGACY_EXIT_RULE_ROUTE_SECTION_PREFIX):
-            return False
-
-        # Current exit rule/route sections are anonymous.  Consume an exact
-        # generated match so repeated generation stays idempotent without
-        # assigning artificial UCI section names.  Changed/obsolete anonymous
-        # blocks remain unmanaged, matching the existing stale-object policy.
-        raw = str(parsed.get("raw", ""))
-        if raw and consume_expected_uci_block(
-            anonymous_exit_blocks, raw, where="generate_network"
-        ):
-            return False
-        return uci_management_key(parsed) not in managed_keys
-
-    preserved_before = filter_preserved_before_marker(before_marker, keep_block)
-
-    updated = render_marked_uci_text(
-        generated_parts,
-        preserved_before,
-        marker_and_tail,
-    )
-    write(path, updated)
+    parts = [access_text, mesh_text, exit_text, ipip_text, exit_rule_text]
+    blocks = [part.strip() for part in parts if part.strip()]
+    generated = normalize_uci("\n\n".join(blocks)).strip("\n")
+    write(path, "\n" + generated + "\n")
 
 
 def build_babeld_text(

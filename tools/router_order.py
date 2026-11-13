@@ -3,10 +3,8 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import RouterDef, build_config_data
-except ImportError:
-    from common import RouterDef, build_config_data
+from .config_builder import build_config_data
+from .config_model import RouterDef
 
 
 def router_slug(name: str) -> str:

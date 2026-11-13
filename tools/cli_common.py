@@ -5,15 +5,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .process import die, run_interactive
-except ImportError:
-    from process import die, run_interactive  # type: ignore
-
-
-def clear_screen(enabled: bool) -> None:
-    if enabled:
-        run_interactive(["clear"])
+from .process import die
 
 
 def command_from_argv(argv: list[str]) -> str:

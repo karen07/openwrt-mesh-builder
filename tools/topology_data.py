@@ -3,12 +3,15 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 
-from tools.common import (
-    ConfigData,
-    build_config_data,
+from .config_builder import build_config_data
+from .config_io import load_json_config
+from .config_model import ConfigData
+from .link_alias_model import (
     build_exit_client_alias,
     build_exit_exit_alias,
     build_exit_reverse_client_alias,
+)
+from .link_model import (
     client_iface_name_for_target,
     exit_exit_link_pairs,
     exit_in_iface_name,
@@ -17,9 +20,8 @@ from tools.common import (
     mesh_server_iface_name_for_target,
     public_exit_hub_names,
 )
-from tools.config_io import load_json_config
-from tools.topology_index import load_generated_topology_index
-from tools.topology_metrics import (
+from .topology_index import load_generated_topology_index
+from .topology_metrics import (
     STATUS_TARGET,
     SpeedRow,
     TopologyRoles,

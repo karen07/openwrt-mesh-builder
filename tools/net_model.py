@@ -5,42 +5,23 @@ sys.dont_write_bytecode = True
 import ipaddress
 import re
 
-try:
-    from .config_model import AccessGroup, ExitHub, RouterDef
-    from .default import (
-        ACCESS_SUBNET_CIDR,
-        EXIT_ANNOUNCE_PREFIXLEN,
-        EXIT_ANNOUNCE_SUPERNET4,
-        EXIT_NODE_PREFIXLEN,
-        EXIT_NODE_SUPERNET4,
-        INFRA_LINK_POOL,
-        IPV4_LINK_LOCAL_PREFIXLEN,
-        IPV4_OCTET_COUNT,
-        IPV4_OCTET_MAX,
-        IPV4_OCTET_MIN,
-        P2P_LINK_PREFIXLEN,
-    )
-    from .identifiers import CANONICAL_IPV4_RE
-    from .process import die
-    from .stable_model import stable_unique_values
-except ImportError:
-    from config_model import AccessGroup, ExitHub, RouterDef  # type: ignore
-    from default import (  # type: ignore
-        ACCESS_SUBNET_CIDR,
-        EXIT_ANNOUNCE_PREFIXLEN,
-        EXIT_ANNOUNCE_SUPERNET4,
-        EXIT_NODE_PREFIXLEN,
-        EXIT_NODE_SUPERNET4,
-        INFRA_LINK_POOL,
-        IPV4_LINK_LOCAL_PREFIXLEN,
-        IPV4_OCTET_COUNT,
-        IPV4_OCTET_MAX,
-        IPV4_OCTET_MIN,
-        P2P_LINK_PREFIXLEN,
-    )
-    from identifiers import CANONICAL_IPV4_RE  # type: ignore
-    from process import die  # type: ignore
-    from stable_model import stable_unique_values  # type: ignore
+from .config_model import AccessGroup, ExitHub, RouterDef
+from .default import (
+    ACCESS_SUBNET_CIDR,
+    EXIT_ANNOUNCE_PREFIXLEN,
+    EXIT_ANNOUNCE_SUPERNET4,
+    EXIT_NODE_PREFIXLEN,
+    EXIT_NODE_SUPERNET4,
+    INFRA_LINK_POOL,
+    IPV4_LINK_LOCAL_PREFIXLEN,
+    IPV4_OCTET_COUNT,
+    IPV4_OCTET_MAX,
+    IPV4_OCTET_MIN,
+    P2P_LINK_PREFIXLEN,
+)
+from .identifiers import CANONICAL_IPV4_RE
+from .process import die
+from .stable_model import stable_unique_values
 
 
 def parse_ipv4(ip: str) -> list[int]:

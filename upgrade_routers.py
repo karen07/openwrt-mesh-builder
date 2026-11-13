@@ -6,8 +6,8 @@ import argparse
 import shlex
 from pathlib import Path
 
-from tools.cli_common import ask_yes_no, clear_screen, parse_csv_names
-from tools.common import build_config_data, normalize_openwrt_version
+from tools.cli_common import ask_yes_no, parse_csv_names
+from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
 from tools.default import (
     ASYNC_SYSUPGRADE_DELAY_SEC,
@@ -26,12 +26,8 @@ from tools.remote_exec import run_captured_remote, scp_path_captured
 from tools.router_order import RouterDef, build_router_order, router_slug
 
 
-def router_openwrt_version(
-    router: RouterDef,
-    default_version: str,
-    version_override: str | None,
-) -> str:
-    return version_override or router.openwrt_version or default_version
+def router_openwrt_version(router: RouterDef, default_version: str) -> str:
+    return router.openwrt_version or default_version
 
 
 def find_image_for_router(
@@ -76,7 +72,6 @@ def copy_images(
     remote_dir: str,
     scp_timeout: int,
     default_openwrt_version: str,
-    version_override: str | None = None,
     config_path: str | Path = CONFIG_PATH,
 ) -> tuple[dict[str, Path], dict[str, str]]:
     copied: dict[str, Path] = {}
@@ -88,7 +83,6 @@ def copy_images(
         openwrt_version = router_openwrt_version(
             router,
             default_openwrt_version,
-            version_override,
         )
 
         try:
@@ -246,15 +240,6 @@ def main() -> None:
         help="path to config.json (default: config.json)",
     )
     ap.add_argument(
-        "--version",
-        default=None,
-        help=(
-            "override OpenWrt version for all selected routers. "
-            "Default: routers[].openwrt_version when set, otherwise "
-            "config openwrt_version"
-        ),
-    )
-    ap.add_argument(
         "--result-dir",
         default=str(RESULT_DIR),
         help="directory with build artifacts (default: images)",
@@ -276,20 +261,10 @@ def main() -> None:
         default=SCP_TIMEOUT,
         help=f"scp connect timeout in seconds (default: {SCP_TIMEOUT})",
     )
-    ap.add_argument(
-        "--no-clear",
-        action="store_true",
-        help="do not clear screen before output",
-    )
     args = ap.parse_args()
 
     cfg = load_json_config(Path(args.config))
     cfg_data = build_config_data(cfg)
-    version_override = (
-        normalize_openwrt_version(args.version, "--version")
-        if args.version is not None
-        else None
-    )
     routers = build_router_order(cfg)
     git_version, router_names = resolve_git_version_and_router_names(
         routers,
@@ -305,12 +280,8 @@ def main() -> None:
     if not result_dir.exists() or not result_dir.is_dir():
         die(f"images directory does not exist or is not a directory: {result_dir}")
 
-    clear_screen(not args.no_clear)
-
     print("=== COPYING IMAGES ===")
     print(f"git version: {git_version}")
-    if version_override is not None:
-        print(f"OpenWrt override: {version_override}")
     print(f"image dir: {result_dir}")
     print()
 
@@ -321,7 +292,6 @@ def main() -> None:
         remote_dir=args.remote_dir,
         scp_timeout=args.scp_timeout,
         default_openwrt_version=cfg_data.openwrt_version,
-        version_override=version_override,
         config_path=args.config,
     )
 

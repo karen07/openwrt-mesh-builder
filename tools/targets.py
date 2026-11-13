@@ -3,12 +3,8 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import build_config_data
-    from .process import die
-except ImportError:
-    from common import build_config_data
-    from process import die
+from .config_builder import build_config_data
+from .process import die
 
 
 def config_exit_names(cfg: dict[str, object]) -> list[str]:

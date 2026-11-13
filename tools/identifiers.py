@@ -4,11 +4,7 @@ import sys
 sys.dont_write_bytecode = True
 import re
 
-try:
-    from .process import die
-except ImportError:
-    from process import die
-
+from .process import die
 
 CONFIG_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
 EXIT_HUB_IDENTIFIER_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -69,9 +65,8 @@ def require_generated_linux_iface_name(value: str, where: str) -> None:
 def require_exit_hub_name(value: str, where: str) -> None:
     # The generated OpenWrt IPIP section is f"ip{value}". OpenWrt then
     # creates a Linux device named f"ipip-ip{value}", so the visible
-    # exit name itself may consume at most 8 ASCII bytes.  Keep this
-    # uppercase-only because exit_route_env_key() uppercases names for env
-    # variables, where lowercase names would otherwise collide/change.
+    # exit name itself may consume at most 8 ASCII bytes. Only uppercase
+    # names are accepted to keep generated identifiers case-stable.
     require_ascii_identifier(
         value,
         where,

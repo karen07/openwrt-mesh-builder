@@ -4,14 +4,33 @@ import sys
 sys.dont_write_bytecode = True
 import ipaddress
 
-try:
-    from .common import *
-    from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
-    from .validate_context import vprint
-except ImportError:
-    from common import *  # type: ignore
-    from tunnel_model import exit_hub_is_public, router_is_public_mesh_hub  # type: ignore
-    from validate_context import vprint  # type: ignore
+from .config_exit_model import (
+    router_exit_ipip_iface_name,
+    router_required_exit_hubs,
+    routing_exit_policy_ids,
+)
+from .config_model import ConfigData
+from .default import (
+    ACCESS_SUBNET_CIDR,
+    EXIT_RULE_PRIORITY,
+    P2P_LINK_PREFIXLEN,
+    PROTOCOL_AMNEZIAWG,
+)
+from .link_model import (
+    compute_exit_exit_link_params,
+    compute_exit_link_params,
+    compute_exit_reverse_link_params,
+    compute_mesh_link_params,
+    exit_exit_link_pairs,
+    exit_in_iface_name,
+    exit_out_iface_name,
+    mesh_iface_names_for_router,
+    mesh_link_specs,
+)
+from .net_model import exit_node_network, ipv4_to_link_local, ipv4_without_prefix
+from .process import die
+from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
+from .validate_context import vprint
 
 
 def validate_link_is_31_pair(server_ip: str, client_ip: str, where: str) -> None:
@@ -45,22 +64,6 @@ def validate_link_is_31_pair(server_ip: str, client_ip: str, where: str) -> None
         )
 
 
-def expected_mesh_exit_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    return current_mesh_exit_ifaces(cfg, router_name)
-
-
-def expected_access_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    return {group.name for group in cfg.access.get(router_name, [])}
-
-
-def expected_wireguard_access_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    return {
-        group.name
-        for group in cfg.access.get(router_name, [])
-        if group.protocol == PROTOCOL_WIREGUARD
-    }
-
-
 def expected_amneziawg_access_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
     return {
         group.name
@@ -88,21 +91,6 @@ def expected_tunnel_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
     return expected_babel_tunnel_ifaces(cfg, router_name)
 
 
-def expected_managed_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    return expected_mesh_exit_ifaces(cfg, router_name) | expected_access_ifaces(
-        cfg, router_name
-    )
-
-
-def validate_current_network_objects(
-    cfg: ConfigData, existing: dict[str, dict[str, dict[str, object]]]
-) -> None:
-    # Extra objects from an older configuration are intentionally allowed.
-    # Current generated objects are validated by the dedicated validators;
-    # leftovers are reported by show_unmanaged instead of being rejected here.
-    _ = cfg, existing
-
-
 def validate_exit_rule_network_objects(
     cfg: ConfigData,
     existing: dict[str, dict[str, dict[str, object]]],
@@ -111,11 +99,8 @@ def validate_exit_rule_network_objects(
 
     for router_name in cfg.router_names:
         parsed = existing[router_name]
-        rules = cfg.routing_rules_by_router.get(router_name, [])
-        expected_exit_names = {
-            rule.exit_name for rule in rules if rule.exit_name is not None
-        }
-        for exit_name in expected_exit_names:
+        for hub in router_required_exit_hubs(cfg, router_name):
+            exit_name = hub.name
             policy_id = policy_ids[exit_name]
             rule_expected = {
                 "priority": str(EXIT_RULE_PRIORITY),

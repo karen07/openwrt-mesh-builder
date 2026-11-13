@@ -5,40 +5,16 @@ sys.dont_write_bytecode = True
 import re
 from pathlib import Path
 
-try:
-    from .default import OWMB_ENC_MATERIAL_MARKER
-    from .file_ops import has_any_owmb_marker, read, write
-    from .process import die
-    from .secrets import decrypt_value as decrypt_owmb_value
-    from .secrets import encrypt_material_value
-    from .wg_keys import (
-        derive_public_key,
-        generate_private_key,
-        normalize_private_key,
-    )
-except ImportError:
-    import importlib.util
-
-    from default import OWMB_ENC_MATERIAL_MARKER
-    from file_ops import has_any_owmb_marker, read, write
-    from process import die
-    from wg_keys import (
-        derive_public_key,
-        generate_private_key,
-        normalize_private_key,
-    )
-
-    _secrets_path = Path(__file__).with_name("secrets.py")
-    _secrets_spec = importlib.util.spec_from_file_location(
-        "owmb_local_secrets", _secrets_path
-    )
-    if _secrets_spec is None or _secrets_spec.loader is None:
-        raise ImportError(f"cannot load {_secrets_path}")
-    _secrets_module = importlib.util.module_from_spec(_secrets_spec)
-    _secrets_spec.loader.exec_module(_secrets_module)
-    decrypt_owmb_value = _secrets_module.decrypt_value
-    encrypt_material_value = _secrets_module.encrypt_material_value
-
+from .default import OWMB_ENC_MATERIAL_MARKER
+from .file_ops import has_any_owmb_marker, read, write
+from .process import die
+from .secrets import decrypt_value as decrypt_owmb_value
+from .secrets import encrypt_material_value
+from .wg_keys import (
+    derive_public_key,
+    generate_private_key,
+    normalize_private_key,
+)
 
 PRIVATE_KEY_LINE_RE = re.compile(r"(?m)^\s*PrivateKey\s*=\s*(.*?)\s*$")
 ENC_MATERIAL_RE = re.compile(
@@ -67,11 +43,8 @@ def extract_tunnel_private_key_value(text: str) -> str | None:
     if not value:
         return None
 
-    # WireGuard-style config values are normally single-line, but an OWMB marker
-    # can be line-wrapped manually or by `secrets.py --wrap`. In that case the
-    # old one-token regexp captured only `OWMB_ENC_MATERIAL_V1` and fed that to
-    # `wg pubkey`, producing "Trailing characters found after key". Collect the
-    # marker body until the closing brace before decrypting.
+    # WireGuard-style config values are normally single-line, but OWMB markers
+    # may be wrapped. Collect the full marker before decrypting its key.
     if has_any_owmb_marker(value) and "}" not in value:
         tail = text[m.end() :]
         extra: list[str] = []
@@ -82,6 +55,11 @@ def extract_tunnel_private_key_value(text: str) -> str | None:
         value = "\n".join([value, *extra]).strip()
 
     return value
+
+
+def require_encrypted_material(value: str, where: str) -> None:
+    if not isinstance(value, str) or not ENC_MATERIAL_RE.fullmatch(value.strip()):
+        die(f"{where}: expected {OWMB_ENC_MATERIAL_MARKER} encrypted key material")
 
 
 def wireguard_private_key_plaintext(value: str) -> str:
@@ -97,6 +75,7 @@ def material_plaintext(value: str) -> str:
     # marker surrounding whitespace before decrypting so repeated OpenVPN runs do
     # not add one more newline to the decrypted private key on every generation.
     if has_any_owmb_marker(value):
+        require_encrypted_material(value, "key material")
         plain = decrypt_owmb_value(value.strip())
         remember_encrypted_material(value, plain)
         return plain
@@ -104,14 +83,12 @@ def material_plaintext(value: str) -> str:
 
 
 def stored_key_material(value: str) -> str:
-    # Store every known private/key-material value as an encrypted material marker.
-    # This intentionally acts as a one-pass migration: legacy plaintext values and
-    # OWMB_PLAIN_MATERIAL_V1 values are converted to OWMB_ENC_MATERIAL_V1 when the
-    # generator rewrites the file.
+    # Newly generated plaintext keys are encrypted on output. Existing stored
+    # keys must already use the only supported encrypted material format.
     plain = material_plaintext(value)
-    old_marker = _ENCRYPTED_MATERIAL_BY_PLAINTEXT.get(plain)
-    if old_marker is not None:
-        return old_marker
+    cached_marker = _ENCRYPTED_MATERIAL_BY_PLAINTEXT.get(plain)
+    if cached_marker is not None:
+        return cached_marker
     return encrypt_material_value(plain)
 
 
@@ -120,7 +97,9 @@ def write_material_file(path: Path, plaintext: str) -> None:
 
 
 def material_file_for_tool(path: Path, tmp_dir: Path, name: str) -> Path:
-    plain = material_plaintext(read(path))
+    source = read(path)
+    require_encrypted_material(source, str(path))
+    plain = material_plaintext(source)
     out = tmp_dir / name
     out.write_text(plain, encoding="utf-8")
     out.chmod(0o600)
@@ -131,6 +110,8 @@ def parse_existing_tunnel_conf(path: Path) -> tuple[str | None, str | None]:
     if not path.exists():
         return None, None
     value = extract_tunnel_private_key_value(read(path))
+    if value:
+        require_encrypted_material(value, str(path))
     priv = wireguard_private_key_plaintext(value) if value else None
     return priv, (public_key_from_private(priv) if priv else None)
 

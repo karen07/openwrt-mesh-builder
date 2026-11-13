@@ -11,19 +11,13 @@ from datetime import datetime
 from pathlib import Path
 
 from tools.cli_common import parse_csv_names
-from tools.common import (
-    ConfigData,
-    DeviceProfile,
-    RouterDef,
-    build_config_data,
-    normalize_openwrt_version,
-)
+from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
+from tools.config_model import ConfigData, DeviceProfile, RouterDef
 from tools.default import (
     CONFIG_PATH,
     IMAGES_DIR,
     INSTALL_IMAGE_TYPES,
-    MIN_OPENWRT_VERSION_TEXT,
     OPENWRT_RELEASE_BASE_URL,
     ROUTER_FILES_DIRNAME,
     ROUTER_PACKAGES_DIRNAME,
@@ -66,19 +60,7 @@ def router_packages(cfg: ConfigData, router: RouterDef) -> list[str]:
     return managed_router_packages(cfg, router)
 
 
-def normalize_version_override(override: str | None) -> str | None:
-    if override is None:
-        return None
-    return normalize_openwrt_version(override, "--version")
-
-
-def router_openwrt_version(
-    cfg_data: ConfigData,
-    router: RouterDef,
-    override: str | None,
-) -> str:
-    if override is not None:
-        return override
+def router_openwrt_version(cfg_data: ConfigData, router: RouterDef) -> str:
     return router.openwrt_version or cfg_data.openwrt_version
 
 
@@ -117,12 +99,11 @@ def imagebuilder_spec(profile: DeviceProfile, version: str) -> ImageBuilderSpec:
 def collect_imagebuilders(
     cfg: ConfigData,
     routers: list[RouterDef],
-    version_override: str | None,
 ) -> dict[tuple[str, str, str], ImageBuilderSpec]:
     builders: dict[tuple[str, str, str], ImageBuilderSpec] = {}
 
     for router in routers:
-        version = router_openwrt_version(cfg, router, version_override)
+        version = router_openwrt_version(cfg, router)
         spec = imagebuilder_spec(router_profile(cfg, router), version)
         builders.setdefault(spec.key, spec)
 
@@ -170,7 +151,7 @@ def collect_router_install_images(
     router_tmp: str,
 ) -> list[tuple[Path, str]]:
     # Release images are named like:
-    #   openwrt-25.12.1-mediatek-filogic-<profile>-...
+    #   openwrt-25.12.6-mediatek-filogic-<profile>-...
     # Snapshot images additionally contain the build revision:
     #   openwrt-25.12-snapshot-r33187-ecbf832c08-mediatek-filogic-<profile>-...
     #
@@ -344,7 +325,6 @@ def build_failure_text(exc: BaseException) -> str:
 def build_routers_parallel(
     cfg: ConfigData,
     routers: list[RouterDef],
-    version_override: str | None,
     config_path: Path,
     builders: dict[tuple[str, str, str], ImageBuilderSpec],
     jobs: int,
@@ -362,7 +342,7 @@ def build_routers_parallel(
     ) as executor:
         for router in routers:
             profile = router_profile(cfg, router)
-            version = router_openwrt_version(cfg, router, version_override)
+            version = router_openwrt_version(cfg, router)
             imagebuilder = builders[(version, profile.target, profile.subtarget)]
             future = executor.submit(
                 build_router,
@@ -418,16 +398,6 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--version",
-        default=None,
-        help=(
-            f"override OpenWrt version for all selected routers, for example "
-            f"{MIN_OPENWRT_VERSION_TEXT}.4 or {MIN_OPENWRT_VERSION_TEXT}-SNAPSHOT. "
-            "Default: routers[].openwrt_version when set, otherwise "
-            "config openwrt_version"
-        ),
-    )
-    parser.add_argument(
         "--config",
         default=str(CONFIG_PATH),
         help="path to JSON config file (default: config.json)",
@@ -447,7 +417,6 @@ def main() -> None:
 
     config_path = Path(args.config)
     cfg_data = load_config(config_path)
-    version_override = normalize_version_override(args.version)
 
     routers = cfg_data.routers
     router_names = parse_csv_names(args.routers)
@@ -460,14 +429,13 @@ def main() -> None:
     for router in routers:
         validate_router_build_inputs(router)
 
-    builders = collect_imagebuilders(cfg_data, routers, version_override)
+    builders = collect_imagebuilders(cfg_data, routers)
     prepare_imagebuilders(builders)
 
     jobs = args.jobs if args.jobs is not None else default_jobs(len(routers))
     build_routers_parallel(
         cfg_data,
         routers,
-        version_override,
         config_path,
         builders,
         jobs,

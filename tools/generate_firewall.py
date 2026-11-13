@@ -3,30 +3,48 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .managed_blocks import (
-        generated_uci_management_keys,
-        render_marked_uci_text,
-        uci_management_key,
-    )
-    from .tunnel_model import (
-        exit_reverse_firewall_rule_name,
-        router_exit_listen_port,
-    )
-    from .uci import parse_uci_block, split_uci_blocks
-except ImportError:
-    from common import *  # type: ignore
-    from managed_blocks import (  # type: ignore
-        generated_uci_management_keys,
-        render_marked_uci_text,
-        uci_management_key,
-    )
-    from tunnel_model import (  # type: ignore
-        exit_reverse_firewall_rule_name,
-        router_exit_listen_port,
-    )
-    from uci import parse_uci_block, split_uci_blocks  # type: ignore
+from .config_exit_model import routing_exit_policy_ids
+from .config_firewall_model import (
+    expand_firewall_targets,
+    firewall_allow_rule_name,
+    mesh_firewall_rule_name,
+)
+from .config_model import AccessGroup, ConfigData
+from .config_schema import FIREWALL_ALLOW_KIND_LAN
+from .default import (
+    ACCESS_POLICY_TRANSIT,
+    ACCESS_POLICY_TRUSTED,
+    DNS_PORT,
+    DNS_PROTOCOLS,
+    EXIT_POLICY_BASE,
+    FIREWALL_TARGET_ACCEPT,
+    FIREWALL_TARGET_REJECT,
+    FIREWALL_ZONE_LAN,
+    FIREWALL_ZONE_WAN,
+    PROTOCOL_OPENVPN,
+    ROUTING_WAN_MARK_TEXT,
+    RUNTIME_DIRECT_OUT_NAME,
+    RUNTIME_DIRECT_STATIC_NAME,
+    RUNTIME_IPSETS_DIR,
+    TRANSIT_ACCESS_DNS_RULE_NAME,
+    TRANSPORT_TCP,
+    TRANSPORT_UDP,
+    ZONE_EXIT,
+    ZONE_EXIT_IPIP,
+    ZONE_MESH,
+    ZONE_TRANSIT_ACCESS,
+    ZONE_TRUSTED_ACCESS,
+)
+from .file_ops import write
+from .generate_runtime import build_exit_route_config
+from .layout import router_path
+from .link_model import compute_mesh_link_params, mesh_link_specs_for_hub
+from .network_config import uci_block
+from .tunnel_model import (
+    exit_reverse_firewall_rule_name,
+    router_exit_listen_port,
+)
+from .uci import parse_uci_block, split_uci_blocks
 
 
 def build_zone(
@@ -104,63 +122,346 @@ def build_rule_allow_dns_transit_access() -> str:
     )
 
 
-def routing_firewall_rule_name(rule: RoutingRule) -> str:
-    src = rule.src_ip.split("/", 1)[0].replace(".", "_")
-    if rule.mode == ROUTING_MODE_WAN:
-        return f"{ROUTING_FIREWALL_RULE_PREFIX}WAN-{src}"
-    assert rule.exit_name is not None
-    mode = rule.mode.capitalize()
-    return f"{ROUTING_FIREWALL_RULE_PREFIX}{mode}-{rule.exit_name}-{src}"
-
-
-def build_routing_firewall_blocks(cfg: ConfigData, router_name: str) -> list[str]:
-    policy_ids = routing_exit_policy_ids(cfg)
-    blocks: list[str] = []
-
-    for rule in cfg.routing_rules_by_router.get(router_name, []):
-        src_ip = rule.src_ip.split("/", 1)[0]
-        options = {
-            "name": routing_firewall_rule_name(rule),
-            "src": FIREWALL_ZONE_LAN,
-            "src_ip": src_ip,
-            "dest": "*",
-            "target": "MARK",
-            "family": "ipv4",
+def build_common_firewall_blocks(
+    present_zones: set[str] | None = None,
+    *,
+    initial_mode: str = "AUTO",
+) -> list[str]:
+    if present_zones is None:
+        present_zones = {
+            FIREWALL_ZONE_LAN,
+            FIREWALL_ZONE_WAN,
+            ZONE_MESH,
+            ZONE_EXIT,
+            ZONE_EXIT_IPIP,
+            ZONE_TRUSTED_ACCESS,
+            ZONE_TRANSIT_ACCESS,
         }
+    blocks: list[str] = []
+    for zone in (ZONE_MESH, ZONE_EXIT):
+        if zone not in present_zones:
+            continue
+        for port, proto, label in (
+            (6696, ["udp"], "Babel"),
+            (5201, ["tcp", "udp"], "Iperf"),
+        ):
+            options = {
+                "name": f"Allow-{label}-{zone}",
+                "src": zone,
+                "dest_port": str(port),
+                "target": FIREWALL_TARGET_ACCEPT,
+            }
+            if len(proto) == 1:
+                options["proto"] = proto[0]
+            blocks.append(
+                uci_block(
+                    "rule",
+                    None,
+                    options=options,
+                    lists={"proto": proto} if len(proto) > 1 else None,
+                ).strip()
+            )
 
-        if rule.mode == ROUTING_MODE_WAN:
-            options["set_mark"] = ROUTING_WAN_MARK_TEXT
-        else:
-            assert rule.exit_name is not None
-            options["set_mark"] = str(policy_ids[rule.exit_name])
-            if rule.mode == ROUTING_MODE_SPLIT:
-                options["ipset"] = "!direct"
-
+    for zone, name in (
+        (FIREWALL_ZONE_LAN, "Exitlan"),
+        (ZONE_TRUSTED_ACCESS, "ExitTrustedAccess"),
+        (ZONE_TRANSIT_ACCESS, "ExitTransitAccess"),
+    ):
+        if zone not in present_zones:
+            continue
         blocks.append(
             uci_block(
                 "rule",
                 None,
-                options=options,
+                options={
+                    "name": name,
+                    "src": zone,
+                    "dest": "*",
+                    **(
+                        {"ipset": "!direct"}
+                        if initial_mode not in {"EXIT_FAIL_OPEN", "EXIT_FAIL_CLOSED"}
+                        else {}
+                    ),
+                    **({"enabled": "0"} if initial_mode == "DIRECT" else {}),
+                    "mark": "0",
+                    "target": "MARK",
+                    "set_mark": str(EXIT_POLICY_BASE),
+                    "family": "ipv4",
+                },
                 lists={"proto": ["all"]},
             ).strip()
         )
 
+    blocks.append(
+        uci_block(
+            "ipset",
+            None,
+            options={
+                "name": "main",
+                "family": "ipv4",
+                "loadfile": f"{RUNTIME_IPSETS_DIR}/{RUNTIME_DIRECT_STATIC_NAME}",
+                "timeout": "0",
+                "counters": "0",
+            },
+            lists={"match": ["dest_net"]},
+        ).strip()
+    )
+
+    blocks.append(
+        uci_block(
+            "ipset",
+            None,
+            options={
+                "name": "direct",
+                "family": "ipv4",
+                "loadfile": f"{RUNTIME_IPSETS_DIR}/{RUNTIME_DIRECT_OUT_NAME}",
+                "timeout": "0",
+                "counters": "0",
+            },
+            lists={"match": ["dest_net"]},
+        ).strip()
+    )
+
+    for zone, name in (
+        (FIREWALL_ZONE_LAN, "ExitRouteDirectDropLan"),
+        (ZONE_TRUSTED_ACCESS, "ExitRouteDirectDropTrustedAccess"),
+        (ZONE_TRANSIT_ACCESS, "ExitRouteDirectDropTransitAccess"),
+    ):
+        if zone not in present_zones:
+            continue
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": name,
+                    "src": zone,
+                    "dest": "*",
+                    "mark": str(EXIT_POLICY_BASE),
+                    "ipset": "direct",
+                    "target": "DROP",
+                    "family": "ipv4",
+                    "proto": "all",
+                    **(
+                        {"enabled": "0"}
+                        if initial_mode not in {"EXIT_FAIL_OPEN", "EXIT_FAIL_CLOSED"}
+                        else {}
+                    ),
+                },
+            ).strip()
+        )
+
+    # Fixed strict policies without a Babel route must not fall back to WAN.
+    # The global mark is assigned in prerouting; individual DIRECT/SPLIT
+    # overrides use a different mark and are not affected by this DROP.
+    for zone, name in (
+        (FIREWALL_ZONE_LAN, "ExitRouteUnavailableLan"),
+        (ZONE_TRUSTED_ACCESS, "ExitRouteUnavailableTrustedAccess"),
+        (ZONE_TRANSIT_ACCESS, "ExitRouteUnavailableTransitAccess"),
+    ):
+        if zone not in present_zones:
+            continue
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": name,
+                    "src": zone,
+                    "dest": "*",
+                    "mark": str(EXIT_POLICY_BASE),
+                    "ipset": "!main",
+                    "target": "DROP",
+                    "family": "ipv4",
+                    "proto": "all",
+                    "enabled": "0",
+                },
+            ).strip()
+        )
+
+    # Reject a strict-policy packet if a missing IPIP route resolves to WAN.
+    # The main and direct exceptions are marked 9999 and do not match.
+    for zone, name in (
+        (FIREWALL_ZONE_LAN, "ExitRouteWanGuardLan"),
+        (ZONE_TRUSTED_ACCESS, "ExitRouteWanGuardTrustedAccess"),
+        (ZONE_TRANSIT_ACCESS, "ExitRouteWanGuardTransitAccess"),
+    ):
+        if zone not in present_zones:
+            continue
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": name,
+                    "src": zone,
+                    "dest": FIREWALL_ZONE_WAN,
+                    "mark": str(EXIT_POLICY_BASE),
+                    "target": "DROP",
+                    "family": "ipv4",
+                    "proto": "all",
+                    **(
+                        {}
+                        if initial_mode in {"SPLIT_FAIL_CLOSED", "EXIT_FAIL_CLOSED"}
+                        else {"enabled": "0"}
+                    ),
+                },
+            ).strip()
+        )
+
+    for src, destinations in (
+        (FIREWALL_ZONE_LAN, (ZONE_EXIT_IPIP, ZONE_EXIT, ZONE_MESH)),
+        (ZONE_MESH, (ZONE_EXIT,)),
+        (ZONE_EXIT, (ZONE_MESH,)),
+        (
+            ZONE_TRUSTED_ACCESS,
+            (
+                FIREWALL_ZONE_LAN,
+                ZONE_MESH,
+                ZONE_EXIT,
+                ZONE_EXIT_IPIP,
+                FIREWALL_ZONE_WAN,
+            ),
+        ),
+        (
+            ZONE_TRANSIT_ACCESS,
+            (ZONE_MESH, ZONE_EXIT, ZONE_EXIT_IPIP, FIREWALL_ZONE_WAN),
+        ),
+    ):
+        if src not in present_zones:
+            continue
+        for dest in destinations:
+            if dest not in present_zones:
+                continue
+            blocks.append(
+                uci_block("forwarding", None, options={"src": src, "dest": dest})
+            )
+
     return blocks
 
 
-def validate_firewall_shared_tail(marker_and_tail: str, path: Path) -> None:
-    for block in split_uci_blocks(marker_and_tail):
-        parsed = parse_uci_block(block)
-        if parsed.get("type") != "rule":
-            continue
+def build_initial_device_firewall_blocks(
+    cfg: ConfigData, router_name: str
+) -> list[str]:
+    effective = build_exit_route_config(cfg, router_name)
+    sections = [parse_uci_block(block) for block in split_uci_blocks(effective)]
+    policy_ids = routing_exit_policy_ids(cfg)
+    blocks: list[str] = []
 
-        name = str(parsed.get("options", {}).get("name", ""))
-        if name.startswith(ROUTING_FIREWALL_RULE_PREFIX):
-            die(
-                f"router-specific firewall rule {name!r} found after "
-                f"{FIREWALL_MARKER!r} in {path}; the shared tail is owned "
-                "by routers/example"
+    def add_mark_rule(ip: str, suffix: str, mark: str, ipset: str = "") -> None:
+        section = "exit_route_dev_" + ip.replace(".", "_") + "_" + suffix
+        options = {
+            "name": f"ExitRoute-{section}",
+            "src": FIREWALL_ZONE_LAN,
+            "src_ip": ip,
+            "dest": "*",
+            "target": "MARK",
+            "family": "ipv4",
+            "proto": "all",
+            "set_mark": mark,
+        }
+        if ipset:
+            options["ipset"] = ipset
+        blocks.append(uci_block("rule", None, options=options).strip())
+
+    def add_drop_rule(ip: str, mark: str) -> None:
+        section = "exit_route_dev_" + ip.replace(".", "_") + "_drop"
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": f"ExitRoute-{section}",
+                    "src": FIREWALL_ZONE_LAN,
+                    "src_ip": ip,
+                    "dest": "*",
+                    "target": "DROP",
+                    "mark": mark,
+                    "ipset": "direct",
+                    "family": "ipv4",
+                    "proto": "all",
+                },
+            ).strip()
+        )
+
+    def add_block_rule(ip: str, mark: str | None = None) -> None:
+        section = "exit_route_dev_" + ip.replace(".", "_") + "_block"
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": f"ExitRoute-{section}",
+                    "src": FIREWALL_ZONE_LAN,
+                    "src_ip": ip,
+                    "dest": "*",
+                    "target": "DROP",
+                    "ipset": "!main",
+                    "family": "ipv4",
+                    "proto": "all",
+                    **({"mark": mark} if mark else {}),
+                },
+            ).strip()
+        )
+
+    def add_wan_guard(ip: str, mark: str) -> None:
+        section = "exit_route_dev_" + ip.replace(".", "_") + "_guard"
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": f"ExitRoute-{section}",
+                    "src": FIREWALL_ZONE_LAN,
+                    "src_ip": ip,
+                    "dest": FIREWALL_ZONE_WAN,
+                    "target": "DROP",
+                    "mark": mark,
+                    "family": "ipv4",
+                    "proto": "all",
+                },
+            ).strip()
+        )
+
+    for section in sections:
+        if section.get("type") != "device":
+            continue
+        options = section["options"]
+        if options.get("disabled") == "1":
+            continue
+        ip = options["ip"]
+        mode = options["mode"]
+        exit_name = options.get("exit", "")
+        if mode == "DIRECT":
+            add_mark_rule(ip, "exit", ROUTING_WAN_MARK_TEXT)
+        elif (
+            mode
+            in {
+                "SPLIT_FAIL_OPEN",
+                "SPLIT_FAIL_CLOSED",
+                "EXIT_FAIL_OPEN",
+                "EXIT_FAIL_CLOSED",
+            }
+            and exit_name in policy_ids
+        ):
+            if mode in {"SPLIT_FAIL_OPEN", "SPLIT_FAIL_CLOSED"}:
+                add_mark_rule(ip, "direct", ROUTING_WAN_MARK_TEXT, "direct")
+            add_mark_rule(
+                ip,
+                "exit",
+                str(policy_ids[exit_name]),
+                "!direct" if mode in {"SPLIT_FAIL_OPEN", "SPLIT_FAIL_CLOSED"} else "",
             )
+            if mode in {"EXIT_FAIL_OPEN", "EXIT_FAIL_CLOSED"}:
+                add_drop_rule(ip, str(policy_ids[exit_name]))
+            if mode in {"SPLIT_FAIL_CLOSED", "EXIT_FAIL_CLOSED"}:
+                # Initial state is fail-closed until Babel reachability is known.
+                add_block_rule(
+                    ip,
+                    str(policy_ids[exit_name]) if mode == "SPLIT_FAIL_CLOSED" else None,
+                )
+                add_wan_guard(ip, str(policy_ids[exit_name]))
+    return blocks
 
 
 def build_firewall_blocks(
@@ -290,43 +591,54 @@ def build_firewall_blocks(
                 ).strip()
             )
 
-    blocks.extend(build_routing_firewall_blocks(cfg, router_name))
+    present_zones = {FIREWALL_ZONE_LAN, FIREWALL_ZONE_WAN}
+    if mesh_ifaces:
+        present_zones.add(ZONE_MESH)
+    if exit_ifaces:
+        present_zones.add(ZONE_EXIT)
+    if exit_ipip_ifaces:
+        present_zones.add(ZONE_EXIT_IPIP)
+    if trusted_access_ifaces:
+        present_zones.add(ZONE_TRUSTED_ACCESS)
+    if transit_access_ifaces:
+        present_zones.add(ZONE_TRANSIT_ACCESS)
+
+    initial_mode = cfg.exit_routes_by_router[router_name].mode
+    blocks.extend(
+        build_common_firewall_blocks(
+            present_zones,
+            initial_mode=initial_mode,
+        )
+    )
+    blocks.extend(build_initial_device_firewall_blocks(cfg, router_name))
+
+    # A final main MARK overrides both global and per-device policy marks.
+    # It is deliberately last, and runtime maintains this ordering.
+    for zone, name in (
+        (FIREWALL_ZONE_LAN, "ExitRouteMainLan"),
+        (ZONE_TRUSTED_ACCESS, "ExitRouteMainTrustedAccess"),
+        (ZONE_TRANSIT_ACCESS, "ExitRouteMainTransitAccess"),
+    ):
+        if zone not in present_zones:
+            continue
+        blocks.append(
+            uci_block(
+                "rule",
+                None,
+                options={
+                    "name": name,
+                    "src": zone,
+                    "dest": "*",
+                    "ipset": "main",
+                    "target": "MARK",
+                    "set_mark": ROUTING_WAN_MARK_TEXT,
+                    "family": "ipv4",
+                    "proto": "all",
+                },
+            ).strip()
+        )
 
     return blocks
-
-
-def sync_direct_ipset_loadfile(text: str, path: Path) -> str:
-    desired = f"{RUNTIME_IPSETS_DIR.rstrip('/')}/{RUNTIME_DIRECT_OUT_NAME}"
-    lines = text.splitlines(keepends=True)
-
-    starts = [i for i, line in enumerate(lines) if line.startswith("config ")]
-    starts.append(len(lines))
-
-    found = False
-    for idx in range(len(starts) - 1):
-        start = starts[idx]
-        end = starts[idx + 1]
-        block = lines[start:end]
-        if not block or block[0].strip() != "config ipset":
-            continue
-        if not any(line.strip() == "option name 'direct'" for line in block):
-            continue
-
-        for line_idx in range(start, end):
-            stripped = lines[line_idx].strip()
-            if not stripped.startswith("option loadfile "):
-                continue
-            indent_len = len(lines[line_idx]) - len(lines[line_idx].lstrip())
-            indent = lines[line_idx][:indent_len]
-            newline = "\n" if lines[line_idx].endswith("\n") else ""
-            lines[line_idx] = f"{indent}option loadfile '{desired}'{newline}"
-            found = True
-            break
-
-    if not found:
-        die(f"missing direct ipset loadfile option in {path}")
-
-    return "".join(lines)
 
 
 def update_firewall_part(
@@ -337,63 +649,13 @@ def update_firewall_part(
     exit_ipip_ifaces: list[str],
     access_groups_for_router: list[AccessGroup],
 ) -> None:
-    path = router_path(cfg, router_name, "firewall")
-    original = sync_direct_ipset_loadfile(read(path), path)
-
-    before_marker, marker_and_tail = split_text_by_marker(original, path)
-    validate_firewall_shared_tail(marker_and_tail, path)
+    # This file is entirely generated; the example template is not consulted.
     blocks = build_firewall_blocks(
-        cfg=cfg,
-        router_name=router_name,
-        mesh_ifaces=mesh_ifaces,
-        exit_ifaces=exit_ifaces,
-        exit_ipip_ifaces=exit_ipip_ifaces,
-        access_groups_for_router=access_groups_for_router,
+        cfg,
+        router_name,
+        mesh_ifaces,
+        exit_ifaces,
+        exit_ipip_ifaces,
+        access_groups_for_router,
     )
-    managed_keys = generated_uci_management_keys(blocks)
-
-    # Migration: allow rules used to omit the ingress suffix for Mesh, e.g.
-    # Allow-Devices-To-Anna-Router.  Since generated UCI ownership is keyed by
-    # option name, a plain rename would otherwise preserve that old generated
-    # section as unmanaged.  Remove only legacy names that correspond to an
-    # allow which is still present in the current config for this target.
-    legacy_allow_names: set[str] = set()
-    for allow in cfg.firewall_allows:
-        if router_name not in expand_firewall_targets(cfg, allow):
-            continue
-        legacy_allow_names.add(
-            legacy_firewall_allow_rule_name(allow.source_name, router_name, allow.kind)
-        )
-
-    def keep_block(parsed: dict[str, object]) -> bool:
-        options = parsed.get("options", {})
-        if (
-            parsed.get("type") == "rule"
-            and isinstance(options, dict)
-            and str(options.get("name", "")) in legacy_allow_names
-        ):
-            return False
-        return uci_management_key(parsed) not in managed_keys
-
-    preserved_before = filter_preserved_before_marker(before_marker, keep_block)
-
-    # Render only the router-specific part.  The marker and everything after
-    # it are owned by routers/example and sync_rules.py, so append that text
-    # exactly as it was read instead of passing it through a UCI renderer.
-    rendered_before = render_marked_uci_text(
-        blocks,
-        preserved_before,
-        "",
-        leading_newline=True,
-        normalize_result=False,
-    )
-    if rendered_before:
-        updated = rendered_before.rstrip("\n") + "\n\n" + marker_and_tail
-    else:
-        updated = marker_and_tail
-
-    _updated_before, updated_tail = split_text_by_marker(updated, path)
-    if updated_tail != marker_and_tail:
-        die(f"internal error: shared firewall tail changed for {path}")
-
-    write(path, updated)
+    write(router_path(cfg, router_name, "firewall"), "\n" + "\n\n".join(blocks) + "\n")

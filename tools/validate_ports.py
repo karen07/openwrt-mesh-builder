@@ -3,22 +3,35 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .tunnel_model import (
-        exit_hub_is_public,
-        router_exit_listen_port,
-        router_is_public_mesh_hub,
-    )
-    from .validate_context import vprint
-except ImportError:
-    from common import *  # type: ignore
-    from tunnel_model import (  # type: ignore
-        exit_hub_is_public,
-        router_exit_listen_port,
-        router_is_public_mesh_hub,
-    )
-    from validate_context import vprint  # type: ignore
+import re
+
+from .config_model import AccessGroup, ConfigData
+from .default import (
+    PORT_MAX,
+    PORT_MIN,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+)
+from .file_ops import read
+from .layout import router_openvpn_server_conf_path
+from .link_alias_model import build_exit_client_alias, build_exit_exit_alias
+from .link_model import (
+    compute_exit_exit_link_params,
+    compute_exit_link_params,
+    compute_mesh_link_params,
+    exit_exit_peer_names_for_hub,
+    exit_in_iface_name,
+    mesh_link_specs_for_hub,
+    mesh_server_iface_name_for_target,
+)
+from .process import die
+from .tunnel_model import (
+    exit_hub_is_public,
+    router_exit_listen_port,
+    router_is_public_mesh_hub,
+)
+from .validate_context import vprint
 
 
 def add_port(used: dict[int, str], port: int, desc: str, scope: str) -> None:

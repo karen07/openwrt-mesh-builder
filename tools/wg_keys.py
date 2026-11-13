@@ -6,11 +6,7 @@ import sys
 sys.dont_write_bytecode = True
 import re
 
-try:
-    from .process import need, run_checked
-except ImportError:
-    from process import need, run_checked
-
+from .process import need, run_checked
 
 WG_PRIVATE_KEY_RE = re.compile(r"^[A-Za-z0-9+/]{43}=$")
 WG_PRIVATE_KEY_TOKEN_RE = re.compile(

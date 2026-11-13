@@ -4,10 +4,7 @@ import sys
 sys.dont_write_bytecode = True
 import re
 
-try:
-    from .default import FIREWALL_MARKER
-except ImportError:
-    from default import FIREWALL_MARKER  # type: ignore
+from .default import FIREWALL_MARKER
 
 
 def split_uci_blocks(text: str) -> list[str]:

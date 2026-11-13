@@ -4,22 +4,19 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .generated_files import exit_server_aliases_for_hub
-    from .validate_network import (
-        expected_amneziawg_access_ifaces,
-        expected_tunnel_ifaces,
-    )
-    from .validate_uci import parse_uci_block, parse_uci_file
-except ImportError:
-    from common import *  # type: ignore
-    from generated_files import exit_server_aliases_for_hub  # type: ignore
-    from validate_network import (  # type: ignore
-        expected_amneziawg_access_ifaces,
-        expected_tunnel_ifaces,
-    )
-    from validate_uci import parse_uci_block, parse_uci_file  # type: ignore
+from .config_model import ConfigData
+from .default import IPIP_SERVER_IFACE, NODE_SERVER_IFACE
+from .file_ops import read
+from .generated_files import exit_server_aliases_for_hub
+from .layout import router_path, server_babeld_conf_path
+from .net_model import exit_node_prefix
+from .process import die
+from .uci import parse_uci_block, split_uci_blocks
+from .validate_network import (
+    expected_amneziawg_access_ifaces,
+    expected_tunnel_ifaces,
+)
+from .validate_uci import parse_uci_file
 
 
 def validate_babeld(cfg: ConfigData) -> None:

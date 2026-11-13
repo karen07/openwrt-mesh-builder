@@ -4,10 +4,10 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .common import *
-except ImportError:
-    from common import *  # type: ignore
+from .default import FIREWALL_TARGET_ACCEPT, FIREWALL_ZONE_WAN
+from .file_ops import read
+from .process import die
+from .uci import parse_uci_block, split_uci_blocks
 
 
 def parse_uci_file(path: Path) -> list[dict[str, object]]:

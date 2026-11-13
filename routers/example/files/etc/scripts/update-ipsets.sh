@@ -1,29 +1,59 @@
 #!/bin/sh
 
-ENV_FILE="${ENV_FILE:-/etc/router-autoinstall.env}"
-if [ -r "$ENV_FILE" ]; then
-    # Generated file, loaded once at startup. Re-run to apply changes.
-    # shellcheck disable=SC1091 disable=SC1090
+# OpenWrt routers use UCI; Linux servers use their own generated ENV file.
+# The generator passes ENV_FILE=/dev/null and explicit staging values.
+if [ "${ENV_FILE+x}" != x ] && [ ! -r /etc/config/update_ipsets ] \
+    && [ -r /etc/update-ipsets.env ]; then
+    ENV_FILE=/etc/update-ipsets.env
+fi
+if [ "${ENV_FILE+x}" = x ]; then
+    [ -r "$ENV_FILE" ] || {
+        echo "Missing $ENV_FILE" >&2
+        exit 1
+    }
+    # shellcheck disable=SC1090
     . "$ENV_FILE"
+else
+    [ -r /lib/functions.sh ] || {
+        echo "No OpenWrt UCI loader and no ENV_FILE" >&2
+        exit 1
+    }
+    # shellcheck disable=SC1091
+    . /lib/functions.sh
+    COUNTRIES=''
+    ASNS=''
+    add_country() { COUNTRIES="${COUNTRIES:+$COUNTRIES }$1"; }
+    add_asn() { ASNS="${ASNS:+$ASNS }$1"; }
+    config_load update_ipsets
+    config_list_foreach main country add_country
+    config_list_foreach main asn add_asn
+    config_get DIR main dir /etc/ipsets
+    config_get STATIC_NAME main static_name main.txt
+    config_get OUT_NAME main out_name direct.txt
+    config_get IPINFO_URL main ipinfo_url
+    config_get IPVERSE_ASN_URL main ipverse_asn_url
+    config_get CIDR_OVER_COVERAGE main cidr_over_coverage
+    config_get CONNECT_TIMEOUT main connect_timeout 10
+    config_get MAX_TIME main max_time 180
+    config_get RETRY main retry 3
 fi
 
 SCRIPT_NAME="${0##*/}"
 TAG="${SCRIPT_NAME%.sh}"
 
-# Runtime settings come from default.py through the generated ENV_FILE.
+# Runtime settings come from UCI on OpenWrt or ENV_FILE on Linux.
 # IPSETS_DIR and RELOAD_FIREWALL remain explicit generator/server/test overrides.
-RUNTIME_IPSETS_DIR="${RUNTIME_IPSETS_DIR:-/etc/ipsets}"
-IPSETS_DIR="${IPSETS_DIR:-$RUNTIME_IPSETS_DIR}"
+IPSETS_DIR="${IPSETS_DIR:-${DIR:-/etc/ipsets}}"
 RELOAD_FIREWALL="${RELOAD_FIREWALL:-1}"
 
-RUNTIME_DIRECT_STATIC_NAME="${RUNTIME_DIRECT_STATIC_NAME:-direct-static.txt}"
-RUNTIME_DIRECT_OUT_NAME="${RUNTIME_DIRECT_OUT_NAME:-direct.txt}"
-STATIC_DIRECT_NAME="$RUNTIME_DIRECT_STATIC_NAME"
-OUT_DIRECT_NAME="$RUNTIME_DIRECT_OUT_NAME"
-URL_IPINFO_LITE_CSV_GZ="${URL_IPINFO_LITE_CSV_GZ:-https://github.com/Alice39s/"\
+STATIC_NAME="${STATIC_NAME:-main.txt}"
+OUT_NAME="${OUT_NAME:-direct.txt}"
+STATIC_DIRECT_NAME="$STATIC_NAME"
+OUT_DIRECT_NAME="$OUT_NAME"
+IPINFO_URL="${IPINFO_URL:-https://github.com/Alice39s/"\
 "ipinfo-csv-lite/releases/latest/download/ipinfo-lite.csv.gz}"
-URL_IPVERSE_ASN="${URL_IPVERSE_ASN:-https://raw.githubusercontent.com/ipverse/as-ip-blocks/master}"
-DIRECT_CIDR_OVER_COVERAGE="${DIRECT_CIDR_OVER_COVERAGE-}"
+IPVERSE_ASN_URL="${IPVERSE_ASN_URL:-https://raw.githubusercontent.com/ipverse/as-ip-blocks/master}"
+CIDR_OVER_COVERAGE="${CIDR_OVER_COVERAGE-}"
 
 STATIC_DIRECT="$IPSETS_DIR/$STATIC_DIRECT_NAME"
 OUT_DIRECT="$IPSETS_DIR/$OUT_DIRECT_NAME"
@@ -32,25 +62,25 @@ TMP_OPTIMIZED="${TMP_DIRECT}.optimized"
 TMP_IPINFO="/tmp/ipinfo-lite.$$.csv.gz"
 TMP_COUNTRIES="/tmp/ipinfo-countries.$$.txt"
 
-if [ "${DIRECT_COUNTRIES+x}" != "x" ]; then
-    echo "ERROR: DIRECT_COUNTRIES is not set in $ENV_FILE" >&2
+if [ "${COUNTRIES+x}" != "x" ]; then
+    echo "ERROR: countries list is not configured" >&2
     exit 1
 fi
-if [ "${DIRECT_ASNS+x}" != "x" ]; then
-    echo "ERROR: DIRECT_ASNS is not set in $ENV_FILE" >&2
+if [ "${ASNS+x}" != "x" ]; then
+    echo "ERROR: ASN list is not configured" >&2
     exit 1
 fi
-DIRECT_COUNTRIES="${DIRECT_COUNTRIES-}"
-DIRECT_ASNS="${DIRECT_ASNS-}"
+COUNTRIES="${COUNTRIES-}"
+ASNS="${ASNS-}"
 
-if [ -z "$DIRECT_CIDR_OVER_COVERAGE" ]; then
-    echo "ERROR: DIRECT_CIDR_OVER_COVERAGE is empty in $ENV_FILE" >&2
+if [ -z "$CIDR_OVER_COVERAGE" ]; then
+    echo "ERROR: cidr_over_coverage is empty" >&2
     exit 1
 fi
 
-UPDATE_IPSETS_CURL_CONNECT_TIMEOUT="${UPDATE_IPSETS_CURL_CONNECT_TIMEOUT:-10}"
-UPDATE_IPSETS_CURL_MAX_TIME="${UPDATE_IPSETS_CURL_MAX_TIME:-180}"
-UPDATE_IPSETS_CURL_RETRY="${UPDATE_IPSETS_CURL_RETRY:-3}"
+CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-10}"
+MAX_TIME="${MAX_TIME:-180}"
+RETRY="${RETRY:-3}"
 
 cleanup_tmp() {
     rm -f \
@@ -58,14 +88,8 @@ cleanup_tmp() {
         "$TMP_IPINFO" "$TMP_COUNTRIES"
 }
 
-append_static_direct() {
-    if [ ! -s "$STATIC_DIRECT" ]; then
-        logger -t "$TAG" "ERROR: missing or empty static direct list: $STATIC_DIRECT"
-        return 1
-    fi
-
-    sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' "$STATIC_DIRECT" >>"$TMP_DIRECT"
-}
+# main.txt is independent from the dynamic direct.txt file.
+# Never append its contents to the dynamic list.
 
 append_url_list() {
     url="$1"
@@ -73,9 +97,9 @@ append_url_list() {
 
     data="$(
         curl -fsSL \
-            --connect-timeout "$UPDATE_IPSETS_CURL_CONNECT_TIMEOUT" \
-            --max-time "$UPDATE_IPSETS_CURL_MAX_TIME" \
-            --retry "$UPDATE_IPSETS_CURL_RETRY" \
+            --connect-timeout "$CONNECT_TIMEOUT" \
+            --max-time "$MAX_TIME" \
+            --retry "$RETRY" \
             "$url"
     )" || {
         logger -t "$TAG" "ERROR: failed to fetch $label from $url"
@@ -98,10 +122,10 @@ append_url_list() {
 }
 
 append_country_lists() {
-    [ -n "$DIRECT_COUNTRIES" ] || return 0
+    [ -n "$COUNTRIES" ] || return 0
 
     country_regex=""
-    for country in $DIRECT_COUNTRIES; do
+    for country in $COUNTRIES; do
         case "$country" in
             [A-Za-z][A-Za-z]) ;;
             *)
@@ -120,11 +144,11 @@ append_country_lists() {
 
     rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
     curl -fsSL \
-        --connect-timeout "$UPDATE_IPSETS_CURL_CONNECT_TIMEOUT" \
-        --max-time "$UPDATE_IPSETS_CURL_MAX_TIME" \
-        --retry "$UPDATE_IPSETS_CURL_RETRY" \
+        --connect-timeout "$CONNECT_TIMEOUT" \
+        --max-time "$MAX_TIME" \
+        --retry "$RETRY" \
         -o "$TMP_IPINFO" \
-        "$URL_IPINFO_LITE_CSV_GZ" || {
+        "$IPINFO_URL" || {
         logger -t "$TAG" "ERROR: failed to fetch IPinfo Lite CSV"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
@@ -142,19 +166,19 @@ append_country_lists() {
 
     if [ ! -s "$TMP_COUNTRIES" ]; then
         logger -t "$TAG" \
-            "ERROR: no IPinfo CIDRs for countries: $DIRECT_COUNTRIES"
+            "ERROR: no IPinfo CIDRs for countries: $COUNTRIES"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
     fi
 
     cat "$TMP_COUNTRIES" >>"$TMP_DIRECT"
     rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-    logger -t "$TAG" "OK: added IPinfo countries: $DIRECT_COUNTRIES"
+    logger -t "$TAG" "OK: added IPinfo countries: $COUNTRIES"
     return 0
 }
 
 append_asn_lists() {
-    for asn in $DIRECT_ASNS; do
+    for asn in $ASNS; do
         case "$asn" in
             '' | *[!0-9]*)
                 logger -t "$TAG" "ERROR: bad ASN: $asn"
@@ -164,7 +188,7 @@ append_asn_lists() {
         esac
 
         append_url_list \
-            "$URL_IPVERSE_ASN/as/$asn/ipv4-aggregated.txt" \
+            "$IPVERSE_ASN_URL/as/$asn/ipv4-aggregated.txt" \
             "as:$asn" || return 1
     done
 }
@@ -178,7 +202,7 @@ optimize_direct() {
     before="$(wc -l <"$TMP_DIRECT")"
     cidr-squash \
         -q \
-        -p "$DIRECT_CIDR_OVER_COVERAGE" \
+        -p "$CIDR_OVER_COVERAGE" \
         "$TMP_DIRECT" >"$TMP_OPTIMIZED" || {
         logger -t "$TAG" "ERROR: cidr-squash optimization failed"
         return 1
@@ -208,8 +232,8 @@ reload_firewall_if_needed() {
 mkdir -p "$IPSETS_DIR" || exit 1
 cleanup_tmp
 
-append_static_direct || {
-    cleanup_tmp
+[ -s "$STATIC_DIRECT" ] || {
+    logger -t "$TAG" "ERROR: missing or empty main list: $STATIC_DIRECT"
     exit 1
 }
 

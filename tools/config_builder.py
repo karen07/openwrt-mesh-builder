@@ -1,46 +1,75 @@
 #!/usr/bin/env python3
-try:
-    from .awg_model import infra_awg_port_range, load_awg_options
-    from .config_exit_model import *
-    from .config_firewall_model import *
-    from .config_loaders import *
-    from .config_model import (
-        AccessGroup,
-        ConfigData,
-        FirewallAllow,
-        PppoeConfig,
-        WifiConfig,
-    )
-    from .config_schema import *
-    from .default import *
-    from .identifiers import require_file_identifier, require_linux_iface_name
-    from .net_model import (
-        normalize_ipv4_subnet_24_prefix,
-        validate_config_networks_do_not_overlap,
-    )
-    from .package_model import validate_router_package_policy
-    from .process import die
-except ImportError:
-    from awg_model import infra_awg_port_range, load_awg_options  # type: ignore
-    from config_exit_model import *  # type: ignore
-    from config_firewall_model import *  # type: ignore
-    from config_loaders import *  # type: ignore
-    from config_model import (  # type: ignore
-        AccessGroup,
-        ConfigData,
-        FirewallAllow,
-        PppoeConfig,
-        WifiConfig,
-    )
-    from config_schema import *  # type: ignore
-    from default import *  # type: ignore
-    from identifiers import require_file_identifier, require_linux_iface_name  # type: ignore
-    from net_model import (  # type: ignore
-        normalize_ipv4_subnet_24_prefix,
-        validate_config_networks_do_not_overlap,
-    )
-    from package_model import validate_router_package_policy  # type: ignore
-    from process import die  # type: ignore
+from .awg_model import infra_awg_port_range, load_awg_options
+from .config_dhcp_model import load_dhcp_config
+from .config_exit_model import (
+    assign_generated_exit_announces,
+    load_exit_direct_config,
+    load_exit_order_groups,
+    load_exit_order_names,
+    load_router_exit_route,
+    load_router_routing_rules,
+    validate_exit_announce_set,
+)
+from .config_loaders import (
+    load_access_policy,
+    load_access_protocol,
+    load_config_packages,
+    load_device_profiles,
+    load_exit_hubs,
+    load_firewall_targets,
+    load_mesh_hubs_and_access_endpoints,
+    load_pppoe_config,
+    load_routers,
+    load_wifi_config,
+)
+from .config_model import (
+    AccessGroup,
+    AwgOptions,
+    ConfigData,
+    FirewallAllow,
+    PppoeConfig,
+    RouterExitRoute,
+    RoutingRule,
+    WifiConfig,
+)
+from .config_schema import (
+    ACCESS_KEYS,
+    FIREWALL_ALLOW_KIND_LAN,
+    FIREWALL_ALLOW_KIND_ROUTER,
+    ROUTER_KEYS,
+    normalize_openwrt_version,
+    require_known_keys,
+)
+from .default import (
+    ACCESS_SUBNET_CIDR,
+    CONFIG_KEY_ACCESS,
+    CONFIG_KEY_ALLOW_TO_LAN,
+    CONFIG_KEY_ALLOW_TO_ROUTER,
+    CONFIG_KEY_AWG,
+    CONFIG_KEY_DHCP_HOSTS,
+    CONFIG_KEY_EXIT_ORDER,
+    CONFIG_KEY_EXIT_ROUTE,
+    CONFIG_KEY_MAIN_ROUTER,
+    CONFIG_KEY_NAME,
+    CONFIG_KEY_OPENWRT_VERSION,
+    CONFIG_KEY_POLICY,
+    CONFIG_KEY_PORT,
+    CONFIG_KEY_PROTOCOL,
+    CONFIG_KEY_ROUTERS,
+    CONFIG_KEY_ROUTING_RULES,
+    CONFIG_KEY_SUBNET,
+    CONFIG_KEY_USERS,
+    PORT_MAX,
+    PORT_MIN,
+    PROTOCOL_AMNEZIAWG,
+)
+from .identifiers import require_file_identifier, require_linux_iface_name
+from .net_model import (
+    normalize_ipv4_subnet_24_prefix,
+    validate_config_networks_do_not_overlap,
+)
+from .package_model import validate_router_package_policy
+from .process import die
 
 
 def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
@@ -80,16 +109,16 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
     exit_order = [name for group in exit_order_groups for name in group]
     exit_order_by_router: dict[str, list[str]] = {}
     routing_rules_by_router: dict[str, list[RoutingRule]] = {}
+    exit_routes_by_router: dict[str, RouterExitRoute] = {}
     exit_direct = load_exit_direct_config()
 
     access: dict[str, list[AccessGroup]] = {name: [] for name in router_names}
     firewall_allows: list[FirewallAllow] = []
     wifi: dict[str, dict[str, WifiConfig]] = {name: {} for name in router_names}
     pppoe: dict[str, PppoeConfig] = {}
+    dhcp = {}
 
-    raw_access = raw_cfg.get(CONFIG_KEY_ACCESS, {})
-    if not isinstance(raw_access, dict):
-        die("config key 'access' must be an object")
+    raw_access: dict[str, object] = {}
 
     raw_routers = raw_cfg.get(CONFIG_KEY_ROUTERS, [])
     if not isinstance(raw_routers, list):
@@ -103,6 +132,8 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         )
         router_name = str(raw[CONFIG_KEY_NAME])
         router = router_by_name[router_name]
+        if CONFIG_KEY_ACCESS in raw:
+            raw_access[router_name] = raw[CONFIG_KEY_ACCESS]
         router_exit_order = load_exit_order_names(
             raw.get(CONFIG_KEY_EXIT_ORDER),
             f"routers[{router_name}].exit_order",
@@ -119,8 +150,18 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         )
         if router_routing_rules:
             routing_rules_by_router[router_name] = router_routing_rules
+        exit_routes_by_router[router_name] = load_router_exit_route(
+            raw.get(CONFIG_KEY_EXIT_ROUTE),
+            f"routers[{router_name}].exit_route",
+            exit_hubs_by_name=exit_hubs_by_name,
+        )
         router_where = f"routers[{router_name}]"
         wifi[router_name] = load_wifi_config(raw, router_where)
+        dhcp[router_name] = load_dhcp_config(
+            raw.get(CONFIG_KEY_DHCP_HOSTS, []),
+            router,
+            router_where,
+        )
         router_pppoe = load_pppoe_config(raw, router_where)
         if router_pppoe is not None:
             pppoe[router_name] = router_pppoe
@@ -151,10 +192,8 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
                 )
 
     for router_name, groups in raw_access.items():
-        if router_name not in router_by_name:
-            die(f"access references unknown router: {router_name}")
         if not isinstance(groups, list):
-            die(f"access[{router_name}] must be a list")
+            die(f"routers[{router_name}].access must be a list")
 
         router = router_by_name[router_name]
         seen_access_names: set[str] = set()
@@ -162,15 +201,15 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
 
         for idx, raw in enumerate(groups, start=1):
             if not isinstance(raw, dict):
-                die(f"access[{router_name}][{idx}] must be an object")
+                die(f"routers[{router_name}].access[{idx}] must be an object")
             require_known_keys(
                 raw,
-                f"access[{router_name}][{raw.get(CONFIG_KEY_NAME, idx)}]",
+                f"routers[{router_name}].access[{raw.get(CONFIG_KEY_NAME, idx)}]",
                 ACCESS_KEYS,
             )
 
             iface_name = raw.get(CONFIG_KEY_NAME)
-            where = f"access[{router_name}][{idx}]"
+            where = f"routers[{router_name}].access[{idx}]"
             if not isinstance(iface_name, str) or not iface_name:
                 die(f"{where}.name must be a non-empty string")
             require_linux_iface_name(iface_name, f"{where}.name")
@@ -195,7 +234,7 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
             port = raw.get(CONFIG_KEY_PORT)
             if not isinstance(port, int) or port < PORT_MIN or port > PORT_MAX:
                 die(
-                    f"access[{router_name}][{idx}].port must be an integer "
+                    f"routers[{router_name}].access[{idx}].port must be an integer "
                     f"in {PORT_MIN}..{PORT_MAX}"
                 )
             if port in seen_access_ports:
@@ -210,22 +249,25 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
 
             users_raw = raw.get(CONFIG_KEY_USERS)
             if not isinstance(users_raw, list):
-                die(f"access[{router_name}][{idx}].users must be a list")
+                die(f"routers[{router_name}].access[{idx}].users must be a list")
             users = []
             seen_users: set[str] = set()
             for user in users_raw:
                 if not isinstance(user, str) or not user:
                     die(
-                        f"access[{router_name}][{idx}].users must contain non-empty strings"
+                        f"routers[{router_name}].access[{idx}].users must contain non-empty strings"
                     )
-                require_file_identifier(user, f"access[{router_name}][{idx}].users")
+                require_file_identifier(
+                    user, f"routers[{router_name}].access[{idx}].users"
+                )
                 if user in seen_users:
                     die(f"duplicate access user on {router_name}/{iface_name}: {user}")
                 seen_users.add(user)
                 users.append(user)
 
             access_subnet = normalize_ipv4_subnet_24_prefix(
-                raw.get(CONFIG_KEY_SUBNET), f"access[{router_name}][{idx}].subnet"
+                raw.get(CONFIG_KEY_SUBNET),
+                f"routers[{router_name}].access[{idx}].subnet",
             )
 
             access[router_name].append(
@@ -245,7 +287,7 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
                 (CONFIG_KEY_ALLOW_TO_ROUTER, FIREWALL_ALLOW_KIND_ROUTER),
                 (CONFIG_KEY_ALLOW_TO_LAN, FIREWALL_ALLOW_KIND_LAN),
             ):
-                target_where = f"access[{router_name}][{idx}].{key}"
+                target_where = f"routers[{router_name}].access[{idx}].{key}"
                 targets = load_firewall_targets(
                     raw.get(key),
                     target_where,
@@ -293,9 +335,11 @@ def build_config_data(raw_cfg: dict[str, object]) -> ConfigData:
         exit_order=exit_order,
         exit_order_by_router=exit_order_by_router,
         routing_rules_by_router=routing_rules_by_router,
+        exit_routes_by_router=exit_routes_by_router,
         exit_direct=exit_direct,
         access=access,
         firewall_allows=firewall_allows,
         wifi=wifi,
         pppoe=pppoe,
+        dhcp=dhcp,
     )

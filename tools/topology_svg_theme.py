@@ -2,7 +2,6 @@
 import html
 import math
 import textwrap
-from dataclasses import dataclass
 
 from .default import SPEED_MAX_MBPS, SPEED_MIN_MBPS
 from .default import TOPOLOGY_NODE_R as NODE_R
@@ -13,12 +12,6 @@ from .topology_svg_colors import (
     NO_SPEED_COLOR,
     TOPOLOGY_COLOR,
 )
-
-
-@dataclass(frozen=True)
-class SvgFile:
-    name: str
-    text: str
 
 
 def esc(value: str) -> str:

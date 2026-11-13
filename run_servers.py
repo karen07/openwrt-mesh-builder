@@ -5,7 +5,7 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.cli_common import clear_screen, command_from_argv
+from tools.cli_common import command_from_argv
 from tools.config_io import load_json_config
 from tools.default import (
     CONFIG_PATH,
@@ -91,11 +91,6 @@ def parse_args() -> argparse.Namespace:
         help=f"SSH connect timeout in seconds (default: {SSH_TIMEOUT})",
     )
     ap.add_argument(
-        "--no-clear",
-        action="store_true",
-        help="do not clear screen before output",
-    )
-    ap.add_argument(
         "--servers",
         default="",
         help=(
@@ -127,8 +122,6 @@ def main() -> None:
 
     if not servers:
         die("no exit_hubs defined in config")
-
-    clear_screen(not args.no_clear)
 
     if args.command:
         rc = run_on_all_servers(

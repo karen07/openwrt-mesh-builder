@@ -10,8 +10,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools.common import ConfigData, build_config_data
+from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
+from tools.config_model import ConfigData
 from tools.default import (
     CONFIG_PATH,
     IPERF_BITRATE,

@@ -1,99 +1,73 @@
 #!/usr/bin/env python3
-import re
 
-try:
-    from .awg_model import infra_awg_port_range, load_awg_options
-    from .config_exit_model import router_exit_ipip_iface_name
-    from .config_model import (
-        AccessGroup,
-        AwgOptions,
-        DeviceProfile,
-        ExitHub,
-        MeshHub,
-        PppoeConfig,
-        RouterDef,
-        WifiConfig,
-    )
-    from .config_schema import (
-        ACCESS_POLICIES,
-        ACCESS_PROTOCOLS,
-        DEVICE_PROFILE_KEYS,
-        EXIT_HUB_KEYS,
-        MESH_HUB_KEYS,
-        PPPOE_KEYS,
-        ROUTER_KEYS,
-        WIFI_CONFIG_KEYS,
-        normalize_openwrt_version,
-        require_known_keys,
-        validate_config_known_keys,
-    )
-    from .default import *
-    from .identifiers import (
-        require_device_profile_arch,
-        require_device_profile_board,
-        require_exit_hub_name,
-        require_file_identifier,
-        require_generated_linux_iface_name,
-        require_linux_iface_name,
-    )
-    from .link_model import (
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_server_iface_name_for_target,
-    )
-    from .net_model import (
-        normalize_ipv4_subnet_24_prefix,
-        normalize_listen_ip,
-        normalize_optional_exit_ip,
-    )
-    from .package_model import normalize_config_package_list
-    from .process import die
-except ImportError:
-    from awg_model import infra_awg_port_range  # type: ignore
-    from config_exit_model import router_exit_ipip_iface_name  # type: ignore
-    from config_model import (  # type: ignore
-        DeviceProfile,
-        ExitHub,
-        MeshHub,
-        PppoeConfig,
-        RouterDef,
-        WifiConfig,
-    )
-    from config_schema import (  # type: ignore
-        ACCESS_POLICIES,
-        ACCESS_PROTOCOLS,
-        DEVICE_PROFILE_KEYS,
-        EXIT_HUB_KEYS,
-        MESH_HUB_KEYS,
-        PPPOE_KEYS,
-        WIFI_CONFIG_KEYS,
-        normalize_openwrt_version,
-        require_known_keys,
-        validate_config_known_keys,
-    )
-    from default import *  # type: ignore
-    from identifiers import (  # type: ignore
-        require_device_profile_arch,
-        require_device_profile_board,
-        require_exit_hub_name,
-        require_file_identifier,
-        require_generated_linux_iface_name,
-        require_linux_iface_name,
-    )
-    from link_model import (  # type: ignore
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_server_iface_name_for_target,
-    )
-    from net_model import (  # type: ignore
-        normalize_ipv4_subnet_24_prefix,
-        normalize_listen_ip,
-        normalize_optional_exit_ip,
-    )
-    from package_model import normalize_config_package_list  # type: ignore
-    from process import die  # type: ignore
-
-MAC_RE = re.compile(r"^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+from .awg_model import infra_awg_port_range
+from .config_exit_model import router_exit_ipip_iface_name
+from .config_model import (
+    DeviceProfile,
+    ExitHub,
+    MeshHub,
+    PppoeConfig,
+    RouterDef,
+    WifiConfig,
+)
+from .config_schema import (
+    ACCESS_POLICIES,
+    ACCESS_PROTOCOLS,
+    DEVICE_PROFILE_KEYS,
+    EXIT_HUB_KEYS,
+    MESH_HUB_KEYS,
+    PPPOE_KEYS,
+    WIFI_CONFIG_KEYS,
+    normalize_openwrt_version,
+    require_known_keys,
+    validate_config_known_keys,
+)
+from .default import (
+    ACCESS_SUBNET_CIDR,
+    CONFIG_KEY_ACCESS_ONLY,
+    CONFIG_KEY_ARCH,
+    CONFIG_KEY_BOARD,
+    CONFIG_KEY_DEVICE_PROFILE,
+    CONFIG_KEY_DEVICE_PROFILES,
+    CONFIG_KEY_EXIT_HUBS,
+    CONFIG_KEY_EXIT_IP,
+    CONFIG_KEY_KEY,
+    CONFIG_KEY_LISTEN_IP,
+    CONFIG_KEY_MESH_HUBS,
+    CONFIG_KEY_MTU,
+    CONFIG_KEY_NAME,
+    CONFIG_KEY_OPENWRT_VERSION,
+    CONFIG_KEY_PACKAGES,
+    CONFIG_KEY_PASSWORD,
+    CONFIG_KEY_PPPOE,
+    CONFIG_KEY_ROUTERS,
+    CONFIG_KEY_SSID,
+    CONFIG_KEY_SUBNET,
+    CONFIG_KEY_USERNAME,
+    PPPOE_DEFAULT_MTU,
+    PPPOE_MTU_MAX,
+    PPPOE_MTU_MIN,
+)
+from .identifiers import (
+    require_device_profile_arch,
+    require_device_profile_board,
+    require_exit_hub_name,
+    require_file_identifier,
+    require_generated_linux_iface_name,
+    require_linux_iface_name,
+)
+from .link_model import (
+    exit_in_iface_name,
+    exit_out_iface_name,
+    mesh_server_iface_name_for_target,
+)
+from .net_model import (
+    normalize_ipv4_subnet_24_prefix,
+    normalize_listen_ip,
+    normalize_optional_exit_ip,
+)
+from .package_model import normalize_config_package_list
+from .process import die
 
 
 def load_bool(value: object, where: str, *, default: bool = False) -> bool:
@@ -453,32 +427,6 @@ def load_firewall_targets(
     return targets
 
 
-def load_wifi_blocked_macs(raw: object, where: str) -> tuple[str, ...]:
-    if raw is None:
-        return ()
-
-    if isinstance(raw, str):
-        raw = [raw]
-
-    if not isinstance(raw, list):
-        die(f"{where} must be a string or a list of MAC addresses")
-
-    out: list[str] = []
-    seen: set[str] = set()
-    for idx, item in enumerate(raw, start=1):
-        if not isinstance(item, str) or not item:
-            die(f"{where}[{idx}] must be a non-empty string")
-        if not MAC_RE.fullmatch(item):
-            die(f"{where}[{idx}] must be a MAC address like 02:00:00:00:00:01")
-
-        mac = item.lower()
-        if mac not in seen:
-            seen.add(mac)
-            out.append(mac)
-
-    return tuple(out)
-
-
 def load_wifi_config(raw: dict[str, object], where: str) -> dict[str, WifiConfig]:
     wifi_by_key: dict[str, WifiConfig] = {}
 
@@ -497,14 +445,7 @@ def load_wifi_config(raw: dict[str, object], where: str) -> dict[str, WifiConfig
         if not isinstance(key, str) or not key:
             die(f"{where}.{wifi_key}.key must be a non-empty string")
 
-        blocked_macs = load_wifi_blocked_macs(
-            raw_wifi.get(CONFIG_KEY_BLOCKED_MACS),
-            f"{where}.{wifi_key}.{CONFIG_KEY_BLOCKED_MACS}",
-        )
-
-        wifi_by_key[wifi_key] = WifiConfig(
-            ssid=ssid, key=key, blocked_macs=blocked_macs
-        )
+        wifi_by_key[wifi_key] = WifiConfig(ssid=ssid, key=key)
 
     return wifi_by_key
 

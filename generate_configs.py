@@ -5,19 +5,28 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.cli_common import clear_screen
-from tools.common import ConfigData, DeviceProfile, RouterDef, build_config_data
+from tools.change_report import (
+    mute_intermediate_changes,
+    report_file_changes,
+    snapshot_files,
+)
+from tools.clean_generated import clean_generated
+from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
+from tools.config_model import ConfigData, DeviceProfile, RouterDef
 from tools.default import (
     AWG_PACKAGE_NAMES,
     AWG_RELEASE_BASE_URL,
     CIDR_SQUASH_PACKAGE_NAMES,
     CIDR_SQUASH_RELEASE_BASE_URL,
     CONFIG_PATH,
+    LUCI_EXIT_ROUTE_PACKAGE_NAMES,
+    LUCI_EXIT_ROUTE_RELEASE_BASE_URL,
     MIN_OPENWRT_VERSION_TEXT,
     PACKAGE_EXTENSION,
     PACKAGE_SOURCE_ROOT,
     ROUTER_PACKAGES_DIRNAME,
+    ROUTERS_ROOT,
 )
 from tools.default import (
     ROUTER_EXAMPLE_DIR as EXAMPLE_ROUTER_DIR,
@@ -26,8 +35,9 @@ from tools.downloads import try_download_file
 from tools.ensure_ssh_keys import main as ensure_ssh_keys_main
 from tools.file_ops import copy_file_if_changed, remove_path
 from tools.generate import main as generate_main
+from tools.layout import server_exit_dir
 from tools.packages import apk_canonical_name, remove_package_indexes
-from tools.process import die, run_checked, run_no_capture
+from tools.process import die, need, run_checked, run_no_capture
 from tools.show_unmanaged import main as show_unmanaged_main
 from tools.sync_rules import ensure_router_from_example, sync_router
 from tools.validate import main as validate_main
@@ -190,6 +200,51 @@ def sync_router_packages(
     copy_apk_repo_with_canonical_names(src_dir, dst_dir, arch)
 
 
+def remove_all_package_caches() -> None:
+    """Remove local APK caches and every generated router package directory."""
+    targets = [PACKAGE_SOURCE_ROOT]
+    if ROUTERS_ROOT.is_symlink():
+        die(f"refusing to clean symlinked router root: {ROUTERS_ROOT}")
+    if ROUTERS_ROOT.exists():
+        if not ROUTERS_ROOT.is_dir():
+            die(f"expected router directory: {ROUTERS_ROOT}")
+        for node in sorted(ROUTERS_ROOT.iterdir()):
+            if node.name == EXAMPLE_ROUTER_DIR.name:
+                continue
+            if node.is_symlink():
+                die(f"refusing to clean packages under symlinked router: {node}")
+            if node.is_dir():
+                targets.append(node / ROUTER_PACKAGES_DIRNAME)
+
+    # Validate all deletion targets before touching any package data.
+    for target in targets:
+        if target.is_symlink():
+            die(f"refusing to clean symlinked package directory: {target}")
+        if target.exists() and not target.is_dir():
+            die(f"expected package directory: {target}")
+    for target in targets:
+        remove_path(target)
+
+
+def refresh_all_packages(cfg: ConfigData, routers: list[RouterDef]) -> None:
+    """Discard all cached APKs, then download and distribute fresh releases."""
+    need("curl", "apk")
+    remove_all_package_caches()
+    for names, release_url, label in (
+        (AWG_PACKAGE_NAMES, AWG_RELEASE_BASE_URL, "AWG2"),
+        (CIDR_SQUASH_PACKAGE_NAMES, CIDR_SQUASH_RELEASE_BASE_URL, "CIDR-squash"),
+        (
+            LUCI_EXIT_ROUTE_PACKAGE_NAMES,
+            LUCI_EXIT_ROUTE_RELEASE_BASE_URL,
+            "LuCI Exit Route",
+        ),
+    ):
+        ensure_release_packages(cfg, routers, names, release_url, label)
+    for router in routers:
+        sync_router_packages(cfg, router, router_openwrt_version(cfg, router))
+    print("OK: package caches replaced and router packages synchronized")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
@@ -203,39 +258,27 @@ def main() -> None:
         help="path to config.json (default: config.json)",
     )
     ap.add_argument(
-        "--no-clear",
-        action="store_true",
-        help="do not clear screen before output",
-    )
-    ap.add_argument(
-        "--skip-awg-download",
-        action="store_true",
-        help="do not download AWG packages from GitHub releases",
-    )
-    ap.add_argument(
-        "--skip-cidr-squash-download",
-        action="store_true",
-        help="do not download CIDR-squash package from GitHub releases",
-    )
-    ap.add_argument(
-        "--skip-package-sync",
-        action="store_true",
-        help="do not copy per-router apk package repositories",
-    )
-    ap.add_argument(
-        "--skip-hooks",
-        action="store_true",
-        help=(
-            "do not run tools.generate, tools.ensure_ssh_keys, "
-            "tools.validate and tools.show_unmanaged hooks"
-        ),
-    )
-    ap.add_argument(
         "--skip-direct-downloads",
         action="store_true",
         help=(
             "pass --skip-direct-downloads to tools/generate.py and avoid "
             "downloading dynamic country/ASN direct-list IP sets"
+        ),
+    )
+    ap.add_argument(
+        "--update-packages",
+        action="store_true",
+        help=(
+            "delete all local package caches and router APK copies, "
+            "then download and distribute fresh releases; do not generate configs"
+        ),
+    )
+    ap.add_argument(
+        "--clean",
+        action="store_true",
+        help=(
+            "remove generated router/EXIT configs, retaining tunnel keys, "
+            "customization(), Access keys and client profiles; do not generate"
         ),
     )
     ap.add_argument(
@@ -257,66 +300,84 @@ def main() -> None:
     cfg = load_json_config(Path(args.config))
     cfg_data = build_config_data(cfg)
     routers = cfg_data.routers
-    ensure_example_router_dir()
+    if not (args.clean or args.update_packages):
+        ensure_example_router_dir()
 
     if not routers:
         die("no routers defined in config")
 
-    clear_screen(not args.no_clear)
+    if args.clean:
+        if any(
+            (args.force, args.skip_direct_downloads, args.details, args.update_packages)
+        ):
+            ap.error("--clean cannot be combined with generation flags")
+        clean_generated(cfg_data)
+        return
 
-    for router in routers:
-        ensure_router_from_example(EXAMPLE_ROUTER_DIR, router)
+    if args.update_packages:
+        if any((args.force, args.skip_direct_downloads, args.details)):
+            ap.error("--update-packages cannot be combined with generation flags")
+        refresh_all_packages(cfg_data, routers)
+        return
 
-    if not args.skip_awg_download:
-        ensure_release_packages(
-            cfg_data,
-            routers,
-            AWG_PACKAGE_NAMES,
-            AWG_RELEASE_BASE_URL,
-            "AWG2",
-        )
+    # Resolve external packages before touching existing generated trees.
+    # Their download can fail independently of configuration generation.
+    for names, release_url, label in (
+        (AWG_PACKAGE_NAMES, AWG_RELEASE_BASE_URL, "AWG2"),
+        (CIDR_SQUASH_PACKAGE_NAMES, CIDR_SQUASH_RELEASE_BASE_URL, "CIDR-squash"),
+        (
+            LUCI_EXIT_ROUTE_PACKAGE_NAMES,
+            LUCI_EXIT_ROUTE_RELEASE_BASE_URL,
+            "LuCI Exit Route",
+        ),
+    ):
+        ensure_release_packages(cfg_data, routers, names, release_url, label)
 
-    if not args.skip_cidr_squash_download:
-        ensure_release_packages(
-            cfg_data,
-            routers,
-            CIDR_SQUASH_PACKAGE_NAMES,
-            CIDR_SQUASH_RELEASE_BASE_URL,
-            "CIDR-squash",
-        )
+    # Compare the whole regeneration with the previous output.  Comparing only
+    # individual writes would report every file after the automatic --clean.
+    roots = [router.path for router in routers]
+    roots.extend(server_exit_dir(hub.name) for hub in cfg_data.exit_hubs)
+    previous_files = snapshot_files(roots)
+    try:
+        with mute_intermediate_changes():
+            clean_generated(cfg_data)
 
-    if not args.skip_package_sync:
-        for router in routers:
-            sync_router_packages(
-                cfg_data,
-                router,
-                router_openwrt_version(cfg_data, router),
-            )
+            for router in routers:
+                ensure_router_from_example(EXAMPLE_ROUTER_DIR, router)
 
-    for router in routers:
-        sync_router(EXAMPLE_ROUTER_DIR, router)
+            for router in routers:
+                sync_router_packages(
+                    cfg_data,
+                    router,
+                    router_openwrt_version(cfg_data, router),
+                )
 
-    print("OK: router synchronization finished successfully")
+            for router in routers:
+                sync_router(EXAMPLE_ROUTER_DIR, router)
 
-    if not args.skip_hooks:
-        config_arg = str(Path(args.config))
+            print("OK: router synchronization finished successfully")
 
-        generate_args = ["--config", config_arg]
-        if args.force:
-            generate_args.append("--force")
-        if args.skip_direct_downloads:
-            generate_args.append("--skip-direct-downloads")
+            config_arg = str(Path(args.config))
 
-        generate_main(generate_args)
-        print("OK: generation finished successfully")
+            generate_args = ["--config", config_arg]
+            if args.force:
+                generate_args.append("--force")
+            if args.skip_direct_downloads:
+                generate_args.append("--skip-direct-downloads")
 
-        ensure_ssh_keys_main(["--config", config_arg])
-        validate_main(["--config", config_arg])
+            generate_main(generate_args)
+            print("OK: generation finished successfully")
 
-        show_unmanaged_args = ["--config", config_arg]
-        if args.details:
-            show_unmanaged_args.append("--details")
-        show_unmanaged_main(show_unmanaged_args)
+            ensure_ssh_keys_main(["--config", config_arg])
+            validate_main(["--config", config_arg])
+    finally:
+        # Also report partial changes if generation or validation fails.
+        report_file_changes(previous_files, snapshot_files(roots))
+
+    show_unmanaged_args = ["--config", config_arg]
+    if args.details:
+        show_unmanaged_args.append("--details")
+    show_unmanaged_main(show_unmanaged_args)
 
 
 if __name__ == "__main__":

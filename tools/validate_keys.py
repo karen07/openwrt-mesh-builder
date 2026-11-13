@@ -1,60 +1,35 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-try:
-    from .common import *
-    from .default import OPENVPN_SERVER_CN
-    from .generated_files import exit_server_aliases_for_hub
-    from .materials import wireguard_private_key_plaintext
-    from .openvpn_model import (
-        check_cert_cn,
-        openvpn_client_cn,
-        openvpn_inline_material,
-        validate_openvpn_inline_material,
-        verify_key_matches_cert,
-    )
-    from .tunnel_model import (
-        exit_hub_is_public,
-        exit_route_env_key,
-        router_is_public_mesh_hub,
-    )
-    from .validate_awg_helpers import (
-        find_block_by_type_and_name,
-        require_interface_block,
-        require_option,
-        require_peer_block,
-        validate_awg_conf_options,
-        validate_awg_peer_common,
-        validate_router_awg_interface_common,
-    )
-    from .validate_context import (
-        validate_optional_ipip_mtu,
-        validate_optional_mtu,
-        vprint,
-    )
-    from .validate_network import (
-        validate_link_is_31_pair,
-        validate_link_local_matches_ipv4,
-    )
-    from .validate_uci import parse_uci_file
-    from .wg_keys import derive_public_key
-except ImportError:
-    from common import *  # type: ignore
-    from default import OPENVPN_SERVER_CN  # type: ignore
-    from generated_files import exit_server_aliases_for_hub  # type: ignore
-    from materials import wireguard_private_key_plaintext  # type: ignore
-    from openvpn_model import (  # type: ignore
-        check_cert_cn,
-        openvpn_client_cn,
-        openvpn_inline_material,
-        validate_openvpn_inline_material,
-        verify_key_matches_cert,
-    )
-    from validate_context import (  # type: ignore
-        validate_optional_mtu,
-        vprint,
-    )
-    from wg_keys import derive_public_key  # type: ignore
+from .config_model import ConfigData
+from .default import (
+    DEFAULT_CA_CN,
+    OPENVPN_SERVER_CN,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+)
+from .file_ops import read
+from .generated_files import exit_server_aliases_for_hub
+from .layout import (
+    router_openvpn_ca_dir,
+    router_openvpn_clients_dir,
+    router_openvpn_server_conf_path,
+    router_wireguard_clients_dir,
+    server_client_conf_path,
+)
+from .materials import wireguard_private_key_plaintext
+from .network_config import find_access_peer_block, get_interface_option
+from .openvpn_model import (
+    check_cert_cn,
+    openvpn_client_cn,
+    openvpn_inline_material,
+    validate_openvpn_inline_material,
+    verify_key_matches_cert,
+)
+from .process import die
+from .validate_context import validate_optional_mtu, vprint
+from .wg_keys import derive_public_key
 
 
 def parse_tunnel_conf(path: Path) -> dict[str, dict[str, str]]:

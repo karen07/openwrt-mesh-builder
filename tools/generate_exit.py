@@ -4,23 +4,49 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .common import *
-    from .tunnel_model import (
-        exit_hub_is_public,
-        ipip_mtu_uci_options,
-        ipip_mtu_value,
-        maybe_mtu_conf_line,
-        mtu_uci_options,
-    )
-except ImportError:
-    from common import *  # type: ignore
-    from tunnel_model import (  # type: ignore
-        exit_hub_is_public,
-        ipip_mtu_uci_options,
-        maybe_mtu_conf_line,
-        mtu_uci_options,
-    )
+from .awg_model import awg_conf_lines, awg_uci_options, peer_endpoint
+from .config_exit_model import (
+    lan_subnet_prefix,
+    router_exit_ipip_iface_name,
+    router_required_exit_hubs,
+    routing_exit_policy_ids,
+)
+from .config_model import (
+    AwgOptions,
+    ConfigData,
+    ExitExitLinkParams,
+    ExitHub,
+    KeyMaterial,
+    LinkParams,
+)
+from .default import (
+    DEFAULT_ALLOWED_IPS,
+    DEFAULT_ALLOWED_IPS_TEXT,
+    EXIT_RULE_PRIORITY,
+    PROTOCOL_AMNEZIAWG,
+)
+from .layout import server_client_conf_path
+from .link_alias_model import build_exit_exit_alias
+from .link_model import (
+    exit_exit_link_pair_for_hubs,
+    exit_in_iface_name,
+    exit_out_iface_name,
+)
+from .materials import (
+    gen_private_key,
+    parse_existing_tunnel_conf,
+    public_key_from_private,
+    stored_key_material,
+)
+from .net_model import exit_ipip_endpoint_ip
+from .network_config import get_interface_private_key, uci_block
+from .process import die
+from .tunnel_model import (
+    exit_hub_is_public,
+    ipip_mtu_uci_options,
+    maybe_mtu_conf_line,
+    mtu_uci_options,
+)
 
 
 def build_material_for_exit(
@@ -237,17 +263,61 @@ def build_exit_ipip_interface_block(
 
 
 def build_exit_rule_network_blocks(cfg: ConfigData, router_name: str) -> str:
-    rules = cfg.routing_rules_by_router.get(router_name, [])
-    if not rules:
-        return ""
-
+    # Provision a policy route for every exit on every router, irrespective of
+    # exit_order and the initial per-device routing rules.
     policy_ids = routing_exit_policy_ids(cfg)
     blocks: list[str] = []
 
-    for exit_name in dict.fromkeys(
-        rule.exit_name for rule in rules if rule.exit_name is not None
-    ):
-        policy_id = policy_ids[exit_name]
+    if cfg.exit_hubs:
+        # UID 4453 is the DoH service user. Normal LAN packets use fwmark 10000.
+        # A terminal guard prevents missing exit routes from falling to main.
+        # For DoH the guard is active only while global mode is EXIT_FAIL_CLOSED.
+        initial_mode = cfg.exit_routes_by_router[router_name].mode
+        blocks.extend(
+            [
+                uci_block(
+                    "rule",
+                    options={"priority": "90", "lookup": "10000", "uidrange": "4453"},
+                ),
+                uci_block(
+                    "rule",
+                    options={
+                        "priority": "91",
+                        "uidrange": "4453",
+                        "action": "unreachable",
+                        **(
+                            {}
+                            if initial_mode == "EXIT_FAIL_CLOSED"
+                            else {"disabled": "1"}
+                        ),
+                    },
+                ),
+                uci_block(
+                    "rule",
+                    options={"priority": "100", "lookup": "10000", "mark": "10000"},
+                ),
+            ]
+        )
+
+    # The global route is fixed infrastructure. The runtime service only
+    # changes its selected interface and enabled state; it never creates it.
+    required_hubs = router_required_exit_hubs(cfg, router_name)
+    if required_hubs:
+        blocks.append(
+            uci_block(
+                "route",
+                "exit10000",
+                options={
+                    "interface": router_exit_ipip_iface_name(required_hubs[0].name),
+                    "target": "0.0.0.0/0",
+                    "table": "10000",
+                    "disabled": "1",
+                },
+            )
+        )
+
+    for hub in required_hubs:
+        policy_id = policy_ids[hub.name]
         blocks.append(
             uci_block(
                 "rule",
@@ -262,7 +332,7 @@ def build_exit_rule_network_blocks(cfg: ConfigData, router_name: str) -> str:
             uci_block(
                 "route",
                 options={
-                    "interface": router_exit_ipip_iface_name(exit_name),
+                    "interface": router_exit_ipip_iface_name(hub.name),
                     "target": "0.0.0.0/0",
                     "table": str(policy_id),
                 },

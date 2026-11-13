@@ -4,10 +4,7 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .process import die, need, run_captured, run_interactive
-except ImportError:
-    from process import die, need, run_captured, run_interactive
+from .process import die, need, run_captured, run_interactive
 
 
 def _curl_base(max_time: int) -> list[str]:
@@ -64,15 +61,3 @@ def try_download_file(url: str, dst: Path, *, max_time: int = 900) -> bool:
         return False
     tmp.replace(dst)
     return True
-
-
-def download_text(url: str, *, max_time: int = 60) -> str:
-    result = run_captured(_curl_base(max_time) + [url])
-    if result.returncode != 0:
-        err = result.stderr.strip() or result.stdout.strip()
-        die(f"failed to download {url}: {err or 'curl failed'}")
-    return result.stdout
-
-
-def download_text_lines(url: str, *, max_time: int = 60) -> list[str]:
-    return download_text(url, max_time=max_time).splitlines()

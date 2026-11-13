@@ -6,15 +6,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import (
-    ConfigData,
-    build_config_data,
-    exit_exit_link_pairs,
-    public_exit_hub_names,
-    ring_link_pairs,
-)
+from .config_builder import build_config_data
 from .config_io import load_json_config
+from .config_model import ConfigData
+from .link_model import exit_exit_link_pairs, public_exit_hub_names
 from .process import die
+from .stable_model import ring_link_pairs
 from .topology_data import (
     config_roles,
     infer_roles_from_rows,

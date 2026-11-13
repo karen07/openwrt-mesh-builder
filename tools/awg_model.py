@@ -8,143 +8,69 @@ import hmac
 import random
 import re
 
-try:
-    from .config_model import AwgOptions, PortRange
-    from .default import (
-        AWG_H_COUNT,
-        AWG_H_GAP,
-        AWG_H_MAX,
-        AWG_H_MIN,
-        AWG_H_SPAN_MAX,
-        AWG_H_SPAN_MIN,
-        AWG_INFRA_AUTO_JC_MAX,
-        AWG_INFRA_AUTO_JC_MIN,
-        AWG_INFRA_AUTO_JUNK_SIZE_MAX,
-        AWG_INFRA_AUTO_JUNK_SIZE_MIN,
-        AWG_INFRA_AUTO_S1_MAX,
-        AWG_INFRA_AUTO_S1_MIN,
-        AWG_INFRA_AUTO_S2_MAX,
-        AWG_INFRA_AUTO_S2_MIN,
-        AWG_INFRA_AUTO_S3_MAX,
-        AWG_INFRA_AUTO_S3_MIN,
-        AWG_INFRA_AUTO_S4_MAX,
-        AWG_INFRA_AUTO_S4_MIN,
-        AWG_INFRA_SIGNATURE_COUNT_MAX,
-        AWG_INFRA_SIGNATURE_COUNT_MIN,
-        AWG_INFRA_SIGNATURE_SIZE_MAX,
-        AWG_INFRA_SIGNATURE_SIZE_MIN,
-        AWG_INFRA_SIGNATURE_TAGS,
-        AWG_JC_MAX,
-        AWG_JC_MIN,
-        AWG_JUNK_SIZE_MAX,
-        AWG_JUNK_SIZE_MIN,
-        AWG_S1_MAX,
-        AWG_S1_MIN,
-        AWG_S2_MAX,
-        AWG_S2_MIN,
-        AWG_S3_MAX,
-        AWG_S3_MIN,
-        AWG_S4_MAX,
-        AWG_S4_MIN,
-        INFRA_AWG_PORT_RANGE,
-        PORT_MAX,
-        PORT_MIN,
-    )
-    from .process import die
-    from .stable_model import random_free_slots, stable_seed_u64
-except ImportError:
-    from config_model import AwgOptions, PortRange  # type: ignore
-    from default import (  # type: ignore
-        AWG_H_COUNT,
-        AWG_H_GAP,
-        AWG_H_MAX,
-        AWG_H_MIN,
-        AWG_H_SPAN_MAX,
-        AWG_H_SPAN_MIN,
-        AWG_INFRA_AUTO_JC_MAX,
-        AWG_INFRA_AUTO_JC_MIN,
-        AWG_INFRA_AUTO_JUNK_SIZE_MAX,
-        AWG_INFRA_AUTO_JUNK_SIZE_MIN,
-        AWG_INFRA_AUTO_S1_MAX,
-        AWG_INFRA_AUTO_S1_MIN,
-        AWG_INFRA_AUTO_S2_MAX,
-        AWG_INFRA_AUTO_S2_MIN,
-        AWG_INFRA_AUTO_S3_MAX,
-        AWG_INFRA_AUTO_S3_MIN,
-        AWG_INFRA_AUTO_S4_MAX,
-        AWG_INFRA_AUTO_S4_MIN,
-        AWG_INFRA_SIGNATURE_COUNT_MAX,
-        AWG_INFRA_SIGNATURE_COUNT_MIN,
-        AWG_INFRA_SIGNATURE_SIZE_MAX,
-        AWG_INFRA_SIGNATURE_SIZE_MIN,
-        AWG_INFRA_SIGNATURE_TAGS,
-        AWG_JC_MAX,
-        AWG_JC_MIN,
-        AWG_JUNK_SIZE_MAX,
-        AWG_JUNK_SIZE_MIN,
-        AWG_S1_MAX,
-        AWG_S1_MIN,
-        AWG_S2_MAX,
-        AWG_S2_MIN,
-        AWG_S3_MAX,
-        AWG_S3_MIN,
-        AWG_S4_MAX,
-        AWG_S4_MIN,
-        INFRA_AWG_PORT_RANGE,
-        PORT_MAX,
-        PORT_MIN,
-    )
-    from process import die  # type: ignore
-    from stable_model import random_free_slots, stable_seed_u64  # type: ignore
-
-try:
-    from .default import (
-        AWG_CONTENT_PADDING_ADDITION,
-        AWG_DISABLE_COOKIES,
-        AWG_HEADER_PROTECTION_ENABLED,
-        AWG_HEADER_PROTECTION_MIN_PADDING,
-        AWG_KEEPALIVE_TIMEOUT_MAX,
-        AWG_KEEPALIVE_TIMEOUT_MIN,
-        AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
-        AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
-        AWG_PERSISTENT_KEEPALIVE_MAX,
-        AWG_PERSISTENT_KEEPALIVE_MIN,
-        AWG_RANDOM_TRAILERS,
-        AWG_REJECT_AFTER_TIME_MAX,
-        AWG_REJECT_AFTER_TIME_MIN,
-        AWG_REKEY_AFTER_TIME_MAX,
-        AWG_REKEY_AFTER_TIME_MIN,
-        AWG_REKEY_TIMEOUT_MAX,
-        AWG_REKEY_TIMEOUT_MIN,
-        CONFIG_KEY_MATERIALS_KEY_PATH,
-        CONFIG_PATH,
-    )
-    from .secrets import master_key
-except ImportError:
-    from secrets import master_key  # type: ignore
-
-    from default import (  # type: ignore
-        AWG_CONTENT_PADDING_ADDITION,
-        AWG_DISABLE_COOKIES,
-        AWG_HEADER_PROTECTION_ENABLED,
-        AWG_HEADER_PROTECTION_MIN_PADDING,
-        AWG_KEEPALIVE_TIMEOUT_MAX,
-        AWG_KEEPALIVE_TIMEOUT_MIN,
-        AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
-        AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
-        AWG_PERSISTENT_KEEPALIVE_MAX,
-        AWG_PERSISTENT_KEEPALIVE_MIN,
-        AWG_RANDOM_TRAILERS,
-        AWG_REJECT_AFTER_TIME_MAX,
-        AWG_REJECT_AFTER_TIME_MIN,
-        AWG_REKEY_AFTER_TIME_MAX,
-        AWG_REKEY_AFTER_TIME_MIN,
-        AWG_REKEY_TIMEOUT_MAX,
-        AWG_REKEY_TIMEOUT_MIN,
-        CONFIG_KEY_MATERIALS_KEY_PATH,
-        CONFIG_PATH,
-    )
-
+from .config_model import AwgOptions, PortRange
+from .default import (
+    AWG_CONTENT_PADDING_ADDITION,
+    AWG_DISABLE_COOKIES,
+    AWG_H_COUNT,
+    AWG_H_GAP,
+    AWG_H_MAX,
+    AWG_H_MIN,
+    AWG_H_SPAN_MAX,
+    AWG_H_SPAN_MIN,
+    AWG_HEADER_PROTECTION_ENABLED,
+    AWG_HEADER_PROTECTION_MIN_PADDING,
+    AWG_INFRA_AUTO_JC_MAX,
+    AWG_INFRA_AUTO_JC_MIN,
+    AWG_INFRA_AUTO_JUNK_SIZE_MAX,
+    AWG_INFRA_AUTO_JUNK_SIZE_MIN,
+    AWG_INFRA_AUTO_S1_MAX,
+    AWG_INFRA_AUTO_S1_MIN,
+    AWG_INFRA_AUTO_S2_MAX,
+    AWG_INFRA_AUTO_S2_MIN,
+    AWG_INFRA_AUTO_S3_MAX,
+    AWG_INFRA_AUTO_S3_MIN,
+    AWG_INFRA_AUTO_S4_MAX,
+    AWG_INFRA_AUTO_S4_MIN,
+    AWG_INFRA_SIGNATURE_COUNT_MAX,
+    AWG_INFRA_SIGNATURE_COUNT_MIN,
+    AWG_INFRA_SIGNATURE_SIZE_MAX,
+    AWG_INFRA_SIGNATURE_SIZE_MIN,
+    AWG_INFRA_SIGNATURE_TAGS,
+    AWG_JC_MAX,
+    AWG_JC_MIN,
+    AWG_JUNK_SIZE_MAX,
+    AWG_JUNK_SIZE_MIN,
+    AWG_KEEPALIVE_TIMEOUT_MAX,
+    AWG_KEEPALIVE_TIMEOUT_MIN,
+    AWG_MAX_HANDSHAKE_ATTEMPTS_MAX,
+    AWG_MAX_HANDSHAKE_ATTEMPTS_MIN,
+    AWG_PERSISTENT_KEEPALIVE_MAX,
+    AWG_PERSISTENT_KEEPALIVE_MIN,
+    AWG_RANDOM_TRAILERS,
+    AWG_REJECT_AFTER_TIME_MAX,
+    AWG_REJECT_AFTER_TIME_MIN,
+    AWG_REKEY_AFTER_TIME_MAX,
+    AWG_REKEY_AFTER_TIME_MIN,
+    AWG_REKEY_TIMEOUT_MAX,
+    AWG_REKEY_TIMEOUT_MIN,
+    AWG_S1_MAX,
+    AWG_S1_MIN,
+    AWG_S2_MAX,
+    AWG_S2_MIN,
+    AWG_S3_MAX,
+    AWG_S3_MIN,
+    AWG_S4_MAX,
+    AWG_S4_MIN,
+    CONFIG_KEY_MATERIALS_KEY_PATH,
+    CONFIG_PATH,
+    INFRA_AWG_PORT_RANGE,
+    PORT_MAX,
+    PORT_MIN,
+)
+from .process import die
+from .secrets import master_key
+from .stable_model import random_free_slots, stable_seed_u64
 
 AWG_KEYS = {
     "jc",
@@ -382,13 +308,7 @@ def validate_awg_auto_ranges() -> None:
 def stable_awg_shared_runtime_params(link_key: str) -> tuple[int, int, int, int]:
     """Parameters that must describe the same wire format on both ends."""
     validate_awg_auto_ranges()
-    # Keep the original RNG draw order: the old builder drew J before S.
-    # Consume those legacy J draws before S even though HPK deliberately
-    # narrows the generated S1-S4 ranges to values >= the nonce size.
     rng = random.Random(stable_seed_u64(f"awg-runtime:{link_key}"))
-    rng.randint(AWG_INFRA_AUTO_JC_MIN, AWG_INFRA_AUTO_JC_MAX)
-    rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
-    rng.randint(AWG_INFRA_AUTO_JUNK_SIZE_MIN, AWG_INFRA_AUTO_JUNK_SIZE_MAX)
     s1 = rng.randint(AWG_INFRA_AUTO_S1_MIN, AWG_INFRA_AUTO_S1_MAX)
     s2 = rng.randint(AWG_INFRA_AUTO_S2_MIN, AWG_INFRA_AUTO_S2_MAX)
     s3 = rng.randint(AWG_INFRA_AUTO_S3_MIN, AWG_INFRA_AUTO_S3_MAX)
@@ -424,18 +344,6 @@ def stable_awg_signature_packets(
         values.append(f"<{tag} {size}>")
     values.extend([""] * (5 - len(values)))
     return values[0], values[1], values[2], values[3], values[4]
-
-
-def stable_awg_runtime_params(
-    link_key: str, src: str | None = None, dst: str | None = None
-) -> tuple[int, int, int, int, int, int, int]:
-    # Compatibility helper: callers that do not provide a direction get a
-    # deterministic pseudo-direction based on the link key itself.
-    src = src or link_key
-    dst = dst or link_key
-    jc, jmin, jmax = stable_awg_directional_runtime_params(link_key, src, dst)
-    s1, s2, s3, s4 = stable_awg_shared_runtime_params(link_key)
-    return jc, jmin, jmax, s1, s2, s3, s4
 
 
 def stable_awg_h_ranges(link_key: str) -> tuple[str, str, str, str]:
@@ -594,12 +502,6 @@ def awg_for_infra_direction(link_key: str, src: str, dst: str) -> AwgOptions:
     )
     validate_awg_options(awg, f"infra AWG {direction_key}")
     return awg
-
-
-def awg_for_infra_link(link_key: str) -> AwgOptions:
-    # Backward-compatible deterministic profile for tooling that has no local
-    # endpoint context. New infra generation should use awg_for_infra_direction.
-    return awg_for_infra_direction(link_key, link_key, link_key)
 
 
 def peer_endpoint(

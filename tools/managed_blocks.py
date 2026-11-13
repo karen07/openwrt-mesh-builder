@@ -3,12 +3,9 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Iterable
 
-try:
-    from .common import decrypt_owmb_text, has_any_owmb_marker
-    from .uci import normalize_uci, parse_uci_block, split_uci_blocks
-except ImportError:
-    from common import decrypt_owmb_text, has_any_owmb_marker  # type: ignore
-    from uci import normalize_uci, parse_uci_block, split_uci_blocks  # type: ignore
+from .file_ops import has_any_owmb_marker
+from .secrets import decrypt_text as decrypt_owmb_text
+from .uci import normalize_uci, parse_uci_block, split_uci_blocks
 
 
 def owmb_compare_text(text: str, *, where: str = "managed_blocks") -> str:
@@ -128,81 +125,3 @@ def collect_unmanaged_uci_blocks(
         out.append(key.rstrip())
 
     return out
-
-
-def uci_management_key(
-    parsed: dict[str, object],
-) -> tuple[str, str, str] | None:
-    """Return the stable identity of a generated UCI block.
-
-    Only blocks with an identity present in the current generated output are
-    replaced.  Blocks left from an older configuration keep a different key,
-    remain above the marker and are reported by show_unmanaged.
-    """
-    typ = str(parsed.get("type", ""))
-    name = str(parsed.get("name", ""))
-    options = parsed.get("options", {})
-
-    if name == typ:
-        option_name = str(options.get("name", ""))
-        if option_name:
-            return typ, "option:name", option_name
-
-        if typ.startswith(("wireguard_", "amneziawg_")):
-            description = str(options.get("description", ""))
-            if description:
-                return typ, "option:description", description
-
-    if name != typ:
-        return typ, "section", name
-
-    return None
-
-
-def generated_uci_management_keys(parts: Iterable[str]) -> set[tuple[str, str, str]]:
-    keys: set[tuple[str, str, str]] = set()
-    for part in parts:
-        for block in split_uci_blocks(part):
-            parsed = parse_uci_block(block)
-            if not parsed:
-                continue
-            key = uci_management_key(parsed)
-            if key is not None:
-                keys.add(key)
-    return keys
-
-
-def normalize_uci_part(text: str) -> str:
-    return normalize_uci(text).strip("\n")
-
-
-def render_marked_uci_text(
-    generated_parts: Iterable[str],
-    preserved_before: str,
-    marker_and_tail: str,
-    *,
-    leading_newline: bool = False,
-    normalize_generated: bool = True,
-    normalize_result: bool = True,
-) -> str:
-    parts: list[str] = []
-
-    for part in generated_parts:
-        rendered = normalize_uci_part(part) if normalize_generated else part.strip("\n")
-        if rendered:
-            parts.append(rendered)
-
-    preserved = preserved_before.strip("\n")
-    if preserved:
-        parts.append(preserved)
-
-    marker_tail = marker_and_tail.strip("\n")
-    if marker_tail:
-        parts.append(marker_tail)
-
-    text = "\n\n".join(parts).rstrip()
-    if not text:
-        return ""
-
-    text = ("\n" if leading_newline else "") + text + "\n"
-    return normalize_uci(text) if normalize_result else text

@@ -6,44 +6,17 @@ import argparse
 import getpass
 from pathlib import Path
 
-try:
-    from .default import (
-        CONFIG_PATH,
-        OWMB_ENC_MATERIAL_MARKER,
-        OWMB_ENC_SECRET_MARKER,
-    )
-    from .secrets import (
-        assert_no_markers,
-        decrypt_text,
-        decrypt_tree,
-        encrypt_payload,
-        transform_tree,
-    )
-except ImportError:
-    import importlib.util
-
-    from default import (  # type: ignore
-        CONFIG_PATH,
-        OWMB_ENC_MATERIAL_MARKER,
-        OWMB_ENC_SECRET_MARKER,
-    )
-
-    _secrets_path = Path(__file__).with_name("secrets.py")
-    _secrets_spec = importlib.util.spec_from_file_location(
-        "_owmb_secrets_impl",
-        _secrets_path,
-    )
-    if _secrets_spec is None or _secrets_spec.loader is None:
-        raise ImportError(f"cannot load OWMB secrets helper: {_secrets_path}")
-    _secrets_impl = importlib.util.module_from_spec(_secrets_spec)
-    sys.modules[_secrets_spec.name] = _secrets_impl
-    _secrets_spec.loader.exec_module(_secrets_impl)
-
-    assert_no_markers = _secrets_impl.assert_no_markers
-    decrypt_text = _secrets_impl.decrypt_text
-    decrypt_tree = _secrets_impl.decrypt_tree
-    encrypt_payload = _secrets_impl.encrypt_payload
-    transform_tree = _secrets_impl.transform_tree
+from .default import (
+    CONFIG_PATH,
+    OWMB_ENC_MATERIAL_MARKER,
+    OWMB_ENC_SECRET_MARKER,
+)
+from .secrets import (
+    assert_no_markers,
+    decrypt_text,
+    encrypt_payload,
+    transform_tree,
+)
 
 
 def cmd_encrypt_value(args: argparse.Namespace, marker: str) -> None:
@@ -97,10 +70,6 @@ def main(argv: list[str] | None = None) -> None:
         "encrypt",
         help="read ordinary secret from stdin/TTY and print OWMB_ENC_SECRET_V1 marker",
     )
-    p.add_argument("--wrap", type=int, default=0, metavar="N")
-    p.set_defaults(func=lambda args: cmd_encrypt_value(args, OWMB_ENC_SECRET_MARKER))
-
-    p = sub.add_parser("encrypt-secret", help="alias for encrypt")
     p.add_argument("--wrap", type=int, default=0, metavar="N")
     p.set_defaults(func=lambda args: cmd_encrypt_value(args, OWMB_ENC_SECRET_MARKER))
 
@@ -188,12 +157,8 @@ def main(argv: list[str] | None = None) -> None:
         help_text="decrypt encrypted OWMB markers into plaintext OWMB markers",
     )
 
-    p = sub.add_parser("decrypt-tree", help="alias-like raw decrypt for staging paths")
-    p.add_argument("paths", nargs="+", type=Path)
-    p.set_defaults(func=lambda args: decrypt_tree(args.paths, config_path=args.config))
-
     p = sub.add_parser(
-        "assert-no-markers", help="fail if any OWMB/legacy marker remains"
+        "assert-no-markers", help="fail if any secret/key marker remains"
     )
     p.add_argument("paths", nargs="+", type=Path)
     p.set_defaults(func=lambda args: assert_no_markers(args.paths))

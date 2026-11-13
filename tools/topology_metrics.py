@@ -6,10 +6,7 @@ from datetime import datetime
 from json import JSONDecodeError
 from pathlib import Path
 
-try:
-    from .process import die
-except ImportError:
-    from process import die  # type: ignore
+from .process import die
 
 STATUS_UP = "up"
 STATUS_TARGET = "target"

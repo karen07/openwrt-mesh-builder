@@ -7,28 +7,17 @@ import shutil
 import tempfile
 from pathlib import Path
 
-try:
-    from .common import RouterDef
-    from .default import (
-        FILE_MODE_MASK,
-        FIREWALL_MARKER,
-        SYNC_COPY_DIRS,
-        SYNC_COPY_FILES,
-        SYNC_MERGE_FILES,
-    )
-    from .file_ops import copy_file_if_changed, remove_path
-    from .process import die
-except ImportError:
-    from common import RouterDef
-    from default import (
-        FILE_MODE_MASK,
-        FIREWALL_MARKER,
-        SYNC_COPY_DIRS,
-        SYNC_COPY_FILES,
-        SYNC_MERGE_FILES,
-    )
-    from file_ops import copy_file_if_changed, remove_path  # type: ignore
-    from process import die
+from .change_report import log_change
+from .config_model import RouterDef
+from .default import (
+    FILE_MODE_MASK,
+    FIREWALL_MARKER,
+    SYNC_COPY_DIRS,
+    SYNC_COPY_FILES,
+    SYNC_MERGE_FILES,
+)
+from .file_ops import copy_file_if_changed, remove_path
+from .process import die
 
 MARKER_RE = re.compile(rf"^{re.escape(FIREWALL_MARKER)}\s*$")
 
@@ -50,7 +39,7 @@ def write_text_if_changed(path: Path, text: str) -> None:
     if path.exists() and path.read_text(encoding="utf-8") == text:
         return
 
-    print(f"Updating {path}")
+    log_change(f"Updating {path}")
     old_mode = path.stat().st_mode if path.exists() else None
 
     with tempfile.NamedTemporaryFile(
@@ -71,7 +60,7 @@ def copy_tree_initial(src: Path, dst: Path) -> None:
     if not src.exists() or not src.is_dir():
         die(f"source directory does not exist: {src}")
 
-    print(f"Creating {dst} from {src}")
+    log_change(f"Creating {dst} from {src}")
     shutil.copytree(src, dst, copy_function=shutil.copy2)
 
 

@@ -1,10 +1,11 @@
 # Generated images / topology
 images/*
+link-speeds/*
 openwrt-imagebuilder-*
 
 # Local temporary staging
-.server-deploy-*
 .ca-*
 .cert-*
-.validate-key-*
+.server-deploy-*
 .validate-cert-*
+.validate-key-*

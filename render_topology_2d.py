@@ -5,8 +5,9 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-from tools.common import ConfigData, build_config_data
+from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
+from tools.config_model import ConfigData
 from tools.layout import topology_2d_path, topology_2d_svg_path
 from tools.process import die
 from tools.topology_2d_layout import build_topology_2d_layout
@@ -57,25 +58,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "starts with from"
         ),
     )
-    # Deprecated compatibility switches retained for old command lines.
-    ap.add_argument(
-        "--degraded-mbps",
-        type=float,
-        default=1.0,
-        help=argparse.SUPPRESS,
-    )
-    ap.add_argument(
-        "--main-label-mode",
-        choices=("none", "problems", "all"),
-        default="none",
-        help=argparse.SUPPRESS,
-    )
     args = ap.parse_args(raw_argv)
 
     if args.topology_only and args.only in {"from", "to"}:
         die(f"--only {args.only} requires measured --speeds-json data")
-    if args.degraded_mbps < 0:
-        die("--degraded-mbps must be non-negative")
     return args
 
 

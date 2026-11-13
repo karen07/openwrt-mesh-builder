@@ -3,28 +3,35 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .access_model import router_public_host_for_access
-    from .common import *
-    from .openvpn_model import (
-        build_openvpn_client_conf,
-        ensure_openvpn_client_material,
-        ensure_openvpn_server_conf,
-        reconcile_router_openvpn_dirs,
-        reconcile_router_openvpn_layout,
-        render_openvpn_uci_text,
-    )
-except ImportError:
-    from access_model import router_public_host_for_access  # type: ignore
-    from common import *  # type: ignore
-    from openvpn_model import (  # type: ignore
-        build_openvpn_client_conf,
-        ensure_openvpn_client_material,
-        ensure_openvpn_server_conf,
-        reconcile_router_openvpn_dirs,
-        reconcile_router_openvpn_layout,
-        render_openvpn_uci_text,
-    )
+from .access_model import router_public_host_for_access
+from .awg_model import awg_conf_lines
+from .config_exit_model import lan_subnet_prefix
+from .config_model import AccessGroup, AccessPeerState, AwgOptions, ConfigData
+from .default import (
+    DEFAULT_ALLOWED_IPS_TEXT,
+    KEEPALIVE,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    TUNNEL_MTU,
+)
+from .file_ops import read, rm, write
+from .layout import (
+    router_openvpn_ca_dir,
+    router_openvpn_clients_dir,
+    router_path,
+    router_wireguard_clients_dir,
+    router_wireguard_iface_dir,
+    router_wireguard_root,
+)
+from .materials import stored_key_material
+from .openvpn_model import (
+    build_openvpn_client_conf,
+    ensure_openvpn_client_material,
+    ensure_openvpn_server_conf,
+    reconcile_router_openvpn_dirs,
+    reconcile_router_openvpn_layout,
+    render_openvpn_uci_text,
+)
 
 
 def update_openvpn_uci(

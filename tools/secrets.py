@@ -3,7 +3,6 @@ import sys
 
 sys.dont_write_bytecode = True
 import base64
-import json
 import os
 import re
 from pathlib import Path
@@ -14,36 +13,19 @@ except Exception as e:  # pragma: no cover - import-time dependency error
     print(f"ERROR: missing Python dependency cryptography: {e}", file=sys.stderr)
     sys.exit(1)
 
-try:
-    from .default import (
-        CONFIG_KEY_MATERIALS_KEY_PATH,
-        CONFIG_KEY_SECRET_KEY,
-        CONFIG_KEY_SECRETS_KEY_PATH,
-        CONFIG_PATH,
-        OWMB_ENC_MATERIAL_MARKER,
-        OWMB_ENC_SECRET_MARKER,
-        OWMB_MATERIALS_KEY_MARKER,
-        OWMB_PLAIN_MATERIAL_MARKER,
-        OWMB_PLAIN_SECRET_MARKER,
-        OWMB_SECRETS_KEY_MARKER,
-        ROUTER_SECRET_MARKER,
-    )
-    from .process import die
-except ImportError:
-    from default import (
-        CONFIG_KEY_MATERIALS_KEY_PATH,
-        CONFIG_KEY_SECRET_KEY,
-        CONFIG_KEY_SECRETS_KEY_PATH,
-        CONFIG_PATH,
-        OWMB_ENC_MATERIAL_MARKER,
-        OWMB_ENC_SECRET_MARKER,
-        OWMB_MATERIALS_KEY_MARKER,
-        OWMB_PLAIN_MATERIAL_MARKER,
-        OWMB_PLAIN_SECRET_MARKER,
-        OWMB_SECRETS_KEY_MARKER,
-        ROUTER_SECRET_MARKER,
-    )
-    from process import die
+from .config_io import MARKER_NAME_RE
+from .default import (
+    CONFIG_KEY_MATERIALS_KEY_PATH,
+    CONFIG_KEY_SECRETS_KEY_PATH,
+    CONFIG_PATH,
+    OWMB_ENC_MATERIAL_MARKER,
+    OWMB_ENC_SECRET_MARKER,
+    OWMB_MATERIALS_KEY_MARKER,
+    OWMB_PLAIN_MATERIAL_MARKER,
+    OWMB_PLAIN_SECRET_MARKER,
+    OWMB_SECRETS_KEY_MARKER,
+)
+from .process import die
 
 KEY_SIZE = 32
 NONCE_SIZE = 12
@@ -57,7 +39,6 @@ MARKERS = (
 )
 ENCRYPTED_MARKERS = (OWMB_ENC_SECRET_MARKER, OWMB_ENC_MATERIAL_MARKER)
 PLAIN_MARKERS = (OWMB_PLAIN_SECRET_MARKER, OWMB_PLAIN_MATERIAL_MARKER)
-LEGACY_MARKERS = (ROUTER_SECRET_MARKER,)
 
 # Payloads are either base64url ciphertext or simple plaintext/import values.
 # Keep plaintext marker parsing intentionally simple; values containing a literal
@@ -66,7 +47,6 @@ MARKER_RE = re.compile(
     rf"({'|'.join(re.escape(m) for m in MARKERS)})\s*\{{\s*(.*?)\s*\}}",
     re.S,
 )
-LEGACY_RE = re.compile(rf"{re.escape(ROUTER_SECRET_MARKER)}\s*\{{", re.S)
 
 
 def b64u_encode(data: bytes) -> str:
@@ -95,24 +75,18 @@ def expand_config_path(raw: str, *, config_path: Path) -> Path:
 
 
 def load_config(path: Path) -> dict[str, object]:
-    if not path.exists():
-        die(f"missing config file: {path}")
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        die(f"failed to parse JSON config {path}: {e}")
-    if not isinstance(data, dict):
-        die("config must be a JSON object")
-    return data
+    from .config_io import load_json_config
+
+    return load_json_config(path)
 
 
 def config_key_path(config_key: str, *, config_path: Path) -> Path:
     cfg = load_config(config_path)
-    if CONFIG_KEY_SECRET_KEY in cfg:
-        die(
-            f"legacy config.{CONFIG_KEY_SECRET_KEY} is not supported; "
-            f"use {CONFIG_KEY_SECRETS_KEY_PATH!r} and {CONFIG_KEY_MATERIALS_KEY_PATH!r}"
-        )
+    # This helper is also used by standalone encryption tools. Do not bypass
+    # the project's config.json key whitelist when called outside the generator.
+    from .config_schema import validate_config_known_keys
+
+    validate_config_known_keys(cfg)
     raw = cfg.get(config_key)
     if not isinstance(raw, str) or not raw.strip():
         die(f"config.{config_key} must be a non-empty path")
@@ -226,7 +200,7 @@ def encrypt_material_value(
     wrap: int = 0,
 ) -> str:
     if contains_any_marker(value):
-        return value
+        die("key material to encrypt must be plaintext, not a secret/key marker")
     return encrypt_payload(
         value.encode("utf-8"),
         OWMB_ENC_MATERIAL_MARKER,
@@ -235,14 +209,19 @@ def encrypt_material_value(
     )
 
 
+def require_supported_markers(text: str, where: str) -> None:
+    for match in MARKER_NAME_RE.finditer(text):
+        if match.group(1) not in MARKERS:
+            die(f"{where}: unsupported secret/key marker: {match.group(1)}")
+
+
 def decrypt_text(
     text: str,
     where: str = "<text>",
     *,
     config_path: Path = CONFIG_PATH,
 ) -> str:
-    if LEGACY_RE.search(text):
-        die(f"{where}: legacy {ROUTER_SECRET_MARKER} marker is not supported")
+    require_supported_markers(text, where)
 
     def repl(match: re.Match[str]) -> str:
         marker = match.group(1)
@@ -263,7 +242,7 @@ def decrypt_value(value: str, *, config_path: Path = CONFIG_PATH) -> str:
 
 
 def contains_any_marker_text(text: str) -> bool:
-    return any(marker in text for marker in MARKERS) or ROUTER_SECRET_MARKER in text
+    return MARKER_NAME_RE.search(text) is not None
 
 
 def contains_any_marker(value: str) -> bool:
@@ -295,9 +274,7 @@ def iter_files(paths: list[Path]):
 
 def decrypt_file(path: Path, *, config_path: Path = CONFIG_PATH) -> bool:
     data = path.read_bytes()
-    has_marker = any(marker.encode("ascii") in data for marker in MARKERS)
-    has_legacy_marker = ROUTER_SECRET_MARKER.encode("ascii") in data
-    if not has_marker and not has_legacy_marker:
+    if not MARKER_NAME_RE.search(data.decode("utf-8", errors="ignore")):
         return False
     try:
         text = data.decode("utf-8")
@@ -318,11 +295,10 @@ def decrypt_tree(paths: list[Path], *, config_path: Path = CONFIG_PATH) -> None:
 
 def assert_no_markers(paths: list[Path]) -> None:
     found = False
-    marker_bytes = [m.encode("ascii") for m in MARKERS + LEGACY_MARKERS]
     for path in iter_files(paths):
         data = path.read_bytes()
-        if any(m in data for m in marker_bytes):
-            print(f"OWMB marker left in {path}", file=sys.stderr)
+        if MARKER_NAME_RE.search(data.decode("utf-8", errors="ignore")):
+            print(f"secret/key marker left in {path}", file=sys.stderr)
             found = True
     if found:
         die("secret/key-material markers are still present")
@@ -337,8 +313,7 @@ def transform_markers(
     config_path: Path,
     wrap: int,
 ) -> str:
-    if LEGACY_RE.search(text):
-        die(f"legacy {ROUTER_SECRET_MARKER} marker is not supported")
+    require_supported_markers(text, "secret transformation")
 
     def repl(match: re.Match[str]) -> str:
         marker = match.group(1)
@@ -378,8 +353,7 @@ def transform_markers(
 
 def transform_file(path: Path, **kwargs) -> bool:
     data = path.read_bytes()
-    marker_bytes = [m.encode("ascii") for m in MARKERS + LEGACY_MARKERS]
-    if not any(m in data for m in marker_bytes):
+    if not MARKER_NAME_RE.search(data.decode("utf-8", errors="ignore")):
         return False
     try:
         text = data.decode("utf-8")
@@ -399,10 +373,7 @@ def transform_tree(paths: list[Path], **kwargs) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    try:
-        from .secrets_cli import main as cli_main
-    except ImportError:
-        from secrets_cli import main as cli_main  # type: ignore
+    from .secrets_cli import main as cli_main
 
     cli_main(argv)
 

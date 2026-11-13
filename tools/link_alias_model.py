@@ -4,16 +4,10 @@ import sys
 sys.dont_write_bytecode = True
 import hashlib
 
-try:
-    from .config_model import ConfigData
-    from .default import ANON_LINK_ALIAS_HEX_LEN
-    from .link_model import exit_exit_link_pair_for_hubs, exit_exit_pair_names
-    from .process import die
-except ImportError:
-    from config_model import ConfigData  # type: ignore
-    from default import ANON_LINK_ALIAS_HEX_LEN  # type: ignore
-    from link_model import exit_exit_link_pair_for_hubs, exit_exit_pair_names  # type: ignore
-    from process import die  # type: ignore
+from .config_model import ConfigData
+from .default import ANON_LINK_ALIAS_HEX_LEN
+from .link_model import exit_exit_link_pair_for_hubs, exit_exit_pair_names
+from .process import die
 
 
 def _router_or_die(cfg: ConfigData, name: str) -> None:

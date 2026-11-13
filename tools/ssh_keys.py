@@ -6,10 +6,7 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .process import need, run_checked
-except ImportError:
-    from process import need, run_checked
+from .process import need, run_checked
 
 
 def generate_ed25519_key(path: Path, *, comment: str, mode: int) -> None:

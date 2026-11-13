@@ -4,88 +4,48 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .config_model import ConfigData, ExitHub
-    from .default import (
-        AWG_SERVER_NETWORK_SERVICE_NAME,
-        PROTOCOL_AMNEZIAWG,
-        PROTOCOL_OPENVPN,
-        PROTOCOL_WIREGUARD,
-        REL_DHCP,
-        REL_DIRECT_IPSET,
-        REL_DIRECT_STATIC_IPSET,
-        REL_DROPBEAR_AUTHORIZED_KEYS,
-        REL_RUNTIME_ENV,
-        RUNTIME_DIRECT_OUT_NAME,
-        RUNTIME_DIRECT_STATIC_NAME,
-        RUNTIME_IPSETS_DIR,
-        SERVER_TEMPLATE_DIR,
-    )
-    from .layout import (
-        router_dir,
-        router_openvpn_ca_dir,
-        router_openvpn_clients_dir,
-        router_openvpn_root,
-        router_openvpn_server_conf_path,
-        router_path,
-        router_wireguard_clients_dir,
-        router_wireguard_root,
-        server_amneziawg_dir,
-        server_babeld_conf_path,
-        server_client_conf_path,
-        server_exit_dir,
-        server_path,
-    )
-    from .link_alias_model import (
-        build_exit_client_alias,
-        build_exit_exit_alias,
-        build_exit_reverse_client_alias,
-    )
-    from .link_model import exit_exit_peer_names_for_hub
-    from .process import die
-    from .sync_rules import SYNC_COPY_DIRS, SYNC_COPY_FILES, SYNC_MERGE_FILES
-    from .tunnel_model import exit_hub_is_public
-except ImportError:
-    from config_model import ConfigData, ExitHub  # type: ignore
-    from default import (  # type: ignore
-        AWG_SERVER_NETWORK_SERVICE_NAME,
-        PROTOCOL_AMNEZIAWG,
-        PROTOCOL_OPENVPN,
-        PROTOCOL_WIREGUARD,
-        REL_DHCP,
-        REL_DIRECT_IPSET,
-        REL_DIRECT_STATIC_IPSET,
-        REL_DROPBEAR_AUTHORIZED_KEYS,
-        REL_RUNTIME_ENV,
-        RUNTIME_DIRECT_OUT_NAME,
-        RUNTIME_DIRECT_STATIC_NAME,
-        RUNTIME_IPSETS_DIR,
-        SERVER_TEMPLATE_DIR,
-    )
-    from layout import (  # type: ignore
-        router_dir,
-        router_openvpn_ca_dir,
-        router_openvpn_clients_dir,
-        router_openvpn_root,
-        router_openvpn_server_conf_path,
-        router_path,
-        router_wireguard_clients_dir,
-        router_wireguard_root,
-        server_amneziawg_dir,
-        server_babeld_conf_path,
-        server_client_conf_path,
-        server_exit_dir,
-        server_path,
-    )
-    from link_alias_model import (  # type: ignore
-        build_exit_client_alias,
-        build_exit_exit_alias,
-        build_exit_reverse_client_alias,
-    )
-    from link_model import exit_exit_peer_names_for_hub  # type: ignore
-    from process import die  # type: ignore
-    from sync_rules import SYNC_COPY_DIRS, SYNC_COPY_FILES, SYNC_MERGE_FILES  # type: ignore
-    from tunnel_model import exit_hub_is_public  # type: ignore
+from .config_model import ConfigData, ExitHub
+from .default import (
+    AWG_SERVER_NETWORK_SERVICE_NAME,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+    REL_DHCP,
+    REL_DIRECT_IPSET,
+    REL_DIRECT_STATIC_IPSET,
+    REL_DROPBEAR_AUTHORIZED_KEYS,
+    RUNTIME_DIRECT_OUT_NAME,
+    RUNTIME_DIRECT_STATIC_NAME,
+    RUNTIME_IPSETS_DIR,
+    RUNTIME_UCI_FILES,
+    SERVER_TEMPLATE_DIR,
+    SYNC_COPY_DIRS,
+    SYNC_COPY_FILES,
+    SYNC_MERGE_FILES,
+)
+from .layout import (
+    router_dir,
+    router_openvpn_ca_dir,
+    router_openvpn_clients_dir,
+    router_openvpn_root,
+    router_openvpn_server_conf_path,
+    router_path,
+    router_wireguard_clients_dir,
+    router_wireguard_root,
+    server_amneziawg_dir,
+    server_babeld_conf_path,
+    server_client_conf_path,
+    server_exit_dir,
+    server_path,
+)
+from .link_alias_model import (
+    build_exit_client_alias,
+    build_exit_exit_alias,
+    build_exit_reverse_client_alias,
+)
+from .link_model import exit_exit_peer_names_for_hub
+from .process import die
+from .tunnel_model import exit_hub_is_public
 
 
 def exit_exit_aliases_for_hub(cfg: ConfigData, hub: ExitHub) -> list[str]:
@@ -134,7 +94,7 @@ def expected_router_generated_exact_paths(
         router_path(cfg, router_name, "babeld").relative_to(root),
         REL_DROPBEAR_AUTHORIZED_KEYS,
         REL_DIRECT_STATIC_IPSET,
-        REL_RUNTIME_ENV,
+        *(Path("files/etc/config") / name for name in RUNTIME_UCI_FILES),
         REL_DIRECT_IPSET,
         REL_DHCP,
     }
@@ -195,6 +155,7 @@ def expected_server_exact_paths(cfg: ConfigData) -> set[Path]:
         expected |= {
             server_babeld_conf_path(hub.name),
             exit_root / "etc/awg-server.env",
+            exit_root / "etc/update-ipsets.env",
             exit_root / "etc/scripts/update-ipsets.sh",
             exit_root / RUNTIME_IPSETS_DIR.lstrip("/") / RUNTIME_DIRECT_STATIC_NAME,
             exit_root / RUNTIME_IPSETS_DIR.lstrip("/") / RUNTIME_DIRECT_OUT_NAME,
@@ -300,6 +261,7 @@ def validate_generated_files_exist(cfg: ConfigData) -> None:
         for path in (
             server_babeld_conf_path(hub.name),
             server_path(hub.name, "etc", "awg-server.env"),
+            server_path(hub.name, "etc", "update-ipsets.env"),
             server_exit_dir(hub.name)
             / RUNTIME_IPSETS_DIR.lstrip("/")
             / RUNTIME_DIRECT_STATIC_NAME,

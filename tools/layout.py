@@ -4,28 +4,16 @@ import sys
 sys.dont_write_bytecode = True
 from pathlib import Path
 
-try:
-    from .default import (
-        REL,
-        ROUTERS_ROOT,
-        SERVER_BABELD_CONF_PREFIX,
-        SERVER_BABELD_CONF_SUFFIX,
-        SERVER_ROOT,
-        TOPOLOGY_2D_OUT,
-        TOPOLOGY_2D_SVG_OUT,
-        TOPOLOGY_3D_OUT,
-    )
-except ImportError:
-    from default import (  # type: ignore
-        REL,
-        ROUTERS_ROOT,
-        SERVER_BABELD_CONF_PREFIX,
-        SERVER_BABELD_CONF_SUFFIX,
-        SERVER_ROOT,
-        TOPOLOGY_2D_OUT,
-        TOPOLOGY_2D_SVG_OUT,
-        TOPOLOGY_3D_OUT,
-    )
+from .default import (
+    REL,
+    ROUTERS_ROOT,
+    SERVER_BABELD_CONF_PREFIX,
+    SERVER_BABELD_CONF_SUFFIX,
+    SERVER_ROOT,
+    TOPOLOGY_2D_OUT,
+    TOPOLOGY_2D_SVG_OUT,
+    TOPOLOGY_3D_OUT,
+)
 
 
 def router_dir(cfg: object, name: str) -> Path:

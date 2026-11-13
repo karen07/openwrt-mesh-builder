@@ -2,14 +2,10 @@
 import sys
 
 sys.dont_write_bytecode = True
-import re
 
-try:
-    from .common import ConfigData, ExitHub, exit_reverse_listen_port
-    from .default import IPIP_DEFAULT_MTU, TUNNEL_MTU
-except ImportError:
-    from common import ConfigData, ExitHub, exit_reverse_listen_port
-    from default import IPIP_DEFAULT_MTU, TUNNEL_MTU
+from .config_model import ConfigData, ExitHub
+from .default import IPIP_DEFAULT_MTU, TUNNEL_MTU
+from .link_model import exit_reverse_listen_port
 
 
 def mtu_uci_options() -> dict[str, str]:
@@ -51,10 +47,3 @@ def router_exit_listen_port(
 
 def exit_reverse_firewall_rule_name(hub_name: str) -> str:
     return f"Allow-Exit-Reverse-{hub_name}"
-
-
-def exit_route_env_key(name: str) -> str:
-    key = re.sub(r"[^A-Za-z0-9_]", "_", name).upper()
-    if not key or key[0].isdigit():
-        key = f"_{key}"
-    return key

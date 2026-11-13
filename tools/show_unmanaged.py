@@ -9,52 +9,26 @@ import io
 import os
 from pathlib import Path
 
-try:
-    from .common import (
-        CONFIG_PATH,
-        SERVER_ROOT,
-        ConfigData,
-        build_config_data,
-        load_json_config,
-    )
-    from .default import (
-        REL_BOOTSTRAP,
-        REL_DHCP,
-        REL_FIREWALL,
-        REL_NETWORK,
-        UNMANAGED_REPORT_HASH_LEN,
-    )
-    from .show_unmanaged_collect import (
-        collect_unmanaged_bootstrap_above_marker,
-        collect_unmanaged_dhcp,
-        collect_unmanaged_firewall_above_marker,
-        collect_unmanaged_network_above_marker,
-        collect_unmanaged_router_files,
-        collect_unmanaged_server_files,
-    )
-except ImportError:
-    from common import (  # type: ignore
-        CONFIG_PATH,
-        SERVER_ROOT,
-        ConfigData,
-        build_config_data,
-        load_json_config,
-    )
-    from default import (  # type: ignore
-        REL_BOOTSTRAP,
-        REL_DHCP,
-        REL_FIREWALL,
-        REL_NETWORK,
-        UNMANAGED_REPORT_HASH_LEN,
-    )
-    from show_unmanaged_collect import (  # type: ignore
-        collect_unmanaged_bootstrap_above_marker,
-        collect_unmanaged_dhcp,
-        collect_unmanaged_firewall_above_marker,
-        collect_unmanaged_network_above_marker,
-        collect_unmanaged_router_files,
-        collect_unmanaged_server_files,
-    )
+from .config_builder import build_config_data
+from .config_io import load_json_config
+from .config_model import ConfigData
+from .default import (
+    CONFIG_PATH,
+    REL_BOOTSTRAP,
+    REL_DHCP,
+    REL_FIREWALL,
+    REL_NETWORK,
+    SERVER_ROOT,
+    UNMANAGED_REPORT_HASH_LEN,
+)
+from .show_unmanaged_collect import (
+    collect_unmanaged_bootstrap_above_marker,
+    collect_unmanaged_dhcp,
+    collect_unmanaged_firewall,
+    collect_unmanaged_network_above_marker,
+    collect_unmanaged_router_files,
+    collect_unmanaged_server_files,
+)
 
 # ============================================================
 # PRINT
@@ -127,7 +101,7 @@ def print_unmanaged_report(cfg: ConfigData) -> None:
 
     for router_name in cfg.router_names:
         unmanaged_network = collect_unmanaged_network_above_marker(cfg, router_name)
-        unmanaged_firewall = collect_unmanaged_firewall_above_marker(cfg, router_name)
+        unmanaged_firewall = collect_unmanaged_firewall(cfg, router_name)
         unmanaged_dhcp = collect_unmanaged_dhcp(cfg, router_name)
         unmanaged_bootstrap = collect_unmanaged_bootstrap_above_marker(cfg, router_name)
         unmanaged_files = collect_unmanaged_router_files(cfg, router_name)

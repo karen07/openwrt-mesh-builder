@@ -3,12 +3,20 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .tunnel_model import mtu_uci_options
-except ImportError:
-    from common import *  # type: ignore
-    from tunnel_model import mtu_uci_options  # type: ignore
+from .awg_model import awg_for_infra_direction, awg_uci_options, peer_endpoint
+from .config_model import ConfigData, KeyMaterial, MeshLinkState
+from .default import DEFAULT_ALLOWED_IPS, PROTOCOL_AMNEZIAWG
+from .link_alias_model import build_mesh_client_alias
+from .link_model import (
+    client_iface_name_for_target,
+    compute_mesh_link_params,
+    mesh_link_key,
+    mesh_link_specs,
+    mesh_server_iface_name_for_target,
+)
+from .materials import gen_private_key, public_key_from_private
+from .network_config import get_interface_private_key, uci_block
+from .tunnel_model import mtu_uci_options
 
 
 def build_mesh_material(

@@ -82,50 +82,6 @@ ndpi_netfilter_ready() {
     ndpi_match_works
 }
 
-remove_amnezia_ppa() {
-    _removed=0
-
-    for _source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
-        [ -f "$_source" ] || continue
-        if grep -Eiq 'ppa\.launchpad(content)?\.net/amnezia/ppa' "$_source"; then
-            echo "Removing Amnezia PPA source: $_source"
-            rm -f "$_source"
-            _removed=1
-        fi
-    done
-
-    if [ -f /etc/apt/sources.list ] \
-        && grep -Eiq 'ppa\.launchpad(content)?\.net/amnezia/ppa' /etc/apt/sources.list; then
-        sed -i \
-            -e '\#ppa\.launchpadcontent\.net/amnezia/ppa#d' \
-            -e '\#ppa\.launchpad\.net/amnezia/ppa#d' \
-            /etc/apt/sources.list
-        _removed=1
-    fi
-
-    if [ "$_removed" -eq 1 ]; then
-        echo "OK: removed Amnezia PPA; AmneziaWG will be built from release sources"
-    fi
-}
-
-purge_packaged_amneziawg() {
-    _packages=""
-    for _package in amneziawg amneziawg-tools amneziawg-dkms; do
-        if dpkg-query -W -f='${db:Status-Abbrev}' "$_package" 2>/dev/null \
-            | grep -q '^ii'; then
-            _packages="$_packages $_package"
-        fi
-    done
-
-    [ -n "$_packages" ] || return 0
-
-    echo "Removing packaged AmneziaWG before source/DKMS installation:$_packages"
-    # Package names above are fixed constants; intentional word splitting is required.
-    # shellcheck disable=SC2086
-    apt-get purge -y $_packages \
-        || fail "failed to remove packaged AmneziaWG"
-}
-
 awg_valid_release_tag() {
     printf '%s\n' "$1" \
         | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]{8}([.-][0-9]+)?$'
@@ -393,8 +349,7 @@ install_amneziawg() {
 }
 
 install_ndpi_netfilter() {
-    # Use default xt_ndpi settings; the optional BitTorrent/DHT cache is disabled.
-    rm -f /etc/modprobe.d/xt_ndpi.conf
+    # Load xt_ndpi without modifying system modprobe settings.
     printf '%s\n' xt_ndpi >/etc/modules-load.d/xt_ndpi.conf
 
     if ndpi_netfilter_ready; then
@@ -434,7 +389,7 @@ install_ndpi_netfilter() {
 
     depmod -a || fail "depmod failed after xt_ndpi install"
 
-    # If an older module is already resident, the reboot below will load the new one.
+    # The reboot below loads the installed kernel module.
     if ! grep -q '^xt_ndpi ' /proc/modules 2>/dev/null; then
         modprobe xt_ndpi || fail "failed to load xt_ndpi"
     fi
@@ -477,10 +432,6 @@ install_cidr_squash() {
 export DEBIAN_FRONTEND=noninteractive
 export NEEDRESTART_MODE=a
 
-# A server deployed by an older version may still have the Amnezia PPA.
-# Remove it before apt refresh so future deploys no longer depend on Launchpad.
-remove_amnezia_ppa
-
 apt-get update
 
 apt-get install -y \
@@ -515,10 +466,6 @@ apt-get install -y \
     libmaxminddb-dev \
     librrd-dev \
     libxtables-dev
-
-# One-time migration from the old PPA packages.  On subsequent source-based
-# deploys this is a no-op.
-purge_packaged_amneziawg
 
 install_ndpi_netfilter
 install_amneziawg

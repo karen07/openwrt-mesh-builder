@@ -5,20 +5,12 @@ sys.dont_write_bytecode = True
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from .default import (
-        PPPOE_DEFAULT_MTU,
-        ROUTER_HOSTNAME_PREFIX,
-        ROUTER_SSH_PREFIX,
-        ROUTERS_ROOT,
-    )
-except ImportError:
-    from default import (  # type: ignore
-        PPPOE_DEFAULT_MTU,
-        ROUTER_HOSTNAME_PREFIX,
-        ROUTER_SSH_PREFIX,
-        ROUTERS_ROOT,
-    )
+from .default import (
+    PPPOE_DEFAULT_MTU,
+    ROUTER_HOSTNAME_PREFIX,
+    ROUTER_SSH_PREFIX,
+    ROUTERS_ROOT,
+)
 
 
 @dataclass(frozen=True)
@@ -131,6 +123,13 @@ class RoutingRule:
 
 
 @dataclass(frozen=True)
+class RouterExitRoute:
+    mode: str
+    exit_name: str | None
+    auto_exit: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExitDirectConfig:
     subnets: list[str]
     countries: list[str]
@@ -233,7 +232,6 @@ class AccessPeerState:
 class WifiConfig:
     ssid: str
     key: str
-    blocked_macs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -241,6 +239,26 @@ class PppoeConfig:
     username: str
     password: str
     mtu: int = PPPOE_DEFAULT_MTU
+
+
+@dataclass(frozen=True)
+class DhcpHost:
+    name: str
+    ip: str
+    mac: str
+    tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DhcpTag:
+    name: str
+    dhcp_options: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DhcpConfig:
+    hosts: tuple[DhcpHost, ...]
+    tags: tuple[DhcpTag, ...]
 
 
 @dataclass(frozen=True)
@@ -260,8 +278,10 @@ class ConfigData:
     exit_order: list[str]
     exit_order_by_router: dict[str, list[str]]
     routing_rules_by_router: dict[str, list[RoutingRule]]
+    exit_routes_by_router: dict[str, RouterExitRoute]
     exit_direct: ExitDirectConfig
     access: dict[str, list[AccessGroup]]
     firewall_allows: list[FirewallAllow]
     wifi: dict[str, dict[str, WifiConfig]]
     pppoe: dict[str, PppoeConfig]
+    dhcp: dict[str, DhcpConfig]

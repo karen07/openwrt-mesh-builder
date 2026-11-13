@@ -39,12 +39,18 @@ BABELD_PIDFILE="/run/${BABELD_CONF_NAME%.conf}.pid"
 BABELD_START_TIMEOUT="${BABELD_START_TIMEOUT:-10}"
 BABELD_STOP_TIMEOUT="${BABELD_STOP_TIMEOUT:-3}"
 
-# Runtime direct-list path comes from default.py -> awg-server.env.
-# The shared /etc/scripts/update-ipsets.sh owns downloads and optimization.
-RUNTIME_IPSETS_DIR="${RUNTIME_IPSETS_DIR:-/etc/ipsets}"
-IPSETS_DIR="${IPSETS_DIR:-$RUNTIME_IPSETS_DIR}"
-RUNTIME_DIRECT_OUT_NAME="${RUNTIME_DIRECT_OUT_NAME:-direct.txt}"
-OUT_DIRECT="$IPSETS_DIR/$RUNTIME_DIRECT_OUT_NAME"
+# Direct list location is owned by the shared ipsets configuration.
+DIRECT_ENV_FILE="${DIRECT_ENV_FILE:-/etc/update-ipsets.env}"
+[ -r "$DIRECT_ENV_FILE" ] || {
+    echo "Missing $DIRECT_ENV_FILE" >&2
+    exit 1
+}
+# shellcheck disable=SC1090
+. "$DIRECT_ENV_FILE"
+IPSETS_DIR="${DIR:-/etc/ipsets}"
+OUT_DIRECT="$IPSETS_DIR/${OUT_NAME:-direct.txt}"
+OUT_MAIN="$IPSETS_DIR/${STATIC_NAME:-main.txt}"
+MAIN_IPSET_NAME="${IPSET_NAME}_main"
 
 die() {
     echo "ERROR: $*" >&2
@@ -67,7 +73,7 @@ Usage: $0 <mode>
 Modes:
   network-up      enable forwarding, IPIP receiver, existing guard, AWG services and NAT/SNAT
   network-down    remove guard, NAT chain, AWG services and IPIP receiver
-  guard           refresh direct ipset and install/update FORWARD guard chain
+  guard           refresh ipsets; restore FORWARD guard if missing
 EOF_USAGE
     exit 2
 }
@@ -289,7 +295,7 @@ network_up() {
 
     ensure_node_ip
     ensure_ipip
-    guard_existing
+    guard_apply startup
     start_awg_services
     start_babeld
     install_nat_rules
@@ -308,58 +314,79 @@ network_up() {
 }
 
 network_down() {
-    remove_forward_chain
+    # Keep the guard attached until the receiver and mesh transport are down.
     stop_babeld
     stop_awg_services
-    remove_nat_chain
     "$IP_BIN" link del "$IPIP_IFACE" >/dev/null 2>&1 || true
+    remove_nat_chain
+    remove_forward_chain
     remove_node_ip
     echo "OK: ${SERVER_NAME} network down"
 }
 
+# Fill temporary sets first and swap only after the complete list is loaded.
+# The live sets are never flushed while iptables refers to them.
 restore_ipset() {
+    [ -s "$OUT_MAIN" ] || die "missing or empty main list: $OUT_MAIN"
     [ -s "$OUT_DIRECT" ] || die "missing or empty direct list: $OUT_DIRECT"
 
-    {
-        echo "create $IPSET_NAME hash:net family inet hashsize 16384 maxelem 262144 -exist"
-        echo "flush $IPSET_NAME"
-        # shellcheck disable=SC2016
-        "$AWK_BIN" -v set="$IPSET_NAME" \
-            '{ print "add " set " " $0 " -exist" }' \
-            "$OUT_DIRECT"
-    } | "$IPSET_BIN" restore || die "ipset restore failed"
+    for spec in "$MAIN_IPSET_NAME:$OUT_MAIN" "$IPSET_NAME:$OUT_DIRECT"; do
+        set_name="${spec%%:*}"
+        file="${spec#*:}"
+        staged="${set_name}_next"
+        [ "${#staged}" -le 31 ] || die "ipset name is too long: $staged"
+
+        {
+            echo "create $staged hash:net family inet hashsize 16384 maxelem 262144 -exist"
+            echo "flush $staged"
+            # shellcheck disable=SC2016
+            "$AWK_BIN" -v set="$staged" \
+                'NF && $1 !~ /^#/ { print "add " set " " $1 " -exist" }' \
+                "$file"
+        } | "$IPSET_BIN" restore || die "failed to load staged ipset $staged"
+
+        "$IPSET_BIN" create "$set_name" hash:net family inet \
+            hashsize 16384 maxelem 262144 -exist \
+            || die "failed to create active ipset $set_name"
+        "$IPSET_BIN" swap "$staged" "$set_name" \
+            || die "failed to swap ipset $set_name"
+        "$IPSET_BIN" destroy "$staged" \
+            || die "failed to remove old staged ipset $staged"
+    done
 }
 
-ensure_forward_chain() {
+# The chain is installed at network-up and kept while lists are refreshed.
+prepare_forward_chain() {
     "$IPTABLES_BIN" -N "$FORWARD_CHAIN" 2>/dev/null || true
-
     "$IPTABLES_BIN" -F "$FORWARD_CHAIN" \
-        || die "failed to flush FORWARD chain $FORWARD_CHAIN"
-
-    if ! "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; then
-        "$IPTABLES_BIN" -I FORWARD 1 -j "$FORWARD_CHAIN" \
-            || die "failed to attach FORWARD chain $FORWARD_CHAIN"
-    fi
+        || die "failed to flush guard chain $FORWARD_CHAIN"
 }
 
 remove_forward_chain() {
     while "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; do
         "$IPTABLES_BIN" -D FORWARD -j "$FORWARD_CHAIN" || break
     done
-
     "$IPTABLES_BIN" -F "$FORWARD_CHAIN" 2>/dev/null || true
     "$IPTABLES_BIN" -X "$FORWARD_CHAIN" 2>/dev/null || true
 }
 
 guard_rules() {
     need_exit_subnets
-    ensure_forward_chain
+    prepare_forward_chain
 
     iface="$(default_iface)"
     [ -n "$iface" ] || die "failed to determine default interface"
 
     for subnet in $EXIT_SUBNETS; do
         [ -n "$subnet" ] || continue
+
+        # Final guard: no router can export either main or direct via EXIT.
+        for set_name in "$MAIN_IPSET_NAME" "$IPSET_NAME"; do
+            "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
+                -s "$subnet" -o "$iface" \
+                -m set --match-set "$set_name" dst -j DROP \
+                || die "failed to install exit guard for $set_name: $subnet"
+        done
 
         # Skip DPI for ordinary web traffic. TCP ports 80 and 443 bypass
         # nDPI; UDP bypasses only 443 so UDP/80 remains available for P2P
@@ -396,37 +423,39 @@ guard_rules() {
         -j ACCEPT \
         || die "failed to install established/related guard rule"
 
-    for subnet in $EXIT_SUBNETS; do
-        [ -n "$subnet" ] || continue
+    # The main and direct DROP rules above are independent final protection.
+    # nDPI BitTorrent filtering remains enforced as a second policy.
 
-        "$IPTABLES_BIN" -A "$FORWARD_CHAIN" \
-            -s "$subnet" -o "$iface" \
-            -m set --match-set "$IPSET_NAME" dst \
-            -j DROP \
-            || die "failed to install $IPSET_NAME WAN guard rule for $subnet"
-    done
+    if ! "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; then
+        "$IPTABLES_BIN" -I FORWARD 1 -j "$FORWARD_CHAIN" \
+            || die "failed to attach forward guard"
+    fi
 
-    echo "OK: installed $FORWARD_CHAIN rules for $IPSET_NAME and nDPI BitTorrent guard \
+    echo "OK: installed $FORWARD_CHAIN main/direct DROP and nDPI BitTorrent guard \
 (TCP 80/443 and UDP 443 bypassed) on wan=$iface"
 }
 
-guard_existing() {
+guard_apply() {
     restore_ipset
-    guard_rules
-    echo "OK: installed $IPSET_NAME guard from existing $OUT_DIRECT"
-}
+    if [ "$1" = refresh ] \
+        && "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; then
+        echo "OK: refreshed main/direct ipsets; FORWARD guard unchanged"
+        return 0
+    fi
 
-guard_refresh() {
-    restore_ipset
     guard_rules
-    echo "OK: refreshed $IPSET_NAME guard from $OUT_DIRECT"
+    echo "OK: installed main/direct guard from $OUT_MAIN and $OUT_DIRECT"
 }
 
 mode="${1:-}"
 validate_runtime_config
+# Prevent guard timer and network-up/down from rebuilding the same chains
+# or staging sets concurrently.
+exec 9>/run/awg-server.lock || die 'failed to open guard lock'
+flock -w 180 9 || die 'AWG guard lock timeout'
 case "$mode" in
     network-up) network_up ;;
     network-down) network_down ;;
-    guard) guard_refresh ;;
+    guard) guard_apply refresh ;;
     *) usage ;;
 esac

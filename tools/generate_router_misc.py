@@ -4,12 +4,22 @@ import sys
 sys.dont_write_bytecode = True
 import re
 
-try:
-    from .common import *
-    from .default import OWMB_ENC_SECRET_MARKER, OWMB_PLAIN_SECRET_MARKER
-except ImportError:
-    from common import *  # type: ignore
-    from default import OWMB_ENC_SECRET_MARKER, OWMB_PLAIN_SECRET_MARKER  # type: ignore
+from .config_exit_model import router_or_die
+from .config_model import ConfigData, RouterDef, WifiConfig
+from .default import (
+    OWMB_ENC_SECRET_MARKER,
+    OWMB_PLAIN_SECRET_MARKER,
+    PROTOCOL_OPENVPN,
+    SHELL_SECRET_WRAP_COL,
+    WIFI_CELL_DENSITY,
+    WIFI_COUNTRY,
+    WIFI_ENCRYPTION_BY_KEY,
+    WIFI_RADIO_BY_KEY,
+)
+from .file_ops import read, write
+from .layout import router_path
+from .net_model import ipv4_without_prefix
+from .process import die
 
 SECRET_MARKER_RE = re.compile(
     rf"^({re.escape(OWMB_ENC_SECRET_MARKER)}|"
@@ -17,7 +27,7 @@ SECRET_MARKER_RE = re.compile(
     re.S,
 )
 
-WIFI_MANAGED_COMMENT_RE = re.compile(r"^\s*#\s*Set\s+Wi-Fi(?:\s+radio[012])?\s*$")
+WIFI_MANAGED_COMMENT_RE = re.compile(r"^\s*#\s*Set\s+Wi-Fi\s+radio[012]\s*$")
 
 WIFI_MANAGED_UCI_RE = re.compile(
     r"^\s*uci\s+(?:-q\s+)?(?:set|delete|add_list)\s+"
@@ -31,8 +41,6 @@ PPPOE_MANAGED_COMMENT_RE = re.compile(
 PPPOE_MANAGED_UCI_RE = re.compile(
     r"^\s*uci\s+(?:-q\s+)?set\s+network\.wan\." r"(?:proto|mtu|username|password)="
 )
-
-DANGLING_SECRET_CLOSE_RE = re.compile(r"^\s*\}'\s*$")
 
 
 def build_subnet_hostname_block(router: RouterDef) -> str:
@@ -51,7 +59,6 @@ def update_subnet_hostname_block(body: str, router: RouterDef) -> str:
         ^[ \t]*\#\s*Set\s+subnet\s+and\s+name[ \t]*\n
         (?:^[ \t]*uci\s+(?:-q\s+)?set\s+network\.lan\.ipaddr='[^']*'[ \t]*\n)?
         (?:^[ \t]*uci\s+(?:-q\s+)?set\s+system\.@system\[0\]\.hostname='[^']*'[ \t]*\n)?
-        (?:^[ \t]*(?:true|:)[ \t]*;?[ \t]*\n)?
         """,
         re.X,
     )
@@ -147,22 +154,6 @@ def build_pppoe_block(cfg: ConfigData, router_name: str) -> str:
     )
 
 
-def build_wifi_macfilter_lines(iface: str, blocked_macs: tuple[str, ...]) -> list[str]:
-    lines = [
-        f"    uci -q delete wireless.{iface}.macfilter",
-        f"    uci -q delete wireless.{iface}.maclist",
-    ]
-
-    if blocked_macs:
-        lines.append(f"    uci -q set wireless.{iface}.macfilter='deny'")
-        for mac in blocked_macs:
-            lines.append(
-                f"    uci -q add_list wireless.{iface}.maclist={shell_single_quote(mac)}"
-            )
-
-    return lines
-
-
 def build_wifi_radio_block(
     wifi_by_key: dict[str, WifiConfig],
     wifi_key: str,
@@ -179,7 +170,6 @@ def build_wifi_radio_block(
                 f"    uci -q set wireless.{iface}.disabled='1'",
             ]
         )
-        lines.extend(build_wifi_macfilter_lines(iface, ()))
         return lines
 
     lines.extend(
@@ -193,7 +183,6 @@ def build_wifi_radio_block(
             f"    uci -q set wireless.{iface}.key={shell_wifi_value(wifi.key)}",
         ]
     )
-    lines.extend(build_wifi_macfilter_lines(iface, wifi.blocked_macs))
     return lines
 
 
@@ -246,10 +235,10 @@ def update_openvpn_babeld_hotplug_block(
     cfg: ConfigData,
     router_name: str,
 ) -> str:
+    body = remove_openvpn_babeld_hotplug_block(body)
     if not router_has_openvpn_access(cfg, router_name):
         return body
 
-    body = remove_openvpn_babeld_hotplug_block(body)
     body = body.rstrip()
     if body:
         body += "\n\n"
@@ -288,10 +277,6 @@ def skip_managed_pppoe_block(lines: list[str], start: int) -> int:
 
         if PPPOE_MANAGED_UCI_RE.match(text):
             in_single_quote = line_has_open_single_quote(lines[i])
-            i += 1
-            continue
-
-        if DANGLING_SECRET_CLOSE_RE.match(text):
             i += 1
             continue
 
@@ -356,12 +341,6 @@ def skip_managed_wifi_block(lines: list[str], start: int) -> int:
             i += 1
             continue
 
-        # Be forgiving when cleaning files produced by the older broken matcher:
-        # a dangling closing marker line could be left before the next managed UCI line.
-        if DANGLING_SECRET_CLOSE_RE.match(text):
-            i += 1
-            continue
-
         break
 
     return i
@@ -401,6 +380,29 @@ def update_wifi_block(body: str, cfg: ConfigData, router_name: str) -> str:
     return managed + body
 
 
+def remove_template_noop(body: str) -> str:
+    """Drop the template's trailing `true` once real commands are generated."""
+    hotplug = build_openvpn_babeld_hotplug_block()
+    if hotplug in body:
+        prefix, suffix = body.split(hotplug, 1)
+        suffix = hotplug + suffix
+    else:
+        prefix, suffix = body, ""
+
+    lines = prefix.splitlines(keepends=True)
+    last = len(lines) - 1
+    while last >= 0 and not lines[last].strip():
+        last -= 1
+    if (
+        last >= 0
+        and lines[last].rstrip("\r\n") == "    true"
+        and "    # Set subnet and name\n" in prefix
+        and "    uci -q set network.lan.ipaddr=" in prefix
+    ):
+        del lines[last]
+    return "".join(lines) + suffix
+
+
 def update_bootstrap(cfg: ConfigData, router_name: str) -> None:
     router = router_or_die(cfg, router_name)
     path = router_path(cfg, router_name, "bootstrap")
@@ -415,6 +417,7 @@ def update_bootstrap(cfg: ConfigData, router_name: str) -> None:
     body = update_doh_source_addr_block(body, router)
     body = update_wifi_block(body, cfg, router_name)
     body = update_pppoe_block(body, cfg, router_name)
+    body = remove_template_noop(body)
     body = update_openvpn_babeld_hotplug_block(body, cfg, router_name)
 
     updated = text[: m.start("body")] + body + text[m.end("body") :]

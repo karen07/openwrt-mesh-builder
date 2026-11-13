@@ -3,14 +3,12 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .materials import public_key_from_private as wg_public_key_from_private
-    from .validate_context import validate_optional_mtu
-except ImportError:
-    from common import *  # type: ignore
-    from materials import public_key_from_private as wg_public_key_from_private  # type: ignore
-    from validate_context import validate_optional_mtu  # type: ignore
+from .awg_model import awg_uci_options
+from .config_model import AwgOptions
+from .default import DEFAULT_ALLOWED_IPS, PROTOCOL_AMNEZIAWG
+from .materials import public_key_from_private as wg_public_key_from_private
+from .process import die
+from .validate_context import validate_optional_mtu
 
 
 def public_key_or_die(priv: str, where: str) -> str:

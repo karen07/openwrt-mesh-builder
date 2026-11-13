@@ -9,33 +9,15 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-try:
-    from tools.common import server_exit_dir
-    from tools.config_io import load_json_config
-    from tools.default import CONFIG_PATH, REMOTE_DEPLOY_COMMAND, REMOTE_ROOT
-    from tools.git_utils import git_short
-    from tools.process import die, need
-    from tools.remote_exec import (
-        run_interactive_ssh,
-        scp_paths_interactive,
-    )
-    from tools.remote_hosts import SERVER_SSH_MODE_CHOICES, server_ssh_hosts
-    from tools.secrets import assert_no_markers, decrypt_tree
-    from tools.targets import selected_servers
-except ImportError:
-    from secrets import assert_no_markers, decrypt_tree
-
-    from common import server_exit_dir
-    from config_io import load_json_config
-    from default import CONFIG_PATH, REMOTE_DEPLOY_COMMAND, REMOTE_ROOT
-    from git_utils import git_short
-    from process import die, need
-    from remote_exec import (
-        run_interactive_ssh,
-        scp_paths_interactive,
-    )
-    from remote_hosts import SERVER_SSH_MODE_CHOICES, server_ssh_hosts
-    from targets import selected_servers
+from tools.config_io import load_json_config
+from tools.default import CONFIG_PATH, REMOTE_DEPLOY_COMMAND, REMOTE_ROOT
+from tools.git_utils import git_short
+from tools.layout import server_exit_dir
+from tools.process import die, need
+from tools.remote_exec import run_interactive_ssh, scp_paths_interactive
+from tools.remote_hosts import SERVER_SSH_MODE_CHOICES, server_ssh_hosts
+from tools.secrets import assert_no_markers, decrypt_tree
+from tools.targets import selected_servers
 
 
 class DeployError(Exception):

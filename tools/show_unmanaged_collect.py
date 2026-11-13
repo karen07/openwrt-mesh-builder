@@ -4,76 +4,59 @@ import sys
 sys.dont_write_bytecode = True
 import re
 
-try:
-    from .common import *
-    from .default import EXPECTED_MANAGED_ROUTER_DIRS
-    from .generate_access import build_access_state
-    from .generate_dhcp import build_mesh_dns_text
-    from .generate_exit import (
-        build_exit_in_network_interface_block,
-        build_exit_ipip_interface_block,
-        build_exit_out_network_interface_block,
-        build_exit_rule_network_blocks,
-        build_material_for_exit,
-        build_material_for_exit_reverse,
-    )
-    from .generate_firewall import build_firewall_blocks
-    from .generate_mesh import build_mesh_state
-    from .generate_router_misc import (
-        build_doh_source_addr_block,
-        build_openvpn_babeld_hotplug_block,
-        build_pppoe_block,
-        build_subnet_hostname_block,
-        build_wifi_block,
-        router_has_openvpn_access,
-    )
-    from .generated_files import (
-        expected_router_generated_exact_paths,
-        expected_server_exact_paths,
-        expected_sync_router_paths,
-    )
-    from .managed_blocks import (
-        collect_unmanaged_uci_blocks,
-        strip_exact_text_blocks,
-        strip_outer_blank_lines,
-        uci_counter_from_text,
-    )
-    from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
-except ImportError:
-    from common import *  # type: ignore
-    from default import EXPECTED_MANAGED_ROUTER_DIRS  # type: ignore
-    from generate_access import build_access_state  # type: ignore
-    from generate_dhcp import build_mesh_dns_text  # type: ignore
-    from generate_exit import (  # type: ignore
-        build_exit_in_network_interface_block,
-        build_exit_ipip_interface_block,
-        build_exit_out_network_interface_block,
-        build_exit_rule_network_blocks,
-        build_material_for_exit,
-        build_material_for_exit_reverse,
-    )
-    from generate_firewall import build_firewall_blocks  # type: ignore
-    from generate_mesh import build_mesh_state  # type: ignore
-    from generate_router_misc import (  # type: ignore
-        build_doh_source_addr_block,
-        build_openvpn_babeld_hotplug_block,
-        build_pppoe_block,
-        build_subnet_hostname_block,
-        build_wifi_block,
-        router_has_openvpn_access,
-    )
-    from generated_files import (  # type: ignore
-        expected_router_generated_exact_paths,
-        expected_server_exact_paths,
-        expected_sync_router_paths,
-    )
-    from managed_blocks import (  # type: ignore
-        collect_unmanaged_uci_blocks,
-        strip_exact_text_blocks,
-        strip_outer_blank_lines,
-        uci_counter_from_text,
-    )
-    from tunnel_model import exit_hub_is_public, router_is_public_mesh_hub  # type: ignore
+from .awg_model import awg_for_infra_direction
+from .config_exit_model import (
+    router_exit_ipip_iface_name,
+    router_or_die,
+    router_required_exit_hubs,
+)
+from .config_model import ConfigData
+from .default import EXPECTED_MANAGED_ROUTER_DIRS, SERVER_ROOT
+from .file_ops import is_under, read
+from .generate_access import build_access_state
+from .generate_dhcp import build_dhcp_text
+from .generate_exit import (
+    build_exit_in_network_interface_block,
+    build_exit_ipip_interface_block,
+    build_exit_out_network_interface_block,
+    build_exit_rule_network_blocks,
+    build_material_for_exit,
+    build_material_for_exit_reverse,
+)
+from .generate_firewall import build_firewall_blocks
+from .generate_mesh import build_mesh_state
+from .generate_router_misc import (
+    build_doh_source_addr_block,
+    build_openvpn_babeld_hotplug_block,
+    build_pppoe_block,
+    build_subnet_hostname_block,
+    build_wifi_block,
+    router_has_openvpn_access,
+)
+from .generated_files import (
+    expected_router_generated_exact_paths,
+    expected_server_exact_paths,
+    expected_sync_router_paths,
+)
+from .layout import router_dir, router_path
+from .link_alias_model import build_exit_client_alias, build_exit_reverse_client_alias
+from .link_model import (
+    compute_exit_link_params,
+    compute_exit_reverse_link_params,
+    exit_in_iface_name,
+    exit_link_key,
+    exit_out_iface_name,
+    exit_reverse_link_key,
+)
+from .managed_blocks import (
+    collect_unmanaged_uci_blocks,
+    strip_exact_text_blocks,
+    strip_outer_blank_lines,
+    uci_counter_from_text,
+)
+from .network_config import load_existing_network_cfgs, split_text_by_marker
+from .process import die
+from .tunnel_model import exit_hub_is_public, router_is_public_mesh_hub
 
 EXPECTED_UNMANAGED_ROUTER_EXACT = {}
 EXPECTED_GENERATION_STATE_CACHE: dict[int, dict[str, dict[str, object]]] = {}
@@ -212,7 +195,7 @@ def expected_router_generation_state(
             )
         ).strip()
 
-        dhcp_text = build_mesh_dns_text(cfg, router_name)
+        dhcp_text = build_dhcp_text(cfg, router_name)
 
         state[router_name] = {
             "network": uci_counter_from_text(network_text, where="show_unmanaged"),
@@ -281,22 +264,22 @@ def collect_unmanaged_network_above_marker(
 ) -> list[str]:
     path = router_path(cfg, router_name, "network")
     text = read(path)
-    before_marker, _ = split_text_by_marker(text, path)
-
+    # Ignore only the exact generated file header, not user-added UCI blocks.
+    header = "# Generated by generate.py. Do not edit on the router.\n"
+    text = text.removeprefix(header)
+    # Network is fully generated and no longer contains a merge marker.
     expected = expected_router_generation_state(cfg)[router_name]["network"].copy()
-    return collect_unmanaged_uci_blocks(before_marker, expected, where="show_unmanaged")
+    return collect_unmanaged_uci_blocks(text, expected, where="show_unmanaged")
 
 
-def collect_unmanaged_firewall_above_marker(
+def collect_unmanaged_firewall(
     cfg: ConfigData,
     router_name: str,
 ) -> list[str]:
     path = router_path(cfg, router_name, "firewall")
     text = read(path)
-    before_marker, _ = split_text_by_marker(text, path)
-
     expected = expected_router_generation_state(cfg)[router_name]["firewall"].copy()
-    return collect_unmanaged_uci_blocks(before_marker, expected, where="show_unmanaged")
+    return collect_unmanaged_uci_blocks(text, expected, where="show_unmanaged")
 
 
 def collect_unmanaged_dhcp(

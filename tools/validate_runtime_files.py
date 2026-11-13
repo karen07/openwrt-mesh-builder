@@ -1,62 +1,71 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-try:
-    from .common import *
-    from .default import OPENVPN_SERVER_CN
-    from .generated_files import exit_server_aliases_for_hub
-    from .openvpn_model import (
-        check_cert_cn,
-        openvpn_client_cn,
-        openvpn_inline_material,
-        validate_openvpn_inline_material,
-        verify_key_matches_cert,
-    )
-    from .tunnel_model import (
-        exit_hub_is_public,
-        exit_route_env_key,
-        ipip_mtu_value,
-        router_is_public_mesh_hub,
-    )
-    from .validate_awg_helpers import (
-        find_block_by_type_and_name,
-        require_interface_block,
-        require_option,
-        require_peer_block,
-        validate_awg_conf_options,
-        validate_awg_peer_common,
-        validate_router_awg_interface_common,
-    )
-    from .validate_context import (
-        validate_optional_ipip_mtu,
-        validate_optional_mtu,
-        vprint,
-    )
-    from .validate_keys import parse_tunnel_conf, require_tunnel_sections
-    from .validate_network import (
-        validate_link_is_31_pair,
-        validate_link_local_matches_ipv4,
-    )
-    from .validate_uci import parse_uci_file
-    from .wg_keys import derive_public_key
-except ImportError:
-    from common import *  # type: ignore
-    from generated_files import exit_server_aliases_for_hub  # type: ignore
-    from tunnel_model import (  # type: ignore
-        exit_hub_is_public,
-        exit_route_env_key,
-        ipip_mtu_value,
-        router_is_public_mesh_hub,
-    )
-    from validate_awg_helpers import (  # type: ignore
-        find_block_by_type_and_name,
-        require_option,
-        validate_awg_conf_options,
-    )
-    from validate_context import (  # type: ignore
-        validate_optional_mtu,
-    )
-    from validate_keys import parse_tunnel_conf, require_tunnel_sections  # type: ignore
+from .awg_model import awg_for_infra_direction, peer_endpoint
+from .config_exit_model import server_exit_subnets
+from .config_model import ConfigData
+from .default import (
+    DEFAULT_ALLOWED_IPS_TEXT,
+    DIRECT_CIDR_OVER_COVERAGE,
+    IPIP_SERVER_IFACE,
+    NODE_SERVER_IFACE,
+    REL_DIRECT_IPSET,
+    REL_DIRECT_STATIC_IPSET,
+    REL_IPSETS_ROOT,
+    RUNTIME_DIRECT_OUT_NAME,
+    RUNTIME_DIRECT_STATIC_NAME,
+    RUNTIME_IPSETS_DIR,
+    RUNTIME_UCI_FILES,
+    SERVER_ENV_IPSET_NAME,
+    SERVER_ROUTE_PROBE_IP,
+    UPDATE_IPSETS_CURL_CONNECT_TIMEOUT,
+    UPDATE_IPSETS_CURL_MAX_TIME,
+    UPDATE_IPSETS_CURL_RETRY,
+    URL_IPINFO_LITE_CSV_GZ,
+    URL_IPVERSE_ASN,
+)
+from .file_ops import read
+from .generated_files import exit_server_aliases_for_hub
+from .layout import (
+    router_dir,
+    server_babeld_conf_remote_path,
+    server_client_conf_path,
+    server_exit_dir,
+    server_path,
+)
+from .link_alias_model import (
+    build_exit_client_alias,
+    build_exit_exit_alias,
+    build_exit_reverse_client_alias,
+)
+from .link_model import (
+    client_iface_name_for_target,
+    compute_exit_exit_link_params,
+    compute_exit_link_params,
+    compute_exit_reverse_link_params,
+    compute_mesh_link_params,
+    exit_exit_link_key,
+    exit_exit_link_pairs,
+    exit_in_iface_name,
+    exit_link_key,
+    exit_out_iface_name,
+    exit_reverse_link_key,
+    mesh_link_specs_for_router,
+)
+from .net_model import exit_ipip_endpoint_addr4, exit_node_addr4
+from .process import die
+from .tunnel_model import (
+    exit_hub_is_public,
+    ipip_mtu_value,
+    router_is_public_mesh_hub,
+)
+from .validate_awg_helpers import (
+    find_block_by_type_and_name,
+    require_option,
+    validate_awg_conf_options,
+)
+from .validate_context import validate_optional_mtu
+from .validate_keys import parse_tunnel_conf, require_tunnel_sections
 
 
 def validate_router_endpoints(
@@ -318,84 +327,26 @@ def validate_server_env(cfg: ConfigData) -> None:
             "EXIT_SUBNETS": server_exit_subnets(cfg),
             "IPSET_NAME": SERVER_ENV_IPSET_NAME,
             "ROUTE_PROBE_IP": SERVER_ROUTE_PROBE_IP,
-            "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
-            "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
-            "RUNTIME_IPSETS_DIR": RUNTIME_IPSETS_DIR,
-            "RUNTIME_DIRECT_STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
-            "RUNTIME_DIRECT_OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
-            "URL_IPINFO_LITE_CSV_GZ": URL_IPINFO_LITE_CSV_GZ,
-            "URL_IPVERSE_ASN": URL_IPVERSE_ASN,
-            "DIRECT_CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
-            "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(
-                UPDATE_IPSETS_CURL_CONNECT_TIMEOUT
-            ),
-            "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
-            "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
             "AWG_SERVICES": awg_services,
             "BABELD_CONF": server_babeld_conf_remote_path(hub.name),
         }
         validate_exact_env_values(path, expected)
-
-
-def expected_runtime_env_values(
-    cfg: ConfigData, router_name: str | None = None
-) -> dict[str, str]:
-    hubs = (
-        router_exit_order_hubs(cfg, router_name)
-        if router_name is not None
-        else [cfg.exit_hubs_by_name[name] for name in cfg.exit_order]
-    )
-    target_names = []
-    for hub in hubs:
-        key = exit_route_env_key(hub.name)
-        iface = router_exit_ipip_iface_name(hub.name)
-        expected_iface = f"ip{hub.name}"
-        if key != hub.name or iface != expected_iface:
-            die(
-                f"exit hub {hub.name!r} cannot be used as an exit-route target; "
-                "use a short uppercase ASCII name containing A-Z, 0-9 or _ so the IPIP interface "
-                f"is {expected_iface!r}"
-            )
-        target_names.append(hub.name)
-    expected = {
-        "DIRECT_COUNTRIES": " ".join(cfg.exit_direct.countries),
-        "DIRECT_ASNS": " ".join(cfg.exit_direct.asns),
-        "RUNTIME_IPSETS_DIR": RUNTIME_IPSETS_DIR,
-        "RUNTIME_DIRECT_STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
-        "RUNTIME_DIRECT_OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
-        "URL_IPINFO_LITE_CSV_GZ": URL_IPINFO_LITE_CSV_GZ,
-        "URL_IPVERSE_ASN": URL_IPVERSE_ASN,
-        "DIRECT_CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
-        "UPDATE_IPSETS_CURL_CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
-        "UPDATE_IPSETS_CURL_MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
-        "UPDATE_IPSETS_CURL_RETRY": str(UPDATE_IPSETS_CURL_RETRY),
-        "CHECK_DOH_DOMAIN": CHECK_DOH_DOMAIN,
-        "CHECK_DOH_INTERVAL": str(CHECK_DOH_INTERVAL),
-        "CHECK_DOH_RESOLV": CHECK_DOH_RESOLV,
-        "CHECK_DOH_RESOLV_WAIT_MAX": str(CHECK_DOH_RESOLV_WAIT_MAX),
-        "CHECK_DOH_PROVIDER_DOMAINS": " ".join(CHECK_DOH_PROVIDER_DOMAINS),
-        "PING_REBOOT_HOSTS": " ".join(PING_REBOOT_HOSTS),
-        "PING_REBOOT_ARM_SUCCESSES": str(PING_REBOOT_ARM_SUCCESSES),
-        "PING_REBOOT_UNARMED_REBOOT": str(PING_REBOOT_UNARMED_REBOOT),
-        "PING_REBOOT_INTERVAL": str(PING_REBOOT_INTERVAL),
-        "PING_REBOOT_MAX_FAILURES": str(PING_REBOOT_MAX_FAILURES),
-        "PING_REBOOT_TIMEOUT": str(PING_REBOOT_TIMEOUT),
-        "EXIT_ROUTE_TABLE": str(EXIT_POLICY_BASE),
-        "EXIT_ROUTE_INTERVAL": str(EXIT_ROUTE_INTERVAL),
-        "EXIT_ROUTE_TARGETS": " ".join(target_names),
-    }
-
-    for hub in hubs:
-        key = exit_route_env_key(hub.name)
-        expected[f"EXIT_ROUTE_{key}_PREFIX"] = str(exit_announce_network(hub))
-
-    return expected
-
-
-def validate_runtime_env_file(
-    path: Path, cfg: ConfigData, router_name: str | None = None
-) -> None:
-    validate_exact_env_values(path, expected_runtime_env_values(cfg, router_name))
+        ipsets_expected = {
+            "COUNTRIES": " ".join(cfg.exit_direct.countries),
+            "ASNS": " ".join(cfg.exit_direct.asns),
+            "DIR": RUNTIME_IPSETS_DIR,
+            "STATIC_NAME": RUNTIME_DIRECT_STATIC_NAME,
+            "OUT_NAME": RUNTIME_DIRECT_OUT_NAME,
+            "IPINFO_URL": URL_IPINFO_LITE_CSV_GZ,
+            "IPVERSE_ASN_URL": URL_IPVERSE_ASN,
+            "CIDR_OVER_COVERAGE": DIRECT_CIDR_OVER_COVERAGE,
+            "CONNECT_TIMEOUT": str(UPDATE_IPSETS_CURL_CONNECT_TIMEOUT),
+            "MAX_TIME": str(UPDATE_IPSETS_CURL_MAX_TIME),
+            "RETRY": str(UPDATE_IPSETS_CURL_RETRY),
+        }
+        validate_exact_env_values(
+            server_path(hub.name, "etc", "update-ipsets.env"), ipsets_expected
+        )
 
 
 def validate_exact_file_set(path: Path, expected: set[str]) -> None:
@@ -430,11 +381,24 @@ def validate_ipset_files(cfg: ConfigData) -> None:
         router_paths.extend(
             [
                 root / REL_DIRECT_STATIC_IPSET,
-                root / REL_RUNTIME_ENV,
+                *(root / "files/etc/config" / name for name in RUNTIME_UCI_FILES),
                 root / REL_DIRECT_IPSET,
             ]
         )
-        validate_runtime_env_file(root / REL_RUNTIME_ENV, cfg, router_name)
+        from .generate_runtime import build_router_runtime_configs
+
+        for name, content in build_router_runtime_configs(cfg, router_name).items():
+            path = root / "files/etc/config" / name
+            if not path.is_file() or path.read_text(encoding="utf-8") != content:
+                die(f"bad generated UCI config: {path}")
+        user_path = root / "files/etc/config/exit_route"
+        from .generate_runtime import build_exit_route_config
+
+        expected = build_exit_route_config(cfg, router_name)
+        if not user_path.is_file() or user_path.read_text(encoding="utf-8") != expected:
+            die(f"bad generated exit_route: {user_path}")
+        if (root / "files/etc/config/exit_route_base").exists():
+            die(f"stale exit_route_base: {root}")
 
     server_paths: list[Path] = []
     for hub in cfg.exit_hubs:
@@ -450,8 +414,5 @@ def validate_ipset_files(cfg: ConfigData) -> None:
     for path in router_paths + server_paths:
         if not path.exists():
             die(f"missing generated ipset file: {path}")
-        if (
-            path.name != RUNTIME_ENV_FILENAME
-            and not path.read_text(encoding="utf-8").strip()
-        ):
+        if not path.read_text(encoding="utf-8").strip():
             die(f"empty generated ipset file: {path}")

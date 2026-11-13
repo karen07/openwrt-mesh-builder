@@ -5,60 +5,32 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-try:
-    from .config_io import load_json_config
-    from .file_ops import atomic_write_text
-    from .process import need
-    from .remote_exec import (
-        deploy_ssh_config_path_from_config,
-        deploy_ssh_dir_from_config,
-    )
-    from .ssh_keys import generate_ed25519_key, public_key_from_private
-except ImportError:
-    from config_io import load_json_config
-    from file_ops import atomic_write_text
-    from process import need
-    from remote_exec import (
-        deploy_ssh_config_path_from_config,
-        deploy_ssh_dir_from_config,
-    )
-    from ssh_keys import generate_ed25519_key, public_key_from_private
-
-try:
-    from .default import (
-        CONFIG_PATH,
-        PRIVATE_KEY_FILE_MODE,
-        PRIVATE_SSH_DIR_MODE,
-        REL_DROPBEAR_AUTHORIZED_KEYS,
-        ROUTERS_ROOT,
-        SSH_KNOWN_HOSTS_FILENAME,
-    )
-    from .default import (
-        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
-    )
-    from .default import (
-        SERVER_KEY_PREFIX as SERVER_PREFIX,
-    )
-except ImportError:
-    from default import (
-        CONFIG_PATH,
-        PRIVATE_KEY_FILE_MODE,
-        PRIVATE_SSH_DIR_MODE,
-        REL_DROPBEAR_AUTHORIZED_KEYS,
-        ROUTERS_ROOT,
-        SSH_KNOWN_HOSTS_FILENAME,
-    )
-    from default import (
-        ROUTER_KEY_PREFIX as ROUTER_PREFIX,
-    )
-    from default import (
-        SERVER_KEY_PREFIX as SERVER_PREFIX,
-    )
-
-try:
-    from .common import ConfigData, ExitHub, build_config_data, server_exit_dir
-except ImportError:
-    from common import ConfigData, ExitHub, build_config_data, server_exit_dir
+from .change_report import log_change
+from .config_builder import build_config_data
+from .config_io import load_json_config
+from .config_model import ConfigData, ExitHub
+from .default import (
+    CONFIG_PATH,
+    PRIVATE_KEY_FILE_MODE,
+    PRIVATE_SSH_DIR_MODE,
+    REL_DROPBEAR_AUTHORIZED_KEYS,
+    ROUTERS_ROOT,
+    SSH_KNOWN_HOSTS_FILENAME,
+)
+from .default import (
+    ROUTER_KEY_PREFIX as ROUTER_PREFIX,
+)
+from .default import (
+    SERVER_KEY_PREFIX as SERVER_PREFIX,
+)
+from .file_ops import atomic_write_text
+from .layout import server_exit_dir
+from .process import need
+from .remote_exec import (
+    deploy_ssh_config_path_from_config,
+    deploy_ssh_dir_from_config,
+)
+from .ssh_keys import generate_ed25519_key, public_key_from_private
 
 
 def ensure_dir(path: Path, mode: int | None = None) -> None:
@@ -86,7 +58,7 @@ def ensure_key_and_write_pub(key_base: Path, auth_file: Path, comment: str) -> N
         if old == pub_text:
             return
 
-    print(f"Writing {auth_file} from {priv_key}")
+    log_change(f"Writing {auth_file} from {priv_key}")
 
     atomic_write_text(auth_file, pub_text)
 

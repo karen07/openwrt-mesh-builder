@@ -2,38 +2,33 @@
 import ipaddress
 import re
 
-try:
-    from .config_model import (
-        ConfigData,
-        ExitDirectConfig,
-        ExitHub,
-        RouterDef,
-        RoutingRule,
-    )
-    from .config_schema import validate_exit_order_shape
-    from .default import *
-    from .net_model import (
-        exit_announce_network,
-        generated_exit_announce_network,
-        generated_exit_node_ip,
-    )
-    from .process import die
-except ImportError:
-    from config_model import (  # type: ignore
-        ConfigData,
-        ExitDirectConfig,
-        ExitHub,
-        RouterDef,
-        RoutingRule,
-    )
-    from config_schema import validate_exit_order_shape  # type: ignore
-    from default import *  # type: ignore
-    from net_model import (  # type: ignore
-        exit_announce_network,
-        generated_exit_announce_network,
-        generated_exit_node_ip,
-    )
-    from process import die  # type: ignore
+from .config_model import (
+    ConfigData,
+    ExitDirectConfig,
+    ExitHub,
+    RouterDef,
+    RouterExitRoute,
+    RoutingRule,
+)
+from .config_schema import validate_exit_order_shape
+from .default import (
+    CONFIG_KEY_EXIT,
+    CONFIG_KEY_MODE,
+    CONFIG_KEY_SRC_IP,
+    EXIT_DIRECT_ASNS,
+    EXIT_DIRECT_COUNTRIES,
+    EXIT_DIRECT_STATIC_IPSETS,
+    EXIT_POLICY_BASE,
+    ROUTING_MODE_AUTO,
+    ROUTING_MODE_DIRECT,
+    ROUTING_MODES,
+)
+from .net_model import (
+    exit_announce_network,
+    generated_exit_announce_network,
+    generated_exit_node_ip,
+)
+from .process import die
 
 
 def router_exit_ipip_iface_name(hub_name: str) -> str:
@@ -198,13 +193,15 @@ def load_router_routing_rules(
 
         mode = raw.get(CONFIG_KEY_MODE)
         if not isinstance(mode, str) or mode not in ROUTING_MODES:
-            allowed = ", ".join(sorted(ROUTING_MODES))
-            die(f"{rule_where}.mode must be one of: {allowed}")
+            die(
+                f"{rule_where}.mode must be one of: "
+                f"{', '.join(sorted(ROUTING_MODES))}"
+            )
 
         exit_name: str | None = None
-        if mode == ROUTING_MODE_WAN:
+        if mode in {ROUTING_MODE_DIRECT, ROUTING_MODE_AUTO}:
             if CONFIG_KEY_EXIT in raw:
-                die(f"{rule_where}.exit is not allowed for mode {ROUTING_MODE_WAN}")
+                die(f"{rule_where}.exit is not allowed for mode {mode}")
         else:
             exit_value = raw.get(CONFIG_KEY_EXIT)
             if not isinstance(exit_value, str) or not exit_value:
@@ -218,30 +215,72 @@ def load_router_routing_rules(
     return rules
 
 
-def routing_exit_policy_ids(cfg: ConfigData) -> dict[str, int]:
-    used_names = {
-        rule.exit_name
-        for rules in cfg.routing_rules_by_router.values()
-        for rule in rules
-        if rule.exit_name is not None
+def load_router_exit_route(
+    value: object,
+    where: str,
+    *,
+    exit_hubs_by_name: dict[str, ExitHub],
+) -> RouterExitRoute:
+    """Read the global EXIT policy only from the declarative router config."""
+    if value is None:
+        return RouterExitRoute("AUTO", None, ())
+    if not isinstance(value, dict):
+        die(f"{where} must be an object")
+    allowed = {CONFIG_KEY_MODE, CONFIG_KEY_EXIT, "auto_exit"}
+    extra = sorted(set(value) - allowed)
+    if extra:
+        die(f"{where}: unknown config key(s): {', '.join(extra)}")
+    mode = value.get(CONFIG_KEY_MODE)
+    modes = {
+        "DIRECT",
+        "AUTO",
+        "SPLIT_FAIL_OPEN",
+        "SPLIT_FAIL_CLOSED",
+        "EXIT_FAIL_OPEN",
+        "EXIT_FAIL_CLOSED",
     }
+    if not isinstance(mode, str) or mode not in modes:
+        die(f"{where}.mode must be one of: {', '.join(sorted(modes))}")
+    fixed = {
+        "SPLIT_FAIL_OPEN",
+        "SPLIT_FAIL_CLOSED",
+        "EXIT_FAIL_OPEN",
+        "EXIT_FAIL_CLOSED",
+    }
+    exit_name = value.get(CONFIG_KEY_EXIT)
+    if mode in fixed:
+        if not isinstance(exit_name, str) or exit_name not in exit_hubs_by_name:
+            die(f"{where}.exit must name a configured EXIT for mode {mode}")
+    elif CONFIG_KEY_EXIT in value:
+        die(f"{where}.exit is not allowed for mode {mode}")
+    else:
+        exit_name = None
+    auto_exit = value.get("auto_exit", [])
+    if not isinstance(auto_exit, list):
+        die(f"{where}.auto_exit must be a list of EXIT names")
+    if any(
+        not isinstance(name, str) or name not in exit_hubs_by_name for name in auto_exit
+    ):
+        die(f"{where}.auto_exit contains an unknown EXIT name")
+    if len(set(auto_exit)) != len(auto_exit):
+        die(f"{where}.auto_exit contains duplicate EXIT names")
+    return RouterExitRoute(mode, exit_name, tuple(auto_exit))
+
+
+def routing_exit_policy_ids(cfg: ConfigData) -> dict[str, int]:
+    # Stable globally: adding or removing device rules must not renumber tables.
     return {
-        hub.name: EXIT_POLICY_BASE + idx + 1
-        for idx, hub in enumerate(
-            hub for hub in cfg.exit_hubs if hub.name in used_names
-        )
+        hub.name: EXIT_POLICY_BASE + idx + 1 for idx, hub in enumerate(cfg.exit_hubs)
     }
 
 
 def router_required_exit_hubs(cfg: ConfigData, router_name: str) -> list[ExitHub]:
-    names = [hub.name for hub in router_exit_order_hubs(cfg, router_name)]
-    seen = set(names)
-    for rule in cfg.routing_rules_by_router.get(router_name, []):
-        if rule.exit_name is None or rule.exit_name in seen:
-            continue
-        names.append(rule.exit_name)
-        seen.add(rule.exit_name)
-    return [cfg.exit_hubs_by_name[name] for name in names]
+    # Every router must have an IPIP interface and a policy table for every exit.
+    # A router-specific exit_order only controls AUTO preference, not which exits
+    # are available to manual/global or per-device routing rules in LuCI.
+    if router_name not in cfg.router_by_name:
+        die(f"unknown router for exit route targets: {router_name}")
+    return list(cfg.exit_hubs)
 
 
 def validate_exit_announce_set(hubs: list[ExitHub]) -> None:

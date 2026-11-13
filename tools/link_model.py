@@ -4,50 +4,27 @@ import sys
 sys.dont_write_bytecode = True
 import ipaddress
 
-try:
-    from .config_model import (
-        ConfigData,
-        ExitExitLinkParams,
-        ExitHub,
-        LinkParams,
-        MeshHub,
-    )
-    from .default import (
-        INFRA_LINK_POOL,
-        P2P_LINK_HOST_STRIDE,
-        P2P_LINK_PREFIXLEN,
-    )
-    from .net_model import ipv4_to_link_local
-    from .process import die
-    from .stable_model import (
-        ring_link_pairs,
-        stable_port_avoiding_for,
-        stable_port_for,
-        stable_unique_values,
-        stable_unique_values_avoiding,
-    )
-except ImportError:
-    from config_model import (  # type: ignore
-        ConfigData,
-        ExitExitLinkParams,
-        ExitHub,
-        LinkParams,
-        MeshHub,
-    )
-    from default import (  # type: ignore
-        INFRA_LINK_POOL,
-        P2P_LINK_HOST_STRIDE,
-        P2P_LINK_PREFIXLEN,
-    )
-    from net_model import ipv4_to_link_local  # type: ignore
-    from process import die  # type: ignore
-    from stable_model import (  # type: ignore
-        ring_link_pairs,
-        stable_port_avoiding_for,
-        stable_port_for,
-        stable_unique_values,
-        stable_unique_values_avoiding,
-    )
+from .config_model import (
+    ConfigData,
+    ExitExitLinkParams,
+    ExitHub,
+    LinkParams,
+    MeshHub,
+)
+from .default import (
+    INFRA_LINK_POOL,
+    P2P_LINK_HOST_STRIDE,
+    P2P_LINK_PREFIXLEN,
+)
+from .net_model import ipv4_to_link_local
+from .process import die
+from .stable_model import (
+    ring_link_pairs,
+    stable_port_avoiding_for,
+    stable_port_for,
+    stable_unique_values,
+    stable_unique_values_avoiding,
+)
 
 
 def _router_or_die(cfg: ConfigData, name: str) -> None:

@@ -5,118 +5,47 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-try:
-    from .common import *
-    from .default import OPENVPN_SERVER_CN
-    from .generated_files import (
-        exit_server_aliases_for_hub,
-        validate_generated_files_exist,
-    )
-    from .openvpn_model import (
-        check_cert_cn,
-        openvpn_client_cn,
-        openvpn_inline_material,
-        validate_openvpn_inline_material,
-        verify_key_matches_cert,
-    )
-    from .package_model import validate_raw_router_package_policy
-    from .tunnel_model import (
-        exit_hub_is_public,
-        exit_route_env_key,
-        ipip_mtu_value,
-        router_is_public_mesh_hub,
-    )
-    from .validate_access import validate_access_links, validate_openvpn_uci
-    from .validate_awg_helpers import (
-        find_block_by_type_and_name,
-        require_interface_block,
-        require_option,
-        require_peer_block,
-        validate_awg_conf_options,
-        validate_awg_peer_common,
-        validate_router_awg_interface_common,
-    )
-    from .validate_firewall import validate_firewall
-    from .validate_network import (
-        validate_current_network_objects,
-        validate_exit_rule_network_objects,
-        validate_link_is_31_pair,
-        validate_link_local_matches_ipv4,
-        validate_subnet_isolation,
-        validate_unique_tunnel_addresses,
-    )
-    from .validate_ports import (
-        validate_exit_server_local_ports,
-        validate_router_local_ports,
-    )
-    from .validate_uci import parse_uci_file
-    from .wg_keys import derive_public_key
-except ImportError:
-    from common import *
-    from generated_files import (  # type: ignore
-        validate_generated_files_exist,
-    )
-    from package_model import validate_raw_router_package_policy  # type: ignore
-    from validate_access import validate_access_links, validate_openvpn_uci  # type: ignore
-    from validate_firewall import validate_firewall  # type: ignore
-    from validate_network import (  # type: ignore
-        validate_current_network_objects,
-        validate_exit_rule_network_objects,
-        validate_link_local_matches_ipv4,
-        validate_subnet_isolation,
-        validate_unique_tunnel_addresses,
-    )
-    from validate_ports import (  # type: ignore
-        validate_exit_server_local_ports,
-        validate_router_local_ports,
-    )
-
-
-try:
-    from .validate_context import set_verbose, vprint
-    from .validate_keys import (
-        validate_openvpn_certs,
-        validate_router_keys,
-        validate_server_keys,
-    )
-    from .validate_router_files import (
-        validate_babeld,
-        validate_router_network_parse_clean,
-    )
-    from .validate_runtime_files import (
-        validate_exit_server_confs,
-        validate_ipset_files,
-        validate_router_endpoints,
-        validate_runtime_env_file,
-        validate_server_env,
-    )
-    from .validate_secrets import validate_encrypted_config_secrets
-    from .validate_tunnel_files import (
-        validate_exit_pair_confs,
-        validate_mesh_pair_confs,
-    )
-except ImportError:
-    from validate_context import set_verbose, vprint  # type: ignore
-    from validate_keys import (  # type: ignore
-        validate_openvpn_certs,
-        validate_router_keys,
-        validate_server_keys,
-    )
-    from validate_router_files import (  # type: ignore
-        validate_babeld,
-        validate_router_network_parse_clean,
-    )
-    from validate_runtime_files import (  # type: ignore
-        validate_exit_server_confs,
-        validate_ipset_files,
-        validate_router_endpoints,
-        validate_server_env,
-    )
-    from validate_secrets import validate_encrypted_config_secrets  # type: ignore
-    from validate_tunnel_files import (  # type: ignore
-        validate_exit_pair_confs,
-        validate_mesh_pair_confs,
-    )
+from .config_builder import build_config_data
+from .config_io import load_json_config
+from .config_schema import validate_config_known_keys
+from .default import CONFIG_PATH
+from .generated_files import validate_generated_files_exist
+from .network_config import load_existing_network_cfgs
+from .package_model import validate_raw_router_package_policy
+from .process import need
+from .validate_access import validate_access_links, validate_openvpn_uci
+from .validate_context import set_verbose, vprint
+from .validate_firewall import validate_firewall
+from .validate_keys import (
+    validate_openvpn_certs,
+    validate_router_keys,
+    validate_server_keys,
+)
+from .validate_network import (
+    validate_exit_rule_network_objects,
+    validate_link_local_matches_ipv4,
+    validate_subnet_isolation,
+    validate_unique_tunnel_addresses,
+)
+from .validate_ports import (
+    validate_exit_server_local_ports,
+    validate_router_local_ports,
+)
+from .validate_router_files import (
+    validate_babeld,
+    validate_router_network_parse_clean,
+)
+from .validate_runtime_files import (
+    validate_exit_server_confs,
+    validate_ipset_files,
+    validate_router_endpoints,
+    validate_server_env,
+)
+from .validate_secrets import validate_encrypted_config_secrets
+from .validate_tunnel_files import (
+    validate_exit_pair_confs,
+    validate_mesh_pair_confs,
+)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -172,7 +101,6 @@ def main(argv: list[str] | None = None) -> None:
     validate_mesh_pair_confs(cfg, existing)
     validate_exit_pair_confs(cfg, existing)
     validate_access_links(cfg, existing)
-    validate_current_network_objects(cfg, existing)
     validate_exit_rule_network_objects(cfg, existing)
 
     vprint("=== FIREWALL VALIDATION ===")

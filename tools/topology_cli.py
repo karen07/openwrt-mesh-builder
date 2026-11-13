@@ -5,12 +5,8 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-try:
-    from .default import CONFIG_PATH, LINK_SPEEDS_JSON_PATH, TOPOLOGY_TITLE
-    from .file_ops import write_text_output
-except ImportError:
-    from default import CONFIG_PATH, LINK_SPEEDS_JSON_PATH, TOPOLOGY_TITLE  # type: ignore
-    from file_ops import write_text_output  # type: ignore
+from .default import CONFIG_PATH, LINK_SPEEDS_JSON_PATH, TOPOLOGY_TITLE
+from .file_ops import write_text_output
 
 
 def add_topology_input_args(parser: argparse.ArgumentParser) -> None:

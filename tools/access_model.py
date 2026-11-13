@@ -3,10 +3,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .process import die
-except ImportError:
-    from process import die  # type: ignore
+from .process import die
 
 
 def router_public_host_for_access(cfg: object, router_name: str) -> str:

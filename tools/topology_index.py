@@ -4,14 +4,9 @@ import sys
 sys.dont_write_bytecode = True
 from dataclasses import dataclass
 
-try:
-    from .common import ConfigData
-    from .layout import router_path, server_amneziawg_dir
-    from .uci import parse_uci_block, split_uci_blocks
-except ImportError:
-    from common import ConfigData  # type: ignore
-    from layout import router_path, server_amneziawg_dir  # type: ignore
-    from uci import parse_uci_block, split_uci_blocks  # type: ignore
+from .config_model import ConfigData
+from .layout import router_path, server_amneziawg_dir
+from .uci import parse_uci_block, split_uci_blocks
 
 
 @dataclass(frozen=True)

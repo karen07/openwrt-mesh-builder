@@ -1,26 +1,65 @@
 #!/usr/bin/env python3
 import re
 
-try:
-    from .awg_model import AWG_KEYS
-    from .default import *
-    from .identifiers import (
-        require_device_profile_arch,
-        require_device_profile_board,
-        require_file_identifier,
-    )
-    from .package_model import validate_config_package_list
-    from .process import die
-except ImportError:
-    from awg_model import AWG_KEYS  # type: ignore
-    from default import *  # type: ignore
-    from identifiers import (  # type: ignore
-        require_device_profile_arch,
-        require_device_profile_board,
-        require_file_identifier,
-    )
-    from package_model import validate_config_package_list  # type: ignore
-    from process import die  # type: ignore
+from .awg_model import AWG_KEYS
+from .default import (
+    ACCESS_POLICY_TRANSIT,
+    ACCESS_POLICY_TRUSTED,
+    CONFIG_KEY_ACCESS,
+    CONFIG_KEY_ACCESS_ONLY,
+    CONFIG_KEY_ALLOW_TO_LAN,
+    CONFIG_KEY_ALLOW_TO_ROUTER,
+    CONFIG_KEY_ARCH,
+    CONFIG_KEY_AWG,
+    CONFIG_KEY_BOARD,
+    CONFIG_KEY_DEVICE_PROFILE,
+    CONFIG_KEY_DEVICE_PROFILES,
+    CONFIG_KEY_DHCP_HOSTS,
+    CONFIG_KEY_EXIT,
+    CONFIG_KEY_EXIT_HUBS,
+    CONFIG_KEY_EXIT_IP,
+    CONFIG_KEY_EXIT_ORDER,
+    CONFIG_KEY_EXIT_ROUTE,
+    CONFIG_KEY_KEY,
+    CONFIG_KEY_LISTEN_IP,
+    CONFIG_KEY_MAIN_ROUTER,
+    CONFIG_KEY_MATERIALS_KEY_PATH,
+    CONFIG_KEY_MESH_HUBS,
+    CONFIG_KEY_MODE,
+    CONFIG_KEY_MTU,
+    CONFIG_KEY_NAME,
+    CONFIG_KEY_OPENWRT_VERSION,
+    CONFIG_KEY_PACKAGES,
+    CONFIG_KEY_PASSWORD,
+    CONFIG_KEY_POLICY,
+    CONFIG_KEY_PORT,
+    CONFIG_KEY_PPPOE,
+    CONFIG_KEY_PROTOCOL,
+    CONFIG_KEY_ROUTERS,
+    CONFIG_KEY_ROUTING_RULES,
+    CONFIG_KEY_SECRETS_KEY_PATH,
+    CONFIG_KEY_SRC_IP,
+    CONFIG_KEY_SSH_KEY_DIR,
+    CONFIG_KEY_SSID,
+    CONFIG_KEY_SUBNET,
+    CONFIG_KEY_USERNAME,
+    CONFIG_KEY_USERS,
+    CONFIG_KEY_WIFI_2G,
+    CONFIG_KEY_WIFI_5G,
+    CONFIG_KEY_WIFI_6G,
+    MIN_OPENWRT_VERSION,
+    MIN_OPENWRT_VERSION_TEXT,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+)
+from .identifiers import (
+    require_device_profile_arch,
+    require_device_profile_board,
+    require_file_identifier,
+)
+from .package_model import validate_config_package_list
+from .process import die
 
 CONFIG_KEYS = {
     CONFIG_KEY_SSH_KEY_DIR,
@@ -34,7 +73,6 @@ CONFIG_KEYS = {
     CONFIG_KEY_MESH_HUBS,
     CONFIG_KEY_EXIT_HUBS,
     CONFIG_KEY_EXIT_ORDER,
-    CONFIG_KEY_ACCESS,
 }
 
 DEVICE_PROFILE_KEYS = {CONFIG_KEY_BOARD, CONFIG_KEY_ARCH}
@@ -47,16 +85,20 @@ ROUTER_KEYS = {
     CONFIG_KEY_PACKAGES,
     CONFIG_KEY_EXIT_ORDER,
     CONFIG_KEY_ROUTING_RULES,
+    CONFIG_KEY_EXIT_ROUTE,
     CONFIG_KEY_ALLOW_TO_LAN,
     CONFIG_KEY_ALLOW_TO_ROUTER,
     CONFIG_KEY_WIFI_2G,
     CONFIG_KEY_WIFI_5G,
     CONFIG_KEY_WIFI_6G,
     CONFIG_KEY_PPPOE,
+    CONFIG_KEY_DHCP_HOSTS,
+    CONFIG_KEY_ACCESS,
 }
 
-WIFI_KEYS = {CONFIG_KEY_SSID, CONFIG_KEY_KEY, CONFIG_KEY_BLOCKED_MACS}
+WIFI_KEYS = {CONFIG_KEY_SSID, CONFIG_KEY_KEY}
 PPPOE_KEYS = {CONFIG_KEY_USERNAME, CONFIG_KEY_PASSWORD, CONFIG_KEY_MTU}
+DHCP_HOST_KEYS = {"name", "ip", "mac", "dhcp_options"}
 WIFI_CONFIG_KEYS = (CONFIG_KEY_WIFI_2G, CONFIG_KEY_WIFI_5G, CONFIG_KEY_WIFI_6G)
 
 MESH_HUB_KEYS = {
@@ -78,6 +120,7 @@ FIREWALL_ALLOW_KIND_ROUTER = "router"
 FIREWALL_ALLOW_KIND_LAN = "lan"
 
 ROUTING_RULE_KEYS = {CONFIG_KEY_SRC_IP, CONFIG_KEY_MODE, CONFIG_KEY_EXIT}
+EXIT_ROUTE_KEYS = {CONFIG_KEY_MODE, CONFIG_KEY_EXIT, "auto_exit"}
 
 ACCESS_KEYS = {
     CONFIG_KEY_NAME,
@@ -93,10 +136,8 @@ ACCESS_KEYS = {
 
 
 def validate_default_exit_direct_config() -> None:
-    try:
-        from .config_exit_model import load_exit_direct_config
-    except ImportError:
-        from config_exit_model import load_exit_direct_config  # type: ignore
+    from .config_exit_model import load_exit_direct_config
+
     load_exit_direct_config()
 
 
@@ -162,12 +203,6 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
     if not isinstance(raw_ssh_key_dir, str) or not raw_ssh_key_dir.strip():
         die(f"config.{CONFIG_KEY_SSH_KEY_DIR} must be a non-empty string")
 
-    if CONFIG_KEY_SECRET_KEY in raw_cfg:
-        die(
-            f"legacy config.{CONFIG_KEY_SECRET_KEY} is not supported; "
-            f"use {CONFIG_KEY_SECRETS_KEY_PATH!r} and {CONFIG_KEY_MATERIALS_KEY_PATH!r}"
-        )
-
     for key_name in (CONFIG_KEY_SECRETS_KEY_PATH, CONFIG_KEY_MATERIALS_KEY_PATH):
         raw_key_path = raw_cfg.get(key_name)
         if raw_key_path is None:
@@ -222,6 +257,38 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
                 raw.get(CONFIG_KEY_EXIT_ORDER),
                 f"{where}.exit_order",
             )
+
+            groups = raw.get(CONFIG_KEY_ACCESS)
+            if groups is not None:
+                if not isinstance(groups, list):
+                    die(f"{where}.access must be a list")
+                for group_idx, group in enumerate(groups, start=1):
+                    if not isinstance(group, dict):
+                        die(f"{where}.access[{group_idx}] must be an object")
+                    group_name = group.get(CONFIG_KEY_NAME, group_idx)
+                    group_where = f"{where}.access[{group_name}]"
+                    require_known_keys(group, group_where, ACCESS_KEYS)
+                    awg = group.get(CONFIG_KEY_AWG)
+                    if awg is not None:
+                        if not isinstance(awg, dict):
+                            die(f"{group_where}.awg must be an object")
+                        require_known_keys(awg, f"{group_where}.awg", AWG_KEYS)
+
+            dhcp_hosts = raw.get(CONFIG_KEY_DHCP_HOSTS)
+            if dhcp_hosts is not None:
+                if not isinstance(dhcp_hosts, list):
+                    die(f"{where}.dhcp_hosts must be a list")
+                for host_idx, host in enumerate(dhcp_hosts, start=1):
+                    host_where = f"{where}.dhcp_hosts[{host_idx}]"
+                    if not isinstance(host, dict):
+                        die(f"{host_where} must be an object")
+                    require_known_keys(host, host_where, DHCP_HOST_KEYS)
+
+            exit_route = raw.get(CONFIG_KEY_EXIT_ROUTE)
+            if CONFIG_KEY_EXIT_ROUTE in raw:
+                if not isinstance(exit_route, dict):
+                    die(f"{where}.exit_route must be an object")
+                require_known_keys(exit_route, f"{where}.exit_route", EXIT_ROUTE_KEYS)
 
             routing_rules = raw.get(CONFIG_KEY_ROUTING_RULES)
             if routing_rules is not None:
@@ -307,26 +374,3 @@ def validate_config_known_keys(raw_cfg: dict[str, object]) -> None:
             require_known_keys(raw, where, EXIT_HUB_KEYS)
 
     validate_default_exit_direct_config()
-
-    raw_access = raw_cfg.get(CONFIG_KEY_ACCESS, {})
-    if raw_access is not None:
-        if not isinstance(raw_access, dict):
-            die("config key 'access' must be an object")
-        for router_name, groups in raw_access.items():
-            if not isinstance(groups, list):
-                die(f"access[{router_name}] must be a list")
-            for idx, raw in enumerate(groups, start=1):
-                if not isinstance(raw, dict):
-                    die(f"access[{router_name}][{idx}] must be an object")
-                iface_name = raw.get(CONFIG_KEY_NAME, idx)
-                access_where = f"access[{router_name}][{iface_name}]"
-                require_known_keys(
-                    raw,
-                    access_where,
-                    ACCESS_KEYS,
-                )
-                awg = raw.get(CONFIG_KEY_AWG)
-                if awg is not None:
-                    if not isinstance(awg, dict):
-                        die(f"{access_where}.awg must be an object")
-                    require_known_keys(awg, f"{access_where}.awg", AWG_KEYS)

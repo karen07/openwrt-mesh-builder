@@ -5,14 +5,9 @@ sys.dont_write_bytecode = True
 import hashlib
 import random
 
-try:
-    from .config_model import PortRange
-    from .default import STABLE_HASH_U32_DIGEST_SIZE, STABLE_SEED_U64_DIGEST_SIZE
-    from .process import die
-except ImportError:
-    from config_model import PortRange  # type: ignore
-    from default import STABLE_HASH_U32_DIGEST_SIZE, STABLE_SEED_U64_DIGEST_SIZE  # type: ignore
-    from process import die  # type: ignore
+from .config_model import PortRange
+from .default import STABLE_HASH_U32_DIGEST_SIZE, STABLE_SEED_U64_DIGEST_SIZE
+from .process import die
 
 
 def stable_hash_u32(seed: str) -> int:
@@ -139,20 +134,12 @@ def stable_int(seed: str, minimum: int, maximum: int) -> int:
 def stable_babel_intervals(local_node: str, iface_name: str) -> tuple[int, int]:
     # Babel timers are local interface properties, so the two directions of a
     # tunnel intentionally get different values.
-    try:
-        from .default import (
-            BABELD_HELLO_INTERVAL_MAX,
-            BABELD_HELLO_INTERVAL_MIN,
-            BABELD_UPDATE_INTERVAL_MAX,
-            BABELD_UPDATE_INTERVAL_MIN,
-        )
-    except ImportError:
-        from default import (  # type: ignore
-            BABELD_HELLO_INTERVAL_MAX,
-            BABELD_HELLO_INTERVAL_MIN,
-            BABELD_UPDATE_INTERVAL_MAX,
-            BABELD_UPDATE_INTERVAL_MIN,
-        )
+    from .default import (
+        BABELD_HELLO_INTERVAL_MAX,
+        BABELD_HELLO_INTERVAL_MIN,
+        BABELD_UPDATE_INTERVAL_MAX,
+        BABELD_UPDATE_INTERVAL_MIN,
+    )
 
     direction = f"{local_node}:{iface_name}"
     hello = stable_int(

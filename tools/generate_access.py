@@ -3,14 +3,29 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .common import *
-    from .openvpn_model import build_openvpn_access_interface_block
-    from .tunnel_model import mtu_uci_options
-except ImportError:
-    from common import *  # type: ignore
-    from openvpn_model import build_openvpn_access_interface_block  # type: ignore
-    from tunnel_model import mtu_uci_options  # type: ignore
+from .awg_model import awg_uci_options
+from .config_model import AccessGroup, AccessPeerState, AwgOptions, ConfigData
+from .default import (
+    ACCESS_HOST_START,
+    ACCESS_SERVER_HOST,
+    ACCESS_SUBNET_CIDR,
+    CLIENT_TUNNEL_CIDR,
+    KEEPALIVE,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+)
+from .layout import router_wireguard_clients_dir
+from .materials import (
+    gen_private_key,
+    parse_existing_tunnel_conf,
+    public_key_from_private,
+)
+from .net_model import host_ip_in_prefix
+from .network_config import find_access_peer_block, get_interface_private_key, uci_block
+from .openvpn_model import build_openvpn_access_interface_block
+from .process import die
+from .tunnel_model import mtu_uci_options
 
 
 def build_access_interface_block(

@@ -7,12 +7,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-try:
-    from .default import FILE_MODE_MASK
-    from .process import die
-except ImportError:
-    from default import FILE_MODE_MASK
-    from process import die
+from .change_report import log_change
+from .default import FILE_MODE_MASK
+from .process import die
 
 
 def read(path: Path) -> str:
@@ -44,28 +41,8 @@ def atomic_write_text(path: Path, text: str) -> None:
     tmp_path.replace(path)
 
 
-OWMB_ENC_MARKERS = ("OWMB_ENC_SECRET_V1", "OWMB_ENC_MATERIAL_V1")
-OWMB_PLAIN_MARKERS = ("OWMB_PLAIN_SECRET_V1", "OWMB_PLAIN_MATERIAL_V1")
-
-
 def has_any_owmb_marker(text: str) -> bool:
     return "OWMB_" in text
-
-
-def has_encrypted_owmb_marker(text: str) -> bool:
-    return any(marker in text for marker in OWMB_ENC_MARKERS)
-
-
-def has_plain_owmb_marker(text: str) -> bool:
-    return any(marker in text for marker in OWMB_PLAIN_MARKERS)
-
-
-def encrypted_owmb_state_is_current(old_text: str, new_text: str) -> bool:
-    # Deprecated compatibility helper kept for imports from tools.common.
-    # Generated files must follow the exact target text produced from config.json
-    # and preserved key-material state. The generic file writer therefore no
-    # longer treats "decrypts to the same plaintext" as "no change".
-    return old_text == new_text
 
 
 def write(path: Path, text: str) -> None:
@@ -73,7 +50,7 @@ def write(path: Path, text: str) -> None:
     if path.exists() and path.read_text(encoding="utf-8") == text:
         return
 
-    print(f"Updating {path}")
+    log_change(f"Updating {path}")
     old_mode = path.stat().st_mode if path.exists() else None
 
     with tempfile.NamedTemporaryFile(
@@ -91,7 +68,7 @@ def write(path: Path, text: str) -> None:
 def rm(path: Path) -> None:
     if not path.exists():
         return
-    print(f"Removing {path}")
+    log_change(f"Removing {path}")
     if path.is_dir():
         shutil.rmtree(path)
     else:
@@ -111,7 +88,7 @@ def copy_file_if_changed(src: Path, dst: Path) -> None:
     if dst.exists() and dst.is_file() and filecmp.cmp(src, dst, shallow=False):
         return
 
-    print(f"Updating {dst}")
+    log_change(f"Updating {dst}")
     shutil.copy2(src, dst)
 
 
@@ -130,5 +107,13 @@ def cp_tree(src: Path, dst: Path) -> None:
             out.parent.mkdir(parents=True, exist_ok=True)
             if out.exists() and item.read_bytes() == out.read_bytes():
                 continue
-            print(f"Updating {out}")
+            log_change(f"Updating {out}")
             shutil.copy2(item, out)
+
+
+def is_under(relpath: Path, parent: Path) -> bool:
+    try:
+        relpath.relative_to(parent)
+        return True
+    except ValueError:
+        return False

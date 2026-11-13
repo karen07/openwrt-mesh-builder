@@ -5,91 +5,73 @@ sys.dont_write_bytecode = True
 import argparse
 from pathlib import Path
 
-try:
-    from .common import *
-    from .generate_access import build_access_state
-    from .generate_clients import (
-        generate_openvpn_access,
-        generate_openvpn_client_files,
-        generate_wireguard_client_files,
-        update_openvpn_uci,
-    )
-    from .generate_dhcp import update_dhcp_part
-    from .generate_exit import (
-        build_exit_exit_server_conf,
-        build_exit_in_network_interface_block,
-        build_exit_ipip_interface_block,
-        build_exit_out_network_interface_block,
-        build_exit_rule_network_blocks,
-        build_material_for_exit,
-        build_material_for_exit_exit,
-        build_material_for_exit_reverse,
-        build_server_direct_conf,
-        build_server_reverse_conf,
-    )
-    from .generate_firewall import update_firewall_part
-    from .generate_mesh import build_mesh_state
-    from .generate_network import update_babeld, update_network_part
-    from .generate_router_misc import update_bootstrap
-    from .generate_runtime import (
-        build_direct_ipset_lines,
-        write_router_ipsets,
-        write_server_ipsets,
-    )
-    from .generate_server_runtime import (
-        build_server_babeld_conf,
-        build_server_env,
-        ensure_server_layout,
-        reconcile_server_dirs,
-        remove_stale_server_amneziawg_confs,
-    )
-    from .tunnel_model import (
-        exit_hub_is_public,
-        router_is_public_mesh_hub,
-    )
-except ImportError:
-    from common import *
-    from generate_access import build_access_state
-    from generate_clients import (
-        generate_openvpn_access,
-        generate_openvpn_client_files,
-        generate_wireguard_client_files,
-        update_openvpn_uci,
-    )
-    from generate_dhcp import update_dhcp_part
-    from generate_exit import (
-        build_exit_exit_server_conf,
-        build_exit_in_network_interface_block,
-        build_exit_ipip_interface_block,
-        build_exit_out_network_interface_block,
-        build_exit_rule_network_blocks,
-        build_material_for_exit,
-        build_material_for_exit_exit,
-        build_material_for_exit_reverse,
-        build_server_direct_conf,
-        build_server_reverse_conf,
-    )
-    from generate_firewall import update_firewall_part
-    from generate_mesh import build_mesh_state
-    from generate_network import update_babeld, update_network_part
-    from generate_router_misc import update_bootstrap
-    from generate_runtime import (
-        build_direct_ipset_lines,
-        write_router_ipsets,
-        write_server_ipsets,
-    )
-    from generate_server_runtime import (
-        build_server_babeld_conf,
-        build_server_env,
-        ensure_server_layout,
-        reconcile_server_dirs,
-        remove_stale_server_amneziawg_confs,
-    )
-    from tunnel_model import (
-        exit_hub_is_public,
-        router_is_public_mesh_hub,
-    )
-
+from .awg_model import awg_for_infra_direction
+from .config_builder import build_config_data
+from .config_exit_model import router_exit_ipip_iface_name, router_required_exit_hubs
+from .config_io import load_json_config
+from .config_model import RouterExitState
+from .default import CONFIG_PATH
+from .file_ops import write
+from .generate_access import build_access_state
+from .generate_clients import (
+    generate_openvpn_access,
+    generate_openvpn_client_files,
+    generate_wireguard_client_files,
+    update_openvpn_uci,
+)
+from .generate_dhcp import update_dhcp_part
+from .generate_exit import (
+    build_exit_exit_server_conf,
+    build_exit_in_network_interface_block,
+    build_exit_ipip_interface_block,
+    build_exit_out_network_interface_block,
+    build_exit_rule_network_blocks,
+    build_material_for_exit,
+    build_material_for_exit_exit,
+    build_material_for_exit_reverse,
+    build_server_direct_conf,
+    build_server_reverse_conf,
+)
+from .generate_firewall import update_firewall_part
+from .generate_mesh import build_mesh_state
+from .generate_network import update_babeld, update_network_part
+from .generate_router_misc import update_bootstrap
+from .generate_runtime import (
+    build_direct_ipset_lines,
+    write_router_ipsets,
+    write_server_ipsets,
+)
+from .generate_server_runtime import (
+    build_server_babeld_conf,
+    build_server_env,
+    build_server_ipsets_env,
+    ensure_server_layout,
+    reconcile_server_dirs,
+    remove_stale_server_amneziawg_confs,
+)
+from .layout import server_babeld_conf_path, server_client_conf_path, server_path
+from .link_alias_model import (
+    build_exit_client_alias,
+    build_exit_exit_alias,
+    build_exit_reverse_client_alias,
+)
+from .link_model import (
+    compute_exit_exit_link_params,
+    compute_exit_link_params,
+    compute_exit_reverse_link_params,
+    exit_exit_link_key,
+    exit_exit_link_pairs,
+    exit_in_iface_name,
+    exit_link_key,
+    exit_out_iface_name,
+    exit_reverse_link_key,
+)
+from .network_config import load_existing_network_cfgs
+from .process import need
+from .tunnel_model import (
+    exit_hub_is_public,
+    router_is_public_mesh_hub,
+)
 
 # ============================================================
 # ACCESS OPENVPN HELPERS
@@ -146,7 +128,7 @@ def main(argv: list[str] | None = None) -> None:
     secrets_force = args.force
     access_force = False
 
-    access_blocks, access_states, access_names = build_access_state(
+    access_blocks, access_states, _access_names = build_access_state(
         cfg=cfg,
         existing_all=existing,
         access_groups=cfg.access,
@@ -351,6 +333,10 @@ def main(argv: list[str] | None = None) -> None:
                 cfg, hub, hub_states[hub.name], exit_exit_aliases_by_hub[hub.name]
             ),
         )
+        write(
+            server_path(hub.name, "etc", "update-ipsets.env"),
+            build_server_ipsets_env(cfg),
+        )
         write_server_ipsets(
             cfg,
             hub.name,
@@ -381,7 +367,6 @@ def main(argv: list[str] | None = None) -> None:
             ipip_text=ipip_text,
             exit_rule_text=exit_rule_text,
             access_text=access_text,
-            access_names=access_names,
         )
         update_babeld(
             cfg=cfg,

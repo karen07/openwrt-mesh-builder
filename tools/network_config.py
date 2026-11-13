@@ -1,49 +1,21 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-try:
-    from .config_builder import router_exit_ipip_iface_name
-    from .config_model import ConfigData
-    from .default import (
-        FIREWALL_MARKER,
-        PROTOCOL_AMNEZIAWG,
-        PROTOCOL_WIREGUARD,
-    )
-    from .file_ops import read
-    from .layout import router_path
-    from .link_model import (
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_iface_names_for_router,
-    )
-    from .materials import (
-        material_plaintext,
-        stored_key_material,
-        wireguard_private_key_plaintext,
-    )
-    from .process import die
-    from .uci import parse_uci_block, render_uci_block, split_uci_blocks
-except ImportError:
-    from config_builder import router_exit_ipip_iface_name  # type: ignore
-    from config_model import ConfigData  # type: ignore
-    from default import (  # type: ignore
-        FIREWALL_MARKER,
-        PROTOCOL_AMNEZIAWG,
-        PROTOCOL_WIREGUARD,
-    )  # type: ignore
-    from file_ops import read  # type: ignore
-    from layout import router_path  # type: ignore
-    from link_model import (  # type: ignore
-        exit_in_iface_name,
-        exit_out_iface_name,
-        mesh_iface_names_for_router,
-    )
-    from materials import (  # type: ignore
-        stored_key_material,
-        wireguard_private_key_plaintext,
-    )
-    from process import die  # type: ignore
-    from uci import parse_uci_block, render_uci_block, split_uci_blocks  # type: ignore
+from .config_model import ConfigData
+from .default import (
+    FIREWALL_MARKER,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_WIREGUARD,
+)
+from .file_ops import read
+from .layout import router_path
+from .materials import (
+    require_encrypted_material,
+    stored_key_material,
+    wireguard_private_key_plaintext,
+)
+from .process import die
+from .uci import parse_uci_block, render_uci_block, split_uci_blocks
 
 
 def uci_block(
@@ -60,17 +32,6 @@ def uci_block(
         lists=lists,
         private_key_transform=stored_key_material,
     )
-
-
-def current_mesh_exit_ifaces(cfg: ConfigData, router_name: str) -> set[str]:
-    names: set[str] = mesh_iface_names_for_router(cfg, router_name)
-
-    for hub in cfg.exit_hubs:
-        names.add(exit_out_iface_name(hub.name))
-        names.add(exit_in_iface_name(hub.name))
-        names.add(router_exit_ipip_iface_name(hub.name))
-
-    return names
 
 
 def find_access_peer_block(
@@ -102,23 +63,10 @@ def split_text_by_marker(text: str, path: Path) -> tuple[str, str]:
     die(f"marker not found in {path}: {FIREWALL_MARKER}")
 
 
-def filter_preserved_before_marker(text_before_marker: str, keep) -> str:
-    out: list[str] = []
-    for block in split_uci_blocks(text_before_marker):
-        parsed = parse_uci_block(block)
-        if not parsed:
-            out.append(block)
-            continue
-        if keep(parsed):
-            out.append(block)
-    joined = "".join(out).rstrip()
-    return joined + "\n" if joined else ""
-
-
 def parse_network_part(cfg: ConfigData, router: str) -> dict[str, dict[str, object]]:
     path = router_path(cfg, router, "network")
     if not path.exists():
-        die(f"missing file: {path}")
+        return {}
 
     out: dict[str, dict[str, object]] = {}
     counter = 0
@@ -146,6 +94,8 @@ def get_interface_private_key(
     for block in cfg_by_name.values():
         if block.get("type") == "interface" and block.get("name") == iface:
             value = block["options"].get("private_key")
+            if value:
+                require_encrypted_material(value, f"network_part.{iface}.private_key")
             return wireguard_private_key_plaintext(value) if value else None
     return None
 

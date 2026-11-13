@@ -6,75 +6,40 @@ import re
 import tempfile
 from pathlib import Path
 
-try:
-    from . import openvpn_pki
-    from .default import (
-        DEFAULT_CA_CN,
-        DEFAULT_CERT_DAYS,
-        LOCAL_TEMP_ROOT,
-        OPENVPN_CLIENT_PROTO,
-        OPENVPN_DATA_CIPHERS,
-        OPENVPN_DEV_TYPE,
-        OPENVPN_GROUP,
-        OPENVPN_KEEPALIVE,
-        OPENVPN_SERVER_CN,
-        OPENVPN_SERVER_PROTO,
-        OPENVPN_TOPOLOGY,
-        OPENVPN_USER,
-        OPENVPN_VERB,
-        PROTOCOL_OPENVPN,
-    )
-    from .file_ops import read, rm, write
-    from .layout import (
-        router_openvpn_ca_dir,
-        router_openvpn_clients_dir,
-        router_openvpn_iface_dir,
-        router_openvpn_root,
-        router_openvpn_server_conf_path,
-    )
-    from .materials import (
-        material_file_for_tool,
-        material_plaintext,
-        stored_key_material,
-        write_material_file,
-    )
-    from .process import die
-    from .uci import render_uci_block
-except ImportError:
-    import openvpn_pki  # type: ignore
-    from default import (  # type: ignore
-        DEFAULT_CA_CN,
-        DEFAULT_CERT_DAYS,
-        LOCAL_TEMP_ROOT,
-        OPENVPN_CLIENT_PROTO,
-        OPENVPN_DATA_CIPHERS,
-        OPENVPN_DEV_TYPE,
-        OPENVPN_GROUP,
-        OPENVPN_KEEPALIVE,
-        OPENVPN_SERVER_CN,
-        OPENVPN_SERVER_PROTO,
-        OPENVPN_TOPOLOGY,
-        OPENVPN_USER,
-        OPENVPN_VERB,
-        PROTOCOL_OPENVPN,
-    )
-    from file_ops import read, rm, write  # type: ignore
-    from layout import (  # type: ignore
-        router_openvpn_ca_dir,
-        router_openvpn_clients_dir,
-        router_openvpn_iface_dir,
-        router_openvpn_root,
-        router_openvpn_server_conf_path,
-    )
-    from materials import (  # type: ignore
-        material_file_for_tool,
-        material_plaintext,
-        stored_key_material,
-        write_material_file,  # type: ignore
-    )
-    from process import die  # type: ignore
-    from uci import render_uci_block  # type: ignore
-
+from . import openvpn_pki
+from .default import (
+    DEFAULT_CA_CN,
+    DEFAULT_CERT_DAYS,
+    LOCAL_TEMP_ROOT,
+    OPENVPN_CLIENT_PROTO,
+    OPENVPN_DATA_CIPHERS,
+    OPENVPN_DEV_TYPE,
+    OPENVPN_GROUP,
+    OPENVPN_KEEPALIVE,
+    OPENVPN_SERVER_CN,
+    OPENVPN_SERVER_PROTO,
+    OPENVPN_TOPOLOGY,
+    OPENVPN_USER,
+    OPENVPN_VERB,
+    PROTOCOL_OPENVPN,
+)
+from .file_ops import read, rm, write
+from .layout import (
+    router_openvpn_ca_dir,
+    router_openvpn_clients_dir,
+    router_openvpn_iface_dir,
+    router_openvpn_root,
+    router_openvpn_server_conf_path,
+)
+from .materials import (
+    material_file_for_tool,
+    material_plaintext,
+    require_encrypted_material,
+    stored_key_material,
+    write_material_file,
+)
+from .process import die
+from .uci import render_uci_block
 
 FORCED_CA_ONCE: set[str] = set()
 
@@ -130,10 +95,10 @@ def local_ca_material(
             openvpn_pki.generate_ed25519_private_key(plain_ca_key)
             write_material_file(ca_key, read(plain_ca_key))
         else:
-            plain_ca_key.write_text(material_plaintext(read(ca_key)), encoding="utf-8")
+            current_key = read(ca_key)
+            require_encrypted_material(current_key, str(ca_key))
+            plain_ca_key.write_text(material_plaintext(current_key), encoding="utf-8")
             plain_ca_key.chmod(0o600)
-            if "OWMB_ENC_MATERIAL_V1" not in read(ca_key):
-                write_material_file(ca_key, read(plain_ca_key))
 
         if not ca_pem.exists():
             print(f"Creating {ca_pem}")
@@ -268,7 +233,7 @@ def render_openvpn_uci_text(
     blocks = [build_openvpn_uci_block(getattr(g, "name")) for g in groups]
     blocks.extend(extra_blocks or [])
     body = "\n\n".join(block.strip() for block in blocks if block.strip()).rstrip()
-    return f"package openvpn\n\n{body}\n" if body else ""
+    return f"\npackage openvpn\n\n{body}\n" if body else ""
 
 
 def reconcile_router_openvpn_layout(
@@ -324,6 +289,7 @@ def ensure_openvpn_server_conf(
             cn=openvpn_server_cn(router_name, getattr(group, "name")),
         )
     else:
+        require_encrypted_material(existing_key, str(server_conf))
         server_cert_text = existing_cert
         server_key_text = existing_key
 
@@ -356,6 +322,7 @@ def ensure_openvpn_client_material(
         existing = read(ovpn_path)
         _ca, existing_cert, existing_key = openvpn_inline_material(existing)
         if existing_cert and existing_key:
+            require_encrypted_material(existing_key, str(ovpn_path))
             return existing_key, existing_cert
 
     ca_dir = router_openvpn_ca_dir(cfg, router_name, iface_name)
@@ -385,7 +352,9 @@ def pubkey_from_private_key(key_pem: Path) -> str:
         prefix=".validate-key-", dir=LOCAL_TEMP_ROOT
     ) as td:
         tmp_key = Path(td) / "key.pem"
-        tmp_key.write_text(material_plaintext(read(key_pem)), encoding="utf-8")
+        encrypted = read(key_pem)
+        require_encrypted_material(encrypted, str(key_pem))
+        tmp_key.write_text(material_plaintext(encrypted), encoding="utf-8")
         tmp_key.chmod(0o600)
         return openvpn_pki.pubkey_from_private_key(tmp_key)
 

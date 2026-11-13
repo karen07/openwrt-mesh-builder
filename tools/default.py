@@ -39,6 +39,7 @@ CONFIG_KEY_MESH_HUBS = "mesh_hubs"
 CONFIG_KEY_EXIT_HUBS = "exit_hubs"
 CONFIG_KEY_EXIT_ORDER = "exit_order"
 CONFIG_KEY_ROUTING_RULES = "routing_rules"
+CONFIG_KEY_EXIT_ROUTE = "exit_route"
 CONFIG_KEY_EXIT = "exit"
 CONFIG_KEY_MODE = "mode"
 CONFIG_KEY_SRC_IP = "src_ip"
@@ -54,9 +55,9 @@ CONFIG_KEY_WIFI_2G = "wifi_2g"
 CONFIG_KEY_WIFI_5G = "wifi_5g"
 CONFIG_KEY_WIFI_6G = "wifi_6g"
 CONFIG_KEY_PPPOE = "pppoe"
+CONFIG_KEY_DHCP_HOSTS = "dhcp_hosts"
 CONFIG_KEY_SSID = "ssid"
 CONFIG_KEY_KEY = "key"
-CONFIG_KEY_BLOCKED_MACS = "blocked_macs"
 CONFIG_KEY_USERNAME = "username"
 CONFIG_KEY_PASSWORD = "password"
 CONFIG_KEY_MTU = "mtu"
@@ -69,7 +70,6 @@ CONFIG_KEY_PORT = "port"
 CONFIG_KEY_USERS = "users"
 CONFIG_KEY_AWG = "awg"
 CONFIG_KEY_SSH_KEY_DIR = "ssh_key_dir"
-CONFIG_KEY_SECRET_KEY = "secret_key"  # legacy, rejected by validation
 CONFIG_KEY_SECRETS_KEY_PATH = "secrets_key_path"
 CONFIG_KEY_MATERIALS_KEY_PATH = "materials_key_path"
 
@@ -87,7 +87,6 @@ ROUTER_KEY_PREFIX = "router"
 SERVER_KEY_PREFIX = "server_"
 EXIT_HUB_NAME_PREFIX = "Exit"
 
-ROUTER_SECRET_MARKER = "ROUTER_SECRET_V1"  # legacy, rejected
 OWMB_PLAIN_SECRET_MARKER = "OWMB_PLAIN_SECRET_V1"
 OWMB_ENC_SECRET_MARKER = "OWMB_ENC_SECRET_V1"
 OWMB_PLAIN_MATERIAL_MARKER = "OWMB_PLAIN_MATERIAL_V1"
@@ -137,7 +136,7 @@ REL_DROPBEAR_AUTHORIZED_KEYS = Path("files/etc/dropbear/authorized_keys")
 # Runtime ipset layout. Keep these here so changing default.py updates both
 # generated file locations and the values exported to runtime shell scripts.
 RUNTIME_IPSETS_DIR = "/etc/ipsets"
-RUNTIME_DIRECT_STATIC_NAME = "direct-static.txt"
+RUNTIME_DIRECT_STATIC_NAME = "main.txt"
 RUNTIME_DIRECT_OUT_NAME = "direct.txt"
 
 _RUNTIME_IPSETS_PATH = Path(RUNTIME_IPSETS_DIR)
@@ -146,9 +145,7 @@ if not _RUNTIME_IPSETS_PATH.is_absolute():
 REL_IPSETS_ROOT = Path("files") / _RUNTIME_IPSETS_PATH.relative_to("/")
 REL_DIRECT_IPSET = REL_IPSETS_ROOT / RUNTIME_DIRECT_OUT_NAME
 REL_DIRECT_STATIC_IPSET = REL_IPSETS_ROOT / RUNTIME_DIRECT_STATIC_NAME
-REL_RUNTIME_ENV = Path("files/etc/router-autoinstall.env")
-RUNTIME_ENV_REMOTE_PATH = f"/{REL_RUNTIME_ENV.relative_to('files').as_posix()}"
-RUNTIME_ENV_FILENAME = REL_RUNTIME_ENV.name
+RUNTIME_UCI_FILES = ("update_ipsets", "dns_failover", "ping_reboot", "exit_route")
 
 REL = {
     "network": REL_NETWORK,
@@ -177,8 +174,6 @@ SYNC_COPY_FILES = {
 
 SYNC_MERGE_FILES = {
     REL_BOOTSTRAP,
-    REL_FIREWALL,
-    REL_NETWORK,
 }
 
 EXPECTED_MANAGED_ROUTER_DIRS = {
@@ -310,7 +305,7 @@ BABELD_UBUS_BINDINGS = "true"
 BABELD_TUNNEL_TYPE = "tunnel"
 BABELD_SPLIT_HORIZON = "true"
 # Babel intervals are deterministic per local tunnel direction/interface.
-# Keep the spread narrow so convergence stays close to the old 2s/10s profile.
+# Keep the spread narrow for predictable Babel convergence.
 BABELD_HELLO_INTERVAL_MIN = 2
 BABELD_HELLO_INTERVAL_MAX = 4
 BABELD_UPDATE_INTERVAL_MIN = 8
@@ -347,7 +342,9 @@ MIN_OPENWRT_MINOR = 12
 MIN_OPENWRT_VERSION = (MIN_OPENWRT_MAJOR, MIN_OPENWRT_MINOR)
 MIN_OPENWRT_VERSION_TEXT = f"{MIN_OPENWRT_MAJOR}.{MIN_OPENWRT_MINOR}"
 
-OPENWRT_RELEASE_BASE_URL = "https://downloads.openwrt.org/releases"
+OPENWRT_RELEASE_BASE_URL = (
+    "https://mirror.berlin.freifunk.net/downloads.openwrt.org/releases"
+)
 AWG_RELEASE_BASE_URL = (
     "https://github.com/karen07/amneziawg-openwrt-package/releases/download"
 )
@@ -362,6 +359,12 @@ CIDR_SQUASH_RELEASE_BASE_URL = (
 CIDR_SQUASH_PACKAGE_NAMES = [
     "cidr-squash",
 ]
+LUCI_EXIT_ROUTE_RELEASE_BASE_URL = (
+    "https://github.com/karen07/luci-app-exit-route-openwrt-package/releases/download"
+)
+LUCI_EXIT_ROUTE_PACKAGE_NAMES = [
+    "luci-app-exit-route",
+]
 
 # OpenWrt image packages required by generated router configs and
 # router example files. User-facing config.packages is for extra packages.
@@ -371,6 +374,7 @@ ROUTER_REQUIRED_PACKAGES = [
     "curl",
     "iperf3",
     "jq-full",
+    "luci-app-exit-route",
     "luci-app-https-dns-proxy",
     "luci-proto-amneziawg",
     "luci-proto-ipip",
@@ -430,11 +434,11 @@ EXIT_DIRECT_ASNS = [
 # GENERATED RUNTIME ENV DEFAULTS
 # ============================================================
 
-CHECK_DOH_DOMAIN = "google.com"
-CHECK_DOH_INTERVAL = 5
-CHECK_DOH_RESOLV = "/tmp/resolv.conf.d/resolv.conf.auto"
-CHECK_DOH_RESOLV_WAIT_MAX = 300
-CHECK_DOH_PROVIDER_DOMAINS = ["ru", "xn--p1ai"]
+DNS_FAILOVER_DOMAIN = "google.com"
+DNS_FAILOVER_INTERVAL = 5
+DNS_FAILOVER_RESOLV = "/tmp/resolv.conf.d/resolv.conf.auto"
+DNS_FAILOVER_RESOLV_WAIT_MAX = 300
+DNS_FAILOVER_PROVIDER_DOMAINS = ["ru", "xn--p1ai"]
 
 PING_REBOOT_HOSTS = ["195.208.4.1", "77.88.8.8"]
 PING_REBOOT_ARM_SUCCESSES = 5
@@ -444,15 +448,23 @@ PING_REBOOT_MAX_FAILURES = 5
 PING_REBOOT_TIMEOUT = 2
 
 
-ROUTING_MODE_WAN = "wan"
-ROUTING_MODE_SPLIT = "split"
-ROUTING_MODE_EXIT = "exit"
-ROUTING_MODES = {ROUTING_MODE_WAN, ROUTING_MODE_SPLIT, ROUTING_MODE_EXIT}
+ROUTING_MODE_DIRECT = "direct"
+ROUTING_MODE_AUTO = "auto"
+ROUTING_MODE_SPLIT_FAIL_OPEN = "split_fail_open"
+ROUTING_MODE_SPLIT_FAIL_CLOSED = "split_fail_closed"
+ROUTING_MODE_EXIT_FAIL_OPEN = "exit_fail_open"
+ROUTING_MODE_EXIT_FAIL_CLOSED = "exit_fail_closed"
+ROUTING_MODES = {
+    ROUTING_MODE_DIRECT,
+    ROUTING_MODE_AUTO,
+    ROUTING_MODE_SPLIT_FAIL_OPEN,
+    ROUTING_MODE_SPLIT_FAIL_CLOSED,
+    ROUTING_MODE_EXIT_FAIL_OPEN,
+    ROUTING_MODE_EXIT_FAIL_CLOSED,
+}
 
 EXIT_POLICY_BASE = 10000
 EXIT_RULE_PRIORITY = 80
-LEGACY_EXIT_RULE_SECTION_PREFIX = "owmb_exit_rule_"
-LEGACY_EXIT_RULE_ROUTE_SECTION_PREFIX = "owmb_exit_route_"
 ROUTING_WAN_MARK_TEXT = "9999"
 ROUTING_FIREWALL_RULE_PREFIX = "Routing-"
 EXIT_ROUTE_INTERVAL = 5

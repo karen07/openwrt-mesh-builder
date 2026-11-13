@@ -1,26 +1,23 @@
 #!/bin/sh
 
-if [ -r /etc/router-autoinstall.env ]; then
-    # Generated file, loaded once at startup. Restart to apply changes.
-    # shellcheck disable=SC1091
-    . /etc/router-autoinstall.env
-fi
-
-DOMAIN="${CHECK_DOH_DOMAIN-}"
-INTERVAL="${CHECK_DOH_INTERVAL:-5}"
-
-RESOLV="${CHECK_DOH_RESOLV:-/tmp/resolv.conf.d/resolv.conf.auto}"
-RESOLV_WAIT_MAX="${CHECK_DOH_RESOLV_WAIT_MAX:-300}"
-if [ "${CHECK_DOH_PROVIDER_DOMAINS+x}" != "x" ]; then
-    echo "CHECK_DOH_PROVIDER_DOMAINS is not set in /etc/router-autoinstall.env" >&2
+# shellcheck disable=SC1091
+. /lib/functions.sh
+config_load dns_failover
+DOMAIN=''
+INTERVAL='5'
+RESOLV='/tmp/resolv.conf.d/resolv.conf.auto'
+RESOLV_WAIT_MAX='300'
+config_get DOMAIN main domain
+config_get INTERVAL main interval 5
+config_get RESOLV main resolv /tmp/resolv.conf.d/resolv.conf.auto
+config_get RESOLV_WAIT_MAX main resolv_wait_max 300
+PROVIDER_DOMAINS=''
+add_provider_domain() { PROVIDER_DOMAINS="${PROVIDER_DOMAINS:+$PROVIDER_DOMAINS }$1"; }
+config_list_foreach main provider_domain add_provider_domain
+[ -n "$DOMAIN" ] || {
+    echo 'dns_failover: missing domain' >&2
     exit 1
-fi
-PROVIDER_DOMAINS="${CHECK_DOH_PROVIDER_DOMAINS-}"
-
-if [ -z "$DOMAIN" ]; then
-    echo "CHECK_DOH_DOMAIN is empty in /etc/router-autoinstall.env" >&2
-    exit 1
-fi
+}
 
 get_doh_endpoints_from_uci() {
     i=0

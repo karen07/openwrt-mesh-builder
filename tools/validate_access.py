@@ -3,34 +3,44 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .access_model import router_public_host_for_access
-    from .common import *
-    from .default import OPENVPN_CLIENT_PROTO, OPENVPN_SERVER_PROTO
-    from .network_config import find_access_peer_block
-    from .validate_awg_helpers import (
-        public_from_iface,
-        require_interface_block,
-        require_list,
-        require_option,
-    )
-    from .validate_context import validate_optional_mtu
-    from .validate_keys import parse_tunnel_conf, require_tunnel_sections
-    from .validate_uci import parse_uci_file
-except ImportError:
-    from access_model import router_public_host_for_access  # type: ignore
-    from common import *  # type: ignore
-    from default import OPENVPN_CLIENT_PROTO, OPENVPN_SERVER_PROTO  # type: ignore
-    from network_config import find_access_peer_block  # type: ignore
-    from validate_awg_helpers import (  # type: ignore
-        public_from_iface,
-        require_interface_block,
-        require_list,
-        require_option,
-    )
-    from validate_context import validate_optional_mtu  # type: ignore
-    from validate_keys import parse_tunnel_conf, require_tunnel_sections  # type: ignore
-    from validate_uci import parse_uci_file  # type: ignore
+import re
+
+from .access_model import router_public_host_for_access
+from .awg_model import awg_conf_lines, awg_uci_options
+from .config_exit_model import lan_subnet_prefix
+from .config_model import AwgOptions, ConfigData
+from .default import (
+    ACCESS_HOST_START,
+    ACCESS_SERVER_HOST,
+    ACCESS_SUBNET_CIDR,
+    CLIENT_TUNNEL_CIDR,
+    DEFAULT_ALLOWED_IPS_TEXT,
+    KEEPALIVE,
+    OPENVPN_CLIENT_PROTO,
+    OPENVPN_SERVER_PROTO,
+    PROTOCOL_AMNEZIAWG,
+    PROTOCOL_OPENVPN,
+    PROTOCOL_WIREGUARD,
+)
+from .file_ops import read
+from .layout import (
+    router_openvpn_clients_dir,
+    router_openvpn_server_conf_path,
+    router_path,
+    router_wireguard_clients_dir,
+)
+from .net_model import host_ip_in_prefix
+from .network_config import find_access_peer_block
+from .process import die
+from .validate_awg_helpers import (
+    public_from_iface,
+    require_interface_block,
+    require_list,
+    require_option,
+)
+from .validate_context import validate_optional_mtu
+from .validate_keys import parse_tunnel_conf, require_tunnel_sections
+from .validate_uci import parse_uci_file
 
 
 def parse_endpoint(value: str, where: str) -> tuple[str, str]:

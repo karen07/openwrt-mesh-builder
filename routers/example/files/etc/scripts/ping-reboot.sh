@@ -1,22 +1,25 @@
 #!/bin/sh
 
-if [ -r /etc/router-autoinstall.env ]; then
-    # Generated file, loaded once at startup. Restart to apply changes.
-    # shellcheck disable=SC1091
-    . /etc/router-autoinstall.env
-fi
-
-HOSTS="${PING_REBOOT_HOSTS:-}"
-ARM_SUCCESSES="${PING_REBOOT_ARM_SUCCESSES:-5}"
-UNARMED_REBOOT="${PING_REBOOT_UNARMED_REBOOT:-3600}"
-INTERVAL="${PING_REBOOT_INTERVAL:-10}"
-MAX_FAILURES="${PING_REBOOT_MAX_FAILURES:-5}"
-TIMEOUT="${PING_REBOOT_TIMEOUT:-2}"
-
-if [ -z "$HOSTS" ]; then
-    echo "PING_REBOOT_HOSTS is empty in /etc/router-autoinstall.env"
+# shellcheck disable=SC1091
+. /lib/functions.sh
+config_load ping_reboot
+ARM_SUCCESSES='5'
+UNARMED_REBOOT='3600'
+INTERVAL='10'
+MAX_FAILURES='5'
+TIMEOUT='2'
+HOSTS=''
+add_host() { HOSTS="${HOSTS:+$HOSTS }$1"; }
+config_list_foreach main host add_host
+config_get ARM_SUCCESSES main arm_successes 5
+config_get UNARMED_REBOOT main unarmed_reboot 3600
+config_get INTERVAL main interval 10
+config_get MAX_FAILURES main max_failures 5
+config_get TIMEOUT main timeout 2
+[ -n "$HOSTS" ] || {
+    echo 'ping_reboot: no hosts configured' >&2
     exit 1
-fi
+}
 
 any_host_reachable() {
     host=""

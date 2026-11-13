@@ -3,26 +3,15 @@ import sys
 
 sys.dont_write_bytecode = True
 
-try:
-    from .default import (
-        CONFIG_KEY_NAME,
-        CONFIG_KEY_PACKAGES,
-        CONFIG_KEY_ROUTERS,
-        ROUTER_REQUIRED_ACCESS_PACKAGES,
-        ROUTER_REQUIRED_PACKAGES,
-    )
-    from .identifiers import require_package_identifier
-    from .process import die
-except ImportError:
-    from default import (  # type: ignore
-        CONFIG_KEY_NAME,
-        CONFIG_KEY_PACKAGES,
-        CONFIG_KEY_ROUTERS,
-        ROUTER_REQUIRED_ACCESS_PACKAGES,
-        ROUTER_REQUIRED_PACKAGES,
-    )
-    from identifiers import require_package_identifier  # type: ignore
-    from process import die  # type: ignore
+from .default import (
+    CONFIG_KEY_NAME,
+    CONFIG_KEY_PACKAGES,
+    CONFIG_KEY_ROUTERS,
+    ROUTER_REQUIRED_ACCESS_PACKAGES,
+    ROUTER_REQUIRED_PACKAGES,
+)
+from .identifiers import require_package_identifier
+from .process import die
 
 
 def dedupe_package_names(packages: list[str]) -> list[str]:
