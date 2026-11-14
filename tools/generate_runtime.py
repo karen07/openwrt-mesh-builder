@@ -204,8 +204,11 @@ def build_exit_route_config(cfg: ConfigData, router_name: str) -> str:
     ]
     if global_policy.exit_name is not None:
         lines.append(_uci_option("exit", global_policy.exit_name))
-    lines.extend(_uci_list("base_auto_exit", (hub.name for hub in hubs)))
-    lines.extend(_uci_list("auto_exit", global_policy.auto_exit))
+    # The generated AUTO order is always explicit in UCI. An explicit
+    # exit_route.auto_exit overrides the router/topology exit_order.
+    # Runtime LuCI edits this same list; there is no shadow default.
+    auto_order = global_policy.auto_exit or tuple(hub.name for hub in hubs)
+    lines.extend(_uci_list("auto_exit", auto_order))
 
     for hub in all_hubs:
         lines.extend(

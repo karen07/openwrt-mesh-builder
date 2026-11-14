@@ -5,13 +5,22 @@ No network, firmware builder or external credentials needed; checks declarative
 coverage and the in-process schema/model/runtime serialization.
 """
 
+import sys
+
+sys.dont_write_bytecode = True
+
 import argparse
 from pathlib import Path
+
+# Make the project package importable when running this file directly.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools import awg_model
 from tools import config_schema as schema
 from tools.awg_model import AWG_KEYS
 from tools.config_builder import build_config_data
+from tools.config_exit_model import router_exit_order_hubs
 from tools.config_io import load_json_config
 from tools.default import ROUTING_MODES
 from tools.generate_runtime import EXIT_ROUTE_MODES, build_exit_route_config
@@ -36,7 +45,7 @@ def union_keys(items):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="config.json")
+    parser.add_argument("--config", default=str(PROJECT_ROOT / "config.json"))
     args = parser.parse_args()
 
     cfg_file = Path(args.config)
@@ -210,12 +219,24 @@ def main():
         problems,
     )
 
-    # Confirm each global EXIT mode generates its corresponding UCI state.
+    # Verify the new single-list UCI contract for every generated router.
     for name in cfg.router_names:
         text = build_exit_route_config(cfg, name)
-        mode = cfg.exit_routes_by_router[name].mode
-        if f"option mode '{mode}'" not in text:
-            problems.append(f"{name}: missing generated UCI mode {mode}")
+        policy = cfg.exit_routes_by_router[name]
+        if f"option mode '{policy.mode}'" not in text:
+            problems.append(f"{name}: missing generated UCI mode {policy.mode}")
+        order = policy.auto_exit or tuple(
+            hub.name for hub in router_exit_order_hubs(cfg, name)
+        )
+        actual = [
+            line.split("'", 2)[1]
+            for line in text.splitlines()
+            if line.startswith("    list auto_exit '")
+        ]
+        if actual != list(order) or not actual:
+            problems.append(f"{name}: generated auto_exit order mismatch")
+        if "base_auto_exit" in text:
+            problems.append(f"{name}: obsolete base_auto_exit present")
     if "config device" not in build_exit_route_config(cfg, "Spine01"):
         problems.append("Spine01: no serialized per-device route rules")
 

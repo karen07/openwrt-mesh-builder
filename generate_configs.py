@@ -10,7 +10,7 @@ from tools.change_report import (
     report_file_changes,
     snapshot_files,
 )
-from tools.clean_generated import clean_generated
+from tools.clean_generated import clean_generated, reject_unsupported_generated_layout
 from tools.config_builder import build_config_data
 from tools.config_io import load_json_config
 from tools.config_model import ConfigData, DeviceProfile, RouterDef
@@ -305,6 +305,9 @@ def main() -> None:
 
     if not routers:
         die("no routers defined in config")
+
+    if not args.update_packages:
+        reject_unsupported_generated_layout(cfg_data)
 
     if args.clean:
         if any(

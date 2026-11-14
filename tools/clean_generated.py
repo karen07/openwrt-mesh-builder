@@ -257,8 +257,113 @@ def replace_with_stage(root: Path, stage: Path) -> None:
     shutil.rmtree(backup)
 
 
+def validate_current_exit_route_file(path: Path) -> None:
+    """Require the current generated UCI structure, without converting input."""
+    allowed = {
+        "state": {"table", "interval", "mode", "exit", "auto_exit"},
+        "exit": {"prefix", "policy", "interface"},
+        "device": {"ip", "mode", "exit", "auto_exit", "disabled"},
+    }
+    fixed_modes = {
+        "SPLIT_FAIL_OPEN",
+        "SPLIT_FAIL_CLOSED",
+        "EXIT_FAIL_OPEN",
+        "EXIT_FAIL_CLOSED",
+    }
+    modes = fixed_modes | {"AUTO", "DIRECT"}
+    state_count = 0
+    exit_count = 0
+    for block in split_uci_blocks(path.read_text(encoding="utf-8")):
+        if not block.strip():
+            continue
+        section = parse_uci_block(block)
+        if not section:
+            die(f"invalid generated exit_route UCI section: {path}")
+        # The generated UCI is canonical. Do not silently ignore malformed
+        # option/list lines that the generic UCI reader cannot parse.
+        for line in block.splitlines()[1:]:
+            if (
+                line.strip()
+                and re.fullmatch(
+                    r"\s*(?:option|list)\s+[A-Za-z_][A-Za-z0-9_]*\s+'[^']*'\s*",
+                    line,
+                )
+                is None
+            ):
+                die(f"invalid generated exit_route UCI line: {path}: {line.strip()}")
+        kind = section["type"]
+        name = section["name"]
+        if kind not in allowed:
+            die(f"unsupported exit_route section {kind}: {path}")
+        options = section["options"]
+        lists = section["lists"]
+        unknown = (set(options) | set(lists)) - allowed[kind]
+        unknown |= set(lists) - (
+            {"auto_exit"} if kind in ("state", "device") else set()
+        )
+        if "auto_exit" in options:
+            unknown.add("auto_exit")
+        if unknown:
+            die(f"unsupported exit_route option {sorted(unknown)[0]}: {path}")
+        if kind == "state":
+            state_count += 1
+            if name != "main" or state_count != 1:
+                die(f"invalid exit_route state section: {path}")
+            if not lists.get("auto_exit"):
+                die(f"missing required main.auto_exit: {path}")
+            for numeric in ("table", "interval"):
+                value = options.get(numeric, "")
+                if not value.isdecimal() or int(value) <= 0:
+                    die(f"invalid required main.{numeric}: {path}")
+        elif kind == "exit":
+            exit_count += 1
+            if name == "exit" or set(options) != allowed["exit"]:
+                die(f"invalid exit_route EXIT definition: {path}")
+        elif name != "device" or not options.get("ip"):
+            die(f"invalid anonymous exit_route device section: {path}")
+        if kind in ("state", "device"):
+            mode = options.get("mode")
+            if mode not in modes and not (kind == "device" and mode == "DEFAULT"):
+                die(f"invalid exit_route mode {mode}: {path}")
+            if mode in fixed_modes and not options.get("exit"):
+                die(f"missing selected EXIT for {mode}: {path}")
+            if mode not in fixed_modes and "exit" in options:
+                die(f"unexpected selected EXIT for {mode}: {path}")
+    if state_count != 1 or exit_count < 1:
+        die(f"exit_route requires one main state and EXIT definitions: {path}")
+
+
+def reject_unsupported_generated_layout(cfg: ConfigData) -> None:
+    """Reject known unsupported layouts before a destructive clean or rebuild.
+
+    Normal regeneration of the current layout still preserves its key material.
+    No files are rewritten as a compatibility upgrade.
+    """
+    for name in cfg.router_names:
+        root = router_dir(cfg, name)
+        for relative in (
+            Path("files/etc/config/exit_route_base"),
+            Path("files/etc/router-autoinstall.env"),
+        ):
+            source = checked_source(root, relative)
+            if source.exists() or source.is_symlink():
+                die(f"unsupported generated layout: {source}")
+
+        route_path = checked_source(root, Path("files/etc/config/exit_route"))
+        if route_path.is_file():
+            validate_current_exit_route_file(route_path)
+
+        firewall_path = checked_source(root, Path("files/etc/config/firewall_part"))
+        if firewall_path.is_file() and any(
+            line.strip() == FIREWALL_MARKER
+            for line in firewall_path.read_text(encoding="utf-8").splitlines()
+        ):
+            die(f"unsupported generated firewall_part layout: {firewall_path}")
+
+
 def clean_generated(cfg: ConfigData) -> None:
     """Rebuild only the persistent subset; do not run configuration generators."""
+    reject_unsupported_generated_layout(cfg)
     planned: list[tuple[Path, dict[Path, PreservedFile]]] = []
     for name in cfg.router_names:
         root = router_dir(cfg, name)
@@ -287,7 +392,7 @@ def clean_generated(cfg: ConfigData) -> None:
             die(f"--clean: expected EXIT directory: {root}")
         planned.append((root, data))
 
-    # Refuse to silently leave old generated targets behind or destroy their
+    # Refuse to silently leave unknown generated targets behind or destroy their
     # private keys. They must be archived/removed explicitly by the operator.
     for parent, expected in (
         (

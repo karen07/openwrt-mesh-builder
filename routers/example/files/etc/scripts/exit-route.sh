@@ -12,12 +12,10 @@ FIREWALL_DIRTY=0
 NETWORK_DIRTY=0
 TABLE=''
 INTERVAL=5
-BASE_TARGETS=''
 EXIT_NAMES=''
 EXIT_DATA=''
 ROUTE_SECTION=''
 
-append_base() { BASE_TARGETS="${BASE_TARGETS:+$BASE_TARGETS }$1"; }
 collect_exit() {
     collect_exit_prefix=''
     collect_exit_policy=''
@@ -64,7 +62,7 @@ validate_exit_uci_keys() {
                 }
                 case "$validate_exit_uci_kind:$validate_exit_uci_option" in
                     state:table | state:interval | state:mode | state:exit | \
-                        state:base_auto_exit | state:auto_exit | \
+                        state:auto_exit | \
                         exit:prefix | exit:policy | exit:interface | \
                         device:ip | device:mode | device:exit | device:auto_exit | device:disabled)
                         :
@@ -102,14 +100,12 @@ EOF
 load_exit_config() {
     TABLE=''
     INTERVAL=5
-    BASE_TARGETS=''
     EXIT_NAMES=''
     EXIT_DATA=''
     validate_exit_uci_keys || return 1
     config_load exit_route || return 1
     config_get TABLE main table
     config_get INTERVAL main interval 5
-    config_list_foreach main base_auto_exit append_base
     config_foreach collect_exit exit
     case "$TABLE" in
         '' | *[!0-9]* | 0)
@@ -125,8 +121,8 @@ load_exit_config() {
             ;;
         *) : ;;
     esac
-    [ -n "$BASE_TARGETS" ] && [ -n "$EXIT_NAMES" ] || {
-        echo 'Missing exit-route base_auto_exit or exit definitions' >&2
+    [ -n "$EXIT_NAMES" ] || {
+        echo 'Missing exit-route EXIT definitions' >&2
         return 1
     }
     ROUTE_SECTION="exit${TABLE}"
@@ -162,8 +158,10 @@ valid_auto_targets() {
 
 load_auto_targets() {
     TARGETS="$(uci -q get exit_route.main.auto_exit || true)"
-    [ -n "$TARGETS" ] || TARGETS="$BASE_TARGETS"
-    valid_auto_targets "$TARGETS"
+    if ! valid_auto_targets "$TARGETS"; then
+        echo 'Missing or invalid exit_route.main.auto_exit' >&2
+        return 1
+    fi
 }
 
 # A device-specific list overrides the shared AUTO order only for that device.
@@ -679,7 +677,7 @@ sync_firewall() {
     sync_global_firewall "$sync_firewall_mode" "$sync_firewall_target" || return 1
     sync_firewall_desired=''
     for sync_firewall_section in $device_sections; do
-        # Disabled overrides fall back to global routing. Their old managed
+        # Disabled overrides inherit global routing. Unneeded managed
         # firewall rules are omitted from desired and removed below.
         [ "$(uci -q get "exit_route.$sync_firewall_section.disabled" || true)" = 1 ] && continue
         sync_firewall_src_ip="$(uci -q get "exit_route.$sync_firewall_section.ip")"
@@ -691,7 +689,7 @@ sync_firewall() {
             sync_firewall_desired="$sync_firewall_desired$sync_firewall_suffix"
         done
     done
-    # Remove obsolete device overrides; never remove rules for other owners.
+    # Remove rules no longer used by current device policies; keep other owners.
     sync_firewall_pattern="s/^firewall\.[^.=]*\.name='ExitRoute-\(exit_route_dev_[0-9_]*_"
     sync_firewall_pattern="$sync_firewall_pattern\(direct\|exit\|drop\|block\|guard\)\)'$/\1/p"
     for sync_firewall_section in $(uci -q show firewall | sed -n "$sync_firewall_pattern"); do
@@ -861,8 +859,8 @@ status() {
     status_mode="$(current_mode)" || return 1
     load_auto_targets || return 1
     status_selected="$(uci -q get exit_route.main.exit || echo -)"
-    printf 'MODE=%s\nSELECTED=%s\nACTIVE=%s\nAUTO_DEFAULT=%s\nAUTO_EFFECTIVE=%s\n' \
-        "$status_mode" "$status_selected" "$(current_target)" "$BASE_TARGETS" "$TARGETS"
+    printf 'MODE=%s\nSELECTED=%s\nACTIVE=%s\nAUTO_EFFECTIVE=%s\n' \
+        "$status_mode" "$status_selected" "$(current_target)" "$TARGETS"
     if [ -f "$NETWORK_PENDING_FILE" ]; then
         printf 'APPLY=ERROR\nERROR=network\n'
     elif [ -f "$FIREWALL_PENDING_FILE" ]; then
