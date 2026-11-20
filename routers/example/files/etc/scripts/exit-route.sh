@@ -8,6 +8,10 @@ LOCK_FILE=/tmp/exit-route-control.lock
 STATUS_FILE=/tmp/exit-route.status
 NETWORK_PENDING_FILE=/tmp/exit-route-network.pending
 FIREWALL_PENDING_FILE=/tmp/exit-route-firewall.pending
+TAG=exit-route
+log_notice() { logger -t "$TAG" -p daemon.notice "$*" 2>/dev/null || :; }
+log_warn() { logger -t "$TAG" -p daemon.warning "$*" 2>/dev/null || :; }
+log_err() { logger -t "$TAG" -p daemon.err "$*" 2>/dev/null || :; }
 FIREWALL_DIRTY=0
 NETWORK_DIRTY=0
 TABLE=''
@@ -739,7 +743,8 @@ reload_firewall_if_needed() {
     [ -f "$FIREWALL_PENDING_FILE" ] || return 0
     uci commit firewall || return 1
     /etc/init.d/firewall reload || return 1
-    rm -f "$FIREWALL_PENDING_FILE"
+    rm -f "$FIREWALL_PENDING_FILE" || return 1
+    log_notice "firewall UCI committed and firewall reload succeeded"
 }
 
 reload_network_if_needed() {
@@ -749,7 +754,8 @@ reload_network_if_needed() {
     [ -f "$NETWORK_PENDING_FILE" ] || return 0
     uci commit network || return 1
     /etc/init.d/network reload || return 1
-    rm -f "$NETWORK_PENDING_FILE"
+    rm -f "$NETWORK_PENDING_FILE" || return 1
+    log_notice "network UCI committed and network reload succeeded"
 }
 
 save_apply_status() {
@@ -832,6 +838,11 @@ apply_all_inner() {
         echo 'EXIT apply: network reload failed' >&2
         return 1
     }
+    if [ "${apply_all_inner_current:-DISABLED}" != \
+        "${apply_all_inner_selected:-DISABLED}" ]; then
+        log_notice "EXIT network UCI route updated: mode=$apply_all_inner_mode" \
+            "previous=$apply_all_inner_current selected=${apply_all_inner_selected:-none}"
+    fi
     APPLY_STAGE=firewall
     sync_firewall "$apply_all_inner_mode" "$apply_all_inner_selected" || {
         echo 'EXIT apply: firewall reload failed' >&2
@@ -841,10 +852,12 @@ apply_all_inner() {
 
 apply_all() {
     apply_all_inner || {
-        save_apply_status ERROR "${APPLY_STAGE:-reconcile}"
+        apply_failed_stage="${APPLY_STAGE:-reconcile}"
+        log_err "reconciliation failed: stage=$apply_failed_stage"
+        save_apply_status ERROR "$apply_failed_stage"
         return 1
     }
-    save_apply_status OK none
+    save_apply_status OK none || return 1
 }
 
 status() {
@@ -919,14 +932,17 @@ case "${1:-run}" in
         ;;
     run)
         [ "$#" -le 1 ] || exit 2
-        run_last_error=''
+        if load_exit_config >/dev/null 2>&1; then
+            log_notice "service started: mode=$(current_mode) interval=${INTERVAL}s"
+        else
+            INTERVAL=5
+            log_warn "service started; EXIT configuration unavailable, retry interval=${INTERVAL}s"
+        fi
+        trap 'log_notice "service stopped"; exit 0' TERM INT
         while true; do
-            if run_error="$(locked apply_all 2>&1)"; then
-                run_last_error=''
-            elif [ "$run_error" != "$run_last_error" ]; then
+            if ! run_error="$(locked apply_all 2>&1)"; then
                 printf '%s\n' "$run_error" >&2
-                echo 'exit-route apply failed' >&2
-                run_last_error="$run_error"
+                log_err "apply detail: $(printf '%s\n' "$run_error" | head -n 1 | cut -c 1-400)"
             fi
             # The polling interval is also part of live UCI configuration.
             load_exit_config >/dev/null 2>&1 || INTERVAL=5

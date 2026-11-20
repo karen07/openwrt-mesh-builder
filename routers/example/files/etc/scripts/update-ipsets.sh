@@ -8,6 +8,7 @@ if [ "${ENV_FILE+x}" != x ] && [ ! -r /etc/config/update_ipsets ] \
 fi
 if [ "${ENV_FILE+x}" = x ]; then
     [ -r "$ENV_FILE" ] || {
+        logger -t update-ipsets -p daemon.err "Missing $ENV_FILE" 2>/dev/null || :
         echo "Missing $ENV_FILE" >&2
         exit 1
     }
@@ -15,6 +16,8 @@ if [ "${ENV_FILE+x}" = x ]; then
     . "$ENV_FILE"
 else
     [ -r /lib/functions.sh ] || {
+        logger -t update-ipsets -p daemon.err \
+            "No OpenWrt UCI loader and no ENV_FILE" 2>/dev/null || :
         echo "No OpenWrt UCI loader and no ENV_FILE" >&2
         exit 1
     }
@@ -40,6 +43,10 @@ fi
 
 SCRIPT_NAME="${0##*/}"
 TAG="${SCRIPT_NAME%.sh}"
+log_notice() { logger -t "$TAG" -p daemon.notice "$*" 2>/dev/null || :; }
+log_warn() { logger -t "$TAG" -p daemon.warning "$*" 2>/dev/null || :; }
+log_err() { logger -t "$TAG" -p daemon.err "$*" 2>/dev/null || :; }
+log_debug() { [ "${LOG_DEBUG:-0}" = 1 ] && logger -t "$TAG" -p daemon.debug "$*" || :; }
 
 # Runtime settings come from UCI on OpenWrt or ENV_FILE on Linux.
 # IPSETS_DIR and RELOAD_FIREWALL remain explicit generator/server/test overrides.
@@ -63,10 +70,12 @@ TMP_IPINFO="/tmp/ipinfo-lite.$$.csv.gz"
 TMP_COUNTRIES="/tmp/ipinfo-countries.$$.txt"
 
 if [ "${COUNTRIES+x}" != "x" ]; then
+    log_err "countries list is not configured"
     echo "ERROR: countries list is not configured" >&2
     exit 1
 fi
 if [ "${ASNS+x}" != "x" ]; then
+    log_err "ASN list is not configured"
     echo "ERROR: ASN list is not configured" >&2
     exit 1
 fi
@@ -74,6 +83,7 @@ COUNTRIES="${COUNTRIES-}"
 ASNS="${ASNS-}"
 
 if [ -z "$CIDR_OVER_COVERAGE" ]; then
+    log_err "cidr_over_coverage is empty"
     echo "ERROR: cidr_over_coverage is empty" >&2
     exit 1
 fi
@@ -102,7 +112,7 @@ append_url_list() {
             --retry "$RETRY" \
             "$url"
     )" || {
-        logger -t "$TAG" "ERROR: failed to fetch $label from $url"
+        log_err "failed to fetch $label from $url"
         return 1
     }
 
@@ -112,12 +122,13 @@ append_url_list() {
     )"
 
     if [ -z "$lines" ]; then
-        logger -t "$TAG" "ERROR: empty $label list from $url"
+        log_err "empty $label list from $url"
         return 1
     fi
 
     printf '%s\n' "$lines" >>"$TMP_DIRECT"
-    logger -t "$TAG" "OK: fetched $label from $url"
+    _added_count="$(printf '%s\n' "$lines" | wc -l)"
+    log_notice "fetched $label: ${_added_count} entries from $url"
     return 0
 }
 
@@ -129,7 +140,7 @@ append_country_lists() {
         case "$country" in
             [A-Za-z][A-Za-z]) ;;
             *)
-                logger -t "$TAG" "ERROR: bad country code: $country"
+                log_err "bad country code: $country"
                 return 1
                 ;;
         esac
@@ -149,13 +160,13 @@ append_country_lists() {
         --retry "$RETRY" \
         -o "$TMP_IPINFO" \
         "$IPINFO_URL" || {
-        logger -t "$TAG" "ERROR: failed to fetch IPinfo Lite CSV"
+        log_err "failed to fetch IPinfo Lite CSV"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
     }
 
     if [ ! -s "$TMP_IPINFO" ] || ! gzip -t "$TMP_IPINFO" 2>/dev/null; then
-        logger -t "$TAG" "ERROR: invalid IPinfo Lite gzip archive"
+        log_err "invalid IPinfo Lite gzip archive"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
     fi
@@ -165,15 +176,15 @@ append_country_lists() {
         | cut -d, -f1 >"$TMP_COUNTRIES"
 
     if [ ! -s "$TMP_COUNTRIES" ]; then
-        logger -t "$TAG" \
-            "ERROR: no IPinfo CIDRs for countries: $COUNTRIES"
+        log_err "no IPinfo CIDRs for countries: $COUNTRIES"
         rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
         return 1
     fi
 
+    _country_count="$(wc -l <"$TMP_COUNTRIES")"
     cat "$TMP_COUNTRIES" >>"$TMP_DIRECT"
     rm -f "$TMP_IPINFO" "$TMP_COUNTRIES"
-    logger -t "$TAG" "OK: added IPinfo countries: $COUNTRIES"
+    log_notice "added IPinfo countries=[$COUNTRIES]: ${_country_count} CIDR entries"
     return 0
 }
 
@@ -181,7 +192,7 @@ append_asn_lists() {
     for asn in $ASNS; do
         case "$asn" in
             '' | *[!0-9]*)
-                logger -t "$TAG" "ERROR: bad ASN: $asn"
+                log_err "bad ASN: $asn"
                 return 1
                 ;;
             *) ;;
@@ -195,7 +206,7 @@ append_asn_lists() {
 
 optimize_direct() {
     if ! command -v cidr-squash >/dev/null 2>&1; then
-        logger -t "$TAG" "ERROR: cidr-squash is not installed"
+        log_err "cidr-squash is not installed"
         return 1
     fi
 
@@ -204,60 +215,76 @@ optimize_direct() {
         -q \
         -p "$CIDR_OVER_COVERAGE" \
         "$TMP_DIRECT" >"$TMP_OPTIMIZED" || {
-        logger -t "$TAG" "ERROR: cidr-squash optimization failed"
+        log_err "cidr-squash optimization failed"
         return 1
     }
 
     if [ ! -s "$TMP_OPTIMIZED" ]; then
-        logger -t "$TAG" "ERROR: cidr-squash generated an empty direct list"
+        log_err "cidr-squash generated an empty direct list"
         return 1
     fi
 
     after="$(wc -l <"$TMP_OPTIMIZED")"
-    mv -f "$TMP_OPTIMIZED" "$TMP_DIRECT" || return 1
-    logger -t "$TAG" \
-        "OK: cidr-squash optimized direct list: $before -> $after entries"
+    mv -f "$TMP_OPTIMIZED" "$TMP_DIRECT" || {
+        log_err "failed to move optimized CIDRs into staging"
+        return 1
+    }
+    log_notice "cidr-squash optimized direct list: $before -> $after entries"
 }
 
 reload_firewall_if_needed() {
     [ "$1" -eq 1 ] || return 0
-    [ "$RELOAD_FIREWALL" = "1" ] || return 0
-
-    if [ -x /etc/init.d/firewall ]; then
-        /etc/init.d/firewall reload >/dev/null 2>&1 \
-            || /etc/init.d/firewall restart >/dev/null 2>&1
+    if [ "$RELOAD_FIREWALL" != 1 ]; then
+        log_debug "firewall reload disabled (RELOAD_FIREWALL=$RELOAD_FIREWALL)"
+        return 0
+    fi
+    if [ ! -x /etc/init.d/firewall ]; then
+        log_warn "firewall init script unavailable; reload skipped (Linux/staging)"
+        return 0
+    fi
+    if /etc/init.d/firewall reload >/dev/null 2>&1; then
+        log_notice "firewall reload succeeded after direct list change"
+    elif /etc/init.d/firewall restart >/dev/null 2>&1; then
+        log_warn "firewall reload failed; restart succeeded"
+    else
+        log_err "firewall reload and restart both failed after direct list change"
+        return 1
     fi
 }
 
-mkdir -p "$IPSETS_DIR" || exit 1
+log_notice "update started: directory=$IPSETS_DIR countries=[$COUNTRIES] asns=[$ASNS]"
+mkdir -p "$IPSETS_DIR" || {
+    log_err "failed to create directory $IPSETS_DIR"
+    exit 1
+}
 cleanup_tmp
 
 [ -s "$STATIC_DIRECT" ] || {
-    logger -t "$TAG" "ERROR: missing or empty main list: $STATIC_DIRECT"
+    log_err "missing or empty main list: $STATIC_DIRECT"
     exit 1
 }
 
 append_country_lists || {
     cleanup_tmp
-    logger -t "$TAG" "ERROR: failed to build direct ipset"
+    log_err "failed to build direct ipset"
     exit 1
 }
 
 append_asn_lists || {
     cleanup_tmp
-    logger -t "$TAG" "ERROR: failed to build direct ipset"
+    log_err "failed to build direct ipset"
     exit 1
 }
 
 if [ ! -s "$TMP_DIRECT" ]; then
     cleanup_tmp
-    logger -t "$TAG" "ERROR: generated direct ipset is empty"
+    log_err "generated direct ipset is empty"
     exit 1
 fi
 
 optimize_direct || {
     cleanup_tmp
-    logger -t "$TAG" "ERROR: failed to optimize direct list"
+    log_err "failed to optimize direct list"
     exit 1
 }
 
@@ -265,7 +292,7 @@ changed=0
 if [ ! -f "$OUT_DIRECT" ] || ! cmp -s "$TMP_DIRECT" "$OUT_DIRECT"; then
     mv -f "$TMP_DIRECT" "$OUT_DIRECT" || {
         cleanup_tmp
-        logger -t "$TAG" "ERROR: failed to replace $OUT_DIRECT"
+        log_err "failed to replace $OUT_DIRECT"
         exit 1
     }
     changed=1
@@ -274,5 +301,10 @@ else
 fi
 
 cleanup_tmp
-reload_firewall_if_needed "$changed"
-logger -t "$TAG" "OK: direct ipset updated, changed=$changed"
+if [ "$changed" -eq 1 ]; then
+    log_notice "direct ipset updated: file=$OUT_DIRECT"
+else
+    log_notice "direct ipset unchanged: file=$OUT_DIRECT"
+fi
+reload_firewall_if_needed "$changed" || :
+log_notice "direct list processing finished: changed=$changed"

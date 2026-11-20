@@ -8,6 +8,7 @@ prog_name="iperf3"
 bin="/usr/bin/$prog_name"
 
 start_service() {
+    logger -t iperf3-server -p daemon.notice "registering iperf3 server (-s) with procd"
     procd_open_instance
     procd_set_param command "$bin" -s
     procd_set_param stdout 1

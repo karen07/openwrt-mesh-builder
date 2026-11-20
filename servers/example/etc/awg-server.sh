@@ -1,5 +1,10 @@
 #!/bin/sh
 
+TAG=awg-server
+log_notice() { logger -t "$TAG" -p daemon.notice "$*" 2>/dev/null || :; }
+log_warn() { logger -t "$TAG" -p daemon.warning "$*" 2>/dev/null || :; }
+log_err() { logger -t "$TAG" -p daemon.err "$*" 2>/dev/null || :; }
+
 ENV_FILE="${ENV_FILE:-/etc/awg-server.env}"
 if [ -f "$ENV_FILE" ]; then
     # shellcheck disable=SC1091 disable=SC1090
@@ -42,6 +47,7 @@ BABELD_STOP_TIMEOUT="${BABELD_STOP_TIMEOUT:-3}"
 # Direct list location is owned by the shared ipsets configuration.
 DIRECT_ENV_FILE="${DIRECT_ENV_FILE:-/etc/update-ipsets.env}"
 [ -r "$DIRECT_ENV_FILE" ] || {
+    log_err "missing $DIRECT_ENV_FILE"
     echo "Missing $DIRECT_ENV_FILE" >&2
     exit 1
 }
@@ -53,6 +59,7 @@ OUT_MAIN="$IPSETS_DIR/${STATIC_NAME:-main.txt}"
 MAIN_IPSET_NAME="${IPSET_NAME}_main"
 
 die() {
+    log_err "$*"
     echo "ERROR: $*" >&2
     exit 1
 }
@@ -101,6 +108,7 @@ ensure_node_iface() {
 
     "$IP_BIN" link add "$NODE_IFACE" type dummy \
         || die "failed to create node interface $NODE_IFACE"
+    log_notice "node interface created: $NODE_IFACE"
 }
 
 ensure_node_ip() {
@@ -134,6 +142,7 @@ ensure_ipip() {
     if ! "$IP_BIN" link show "$IPIP_IFACE" >/dev/null 2>&1; then
         "$IP_BIN" tunnel add "$IPIP_IFACE" mode ipip local "$IPIP_LOCAL" ttl "$IPIP_TTL" \
             || die "failed to create IPIP receiver $IPIP_IFACE local=$IPIP_LOCAL"
+        log_notice "IPIP receiver created: interface=$IPIP_IFACE local=$IPIP_LOCAL"
     fi
 
     "$IP_BIN" addr replace "$IPIP_ADDR4" dev "$IPIP_IFACE" \
@@ -157,6 +166,7 @@ ensure_nat_chain() {
     if ! "$IPTABLES_BIN" -t nat -C POSTROUTING -j "$NAT_CHAIN" 2>/dev/null; then
         "$IPTABLES_BIN" -t nat -A POSTROUTING -j "$NAT_CHAIN" \
             || die "failed to attach NAT chain $NAT_CHAIN"
+        log_notice "NAT chain attached: $NAT_CHAIN"
     fi
 }
 
@@ -174,13 +184,18 @@ start_awg_services() {
         [ -n "$service" ] || continue
         "$SYSTEMCTL_BIN" start "$service" \
             || die "failed to start $service"
+        log_notice "AWG service start command succeeded: $service"
     done
 }
 
 stop_awg_services() {
     for service in $AWG_SERVICES; do
         [ -n "$service" ] || continue
-        "$SYSTEMCTL_BIN" stop "$service" 2>/dev/null || true
+        if "$SYSTEMCTL_BIN" stop "$service" 2>/dev/null; then
+            log_notice "AWG service stop command succeeded: $service"
+        else
+            log_warn "AWG service stop command failed: $service"
+        fi
     done
 }
 
@@ -237,6 +252,7 @@ start_babeld() {
     pid="$(wait_for_babeld_pid || true)"
     [ -n "$pid" ] || die "babeld did not create a live pidfile in time: $BABELD_PIDFILE"
 
+    log_notice "babeld started: pid=$pid conf=$BABELD_CONF"
     echo "OK: babeld started, pid=$pid, conf=$BABELD_CONF"
 }
 
@@ -263,6 +279,7 @@ stop_babeld() {
     fi
 
     rm -f "$BABELD_PIDFILE"
+    log_notice "babeld stop requested: pid=$pid"
     echo "OK: babeld stopped, pid=$pid"
 }
 
@@ -285,9 +302,11 @@ install_nat_rules() {
                 || die "failed to install MASQUERADE rule for $subnet"
         fi
     done
+    log_notice "NAT rules configured: chain=$NAT_CHAIN interface=$iface"
 }
 
 network_up() {
+    log_notice "network-up started: node=$SERVER_NAME"
     need_exit_subnets
 
     "$SYSCTL_BIN" -w net.ipv4.ip_forward=1 >/dev/null \
@@ -311,9 +330,11 @@ network_up() {
     else
         echo "${status}, exit_ip=MASQUERADE"
     fi
+    log_notice "network-up commands completed: node=$SERVER_NAME"
 }
 
 network_down() {
+    log_notice "network-down started: node=$SERVER_NAME"
     # Keep the guard attached until the receiver and mesh transport are down.
     stop_babeld
     stop_awg_services
@@ -321,6 +342,7 @@ network_down() {
     remove_nat_chain
     remove_forward_chain
     remove_node_ip
+    log_notice "network-down cleanup commands completed: node=$SERVER_NAME"
     echo "OK: ${SERVER_NAME} network down"
 }
 
@@ -352,6 +374,7 @@ restore_ipset() {
             || die "failed to swap ipset $set_name"
         "$IPSET_BIN" destroy "$staged" \
             || die "failed to remove old staged ipset $staged"
+        log_notice "ipset swapped: set=$set_name source=$file"
     done
 }
 
@@ -429,6 +452,7 @@ guard_rules() {
     if ! "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; then
         "$IPTABLES_BIN" -I FORWARD 1 -j "$FORWARD_CHAIN" \
             || die "failed to attach forward guard"
+        log_notice "FORWARD guard attached: chain=$FORWARD_CHAIN"
     fi
 
     echo "OK: installed $FORWARD_CHAIN main/direct DROP and nDPI BitTorrent guard \
@@ -439,11 +463,13 @@ guard_apply() {
     restore_ipset
     if [ "$1" = refresh ] \
         && "$IPTABLES_BIN" -C FORWARD -j "$FORWARD_CHAIN" 2>/dev/null; then
+        log_notice "guard lists refreshed: FORWARD guard unchanged"
         echo "OK: refreshed main/direct ipsets; FORWARD guard unchanged"
         return 0
     fi
 
     guard_rules
+    log_notice "guard installed: chain=$FORWARD_CHAIN main=$OUT_MAIN direct=$OUT_DIRECT"
     echo "OK: installed main/direct guard from $OUT_MAIN and $OUT_DIRECT"
 }
 

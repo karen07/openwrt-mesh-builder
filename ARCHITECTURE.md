@@ -20,7 +20,8 @@
 [DNS](docs/architecture/DNS.md),
 [PROVISIONING](docs/architecture/PROVISIONING.md),
 [RECOVERY](docs/architecture/RECOVERY.md),
-[OPERATIONS](docs/architecture/OPERATIONS.md).
+[OPERATIONS](docs/architecture/OPERATIONS.md),
+[LOGGING](docs/architecture/LOGGING.md).
 
 ## Общая схема
 

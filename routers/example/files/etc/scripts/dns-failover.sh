@@ -2,6 +2,11 @@
 
 # shellcheck disable=SC1091
 . /lib/functions.sh
+TAG='dns-failover'
+log_notice() { logger -t "$TAG" -p daemon.notice "$*" 2>/dev/null || :; }
+log_warn() { logger -t "$TAG" -p daemon.warning "$*" 2>/dev/null || :; }
+log_err() { logger -t "$TAG" -p daemon.err "$*" 2>/dev/null || :; }
+log_debug() { [ "${LOG_DEBUG:-0}" = 1 ] && logger -t "$TAG" -p daemon.debug "$*" || :; }
 config_load dns_failover
 DOMAIN=''
 INTERVAL='5'
@@ -15,6 +20,7 @@ PROVIDER_DOMAINS=''
 add_provider_domain() { PROVIDER_DOMAINS="${PROVIDER_DOMAINS:+$PROVIDER_DOMAINS }$1"; }
 config_list_foreach main provider_domain add_provider_domain
 [ -n "$DOMAIN" ] || {
+    log_err 'missing DNS probe domain'
     echo 'dns_failover: missing domain' >&2
     exit 1
 }
@@ -209,48 +215,58 @@ set_dnsmasq_server_endpoint() {
     _set_val="$(dnsmasq_server_value "$_set_ep")"
 
     uci -q del dhcp.@dnsmasq[0].server >/dev/null 2>&1
-    add_dnsmasq_provider_domain_servers || return 1
-    uci -q add_list "dhcp.@dnsmasq[0].server=${_set_val}" || return 1
-    uci -q commit dhcp || return 1
-    /etc/init.d/dnsmasq restart >/dev/null 2>&1
-
+    add_dnsmasq_provider_domain_servers || {
+        log_err "failed to configure provider-domain DNS forwards"
+        return 1
+    }
+    uci -q add_list "dhcp.@dnsmasq[0].server=${_set_val}" || {
+        log_err "failed to configure dnsmasq upstream=$_set_ep"
+        return 1
+    }
+    uci -q commit dhcp || {
+        log_err "failed to commit dnsmasq UCI configuration"
+        return 1
+    }
+    # A failed restart must not be reported as a successful switch.
+    /etc/init.d/dnsmasq restart >/dev/null 2>&1 || {
+        log_err "dnsmasq restart failed after upstream=$_set_ep"
+        return 1
+    }
     return 0
 }
 
 apply_once() {
     endpoints="$(build_endpoints)"
-    cur=""
-    target=""
-
+    cur=''
+    target=''
     if [ -z "$endpoints" ]; then
-        echo "no DNS endpoints found: no https-dns-proxy listen_port and no nameserver in $RESOLV"
+        log_warn "no DNS endpoints: no https-dns-proxy listen_port or nameserver in $RESOLV"
         return 0
     fi
-
     cur="$(current_endpoint || true)"
-
     # shellcheck disable=SC2086
     target="$(best_available_endpoint $endpoints || true)"
-
     if [ -z "$target" ]; then
         # shellcheck disable=SC2086
         target="$(last_endpoint $endpoints || true)"
-        echo "no working DNS endpoint; fallback=${target:-none} endpoints=[$endpoints]"
+        log_warn "no working DNS endpoint; fallback=${target:-none} endpoints=[$endpoints]"
     fi
-
     [ -n "$target" ] || return 0
 
     if [ "$cur" = "$target" ]; then
         if dnsmasq_provider_domains_configured; then
+            log_debug "DNS configuration unchanged: upstream=$target"
             return 0
         fi
-
-        echo "repair dnsmasq provider-domain forwards"
+        set_dnsmasq_server_endpoint "$target" || return 1
+        log_notice "dnsmasq provider-domain forwards applied: upstream=$target" \
+            "(restart returned success)"
     else
-        echo "switch DNS endpoint: current=${cur:-none} target=$target"
+        set_dnsmasq_server_endpoint "$target" || return 1
+        log_notice "dnsmasq upstream configuration switched: previous=${cur:-none}" \
+            "current=$target (restart returned success)"
     fi
-
-    set_dnsmasq_server_endpoint "$target" || return 1
+    return 0
 }
 
 case "${1:-run}" in
@@ -260,15 +276,16 @@ case "${1:-run}" in
 
     run)
         if ! wait_for_resolv_nameservers; then
+            log_err "no nameserver entries in $RESOLV within ${RESOLV_WAIT_MAX}s"
             echo "ERROR: no nameserver entries appeared in $RESOLV within ${RESOLV_WAIT_MAX}s"
             exit 1
         fi
 
-        echo "started: domain=$DOMAIN interval=${INTERVAL}s"
-        echo "provider_domains=[$PROVIDER_DOMAINS] resolv=$RESOLV"
-
+        log_notice "started: domain=$DOMAIN interval=${INTERVAL}s resolv=$RESOLV" \
+            "provider_domains=[$PROVIDER_DOMAINS]"
+        trap 'log_notice "service stopped"; exit 0' TERM INT
         while true; do
-            apply_once
+            apply_once || log_debug "DNS apply attempt failed"
             sleep "$INTERVAL"
         done
         ;;
